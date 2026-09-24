@@ -1,0 +1,207 @@
+\documentclass[../../book.tex]{subfiles}
+
+\begin{document}
+
+\subsection{Rejection Sampling and Lyubashevsky Signatures}\label{section:lyubashevsky}
+
+With SIS and LWE at hand, we can build lattice-based analogues of the discrete-logarithm protocols from the previous chapters.
+In this section, we translate the Schnorr signature into the lattice setting.
+The translation fails in an instructive way, and the fix, called \textbf{rejection sampling}, is the central technique of lattice-based signatures and zero-knowledge proofs.
+The resulting scheme is due to Lyubashevsky~\cite{EC:Lyubashevsky12}, and the same idea underlies ML-DSA (Dilithium).
+
+For simplicity, we work over $\mathbb{Z}_q$; the ring and module versions are obtained by replacing $\mathbb{Z}_q$ with $\mathcal{R}_q$.
+Besides $S_{\eta}$, we use the challenge set
+\begin{equation*}
+    B_{\kappa} := \{\mathbf{c} \in \{-1,0,1\}^k: \mathbf{c} \; \text{has exactly} \; \kappa \; \text{non-zero entries}\}, \quad |B_{\kappa}| = 2^{\kappa}\binom{k}{\kappa},
+\end{equation*}
+where $\kappa$ is chosen so that $|B_{\kappa}| \geq 2^{\lambda}$.
+
+\subsubsection{From Schnorr to Lattices}
+
+Recall the Schnorr signature over a group $\mathbb{G} = \langle g \rangle$ of order $q$.
+The secret key is $\alpha \in \mathbb{Z}_q$ and the public key is $h = g^{\alpha}$.
+To sign $\mu$, the signer samples $r \leftarrowS \mathbb{Z}_q$, computes the challenge $c \gets \mathsf{H}(\mu, g^r)$, and outputs $(z := r + \alpha c, c)$.
+The verifier recomputes $g^r = g^z h^{-c}$ and checks that $c = \mathsf{H}(\mu, g^zh^{-c})$.
+Two properties make this scheme secure: $\alpha \mapsto g^{\alpha}$ is one-way, and $z$ is uniform in $\mathbb{Z}_q$ and thus reveals nothing about $\alpha$.
+
+\paragraph{Attempt \#1: replace exponentiation with a matrix}
+The lattice analogue of $\alpha \mapsto g^{\alpha}$ is the linear map $\mathbf{S} \mapsto \mathbf{A}\mathbf{S}$ for a public random matrix $\mathbf{A} \in \mathbb{Z}_q^{n \times m}$.
+The secret key becomes $\mathbf{S} \in \mathbb{Z}_q^{m \times k}$, the public key becomes $\mathbf{T} := \mathbf{A}\mathbf{S}$, and the signature becomes $(\mathbf{z} := \mathbf{r} + \mathbf{S}\mathbf{c}, \mathbf{c})$ for $\mathbf{c} \gets \mathsf{H}(\mu, \mathbf{A}\mathbf{r})$.
+The verifier checks $\mathbf{c} = \mathsf{H}(\mu, \mathbf{A}\mathbf{z} - \mathbf{T}\mathbf{c})$.
+
+This scheme is completely insecure.
+Since $m > n$, anyone can solve the linear system $\mathbf{A}\mathbf{S}' = \mathbf{T}$ by Gaussian elimination and obtain a (long) matrix $\mathbf{S}'$ that works as a secret key.
+The map $\mathbf{S} \mapsto \mathbf{A}\mathbf{S}$ is one-way only on \emph{short} inputs, by ISIS.
+
+\paragraph{Attempt \#2: make everything short}
+We therefore sample $\mathbf{S} \leftarrowS S_{\eta}^{m \times k}$ and require the verifier to check that $\mathbf{z}$ is short, so that a forger cannot use a long $\mathbf{S}'$.
+For an honest $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$ to pass this check, both terms must be short.
+The term $\mathbf{S}\mathbf{c}$ is short by construction: each of its entries is a sum of $\kappa$ entries of $\mathbf{S}$ (up to signs), so $\|\mathbf{S}\mathbf{c}\|_{\infty} \leq \eta\kappa$.
+The masking vector $\mathbf{r}$ is then sampled from some short distribution, and all computations of $\mathbf{z}$ are done over $\mathbb{Z}$, without reduction modulo $q$.
+
+This attempt is still insecure, but for a subtler reason: \emph{$\mathbf{z}$ leaks the secret key}.
+A short $\mathbf{r}$ cannot hide the shift $\mathbf{S}\mathbf{c}$ completely.
+For example, if $\mathbf{r}$ is centered at zero, then $\mathbb{E}[\mathbf{z}] = \mathbf{S}\mathbf{c}$, and since $\mathbf{c}$ is public, an observer who collects enough signatures recovers $\mathbf{S}$ by linear regression.
+In Schnorr signatures this problem never arises, because $r$ is uniform over the whole group $\mathbb{Z}_q$ and $r + \alpha c$ is uniform for every $\alpha$.
+
+\paragraph{Attempt \#3: rejection sampling}
+The fix is to \emph{abort} and restart the signing procedure whenever the candidate $\mathbf{z}$ reveals too much about $\mathbf{S}$.
+The abort probability is chosen so that the distribution of every \emph{output} $\mathbf{z}$ is a fixed distribution independent of $\mathbf{S}$.
+Since signing is the Fiat--Shamir transform (\Cref{subsection:fiat-shamir}) of an identification protocol, this approach is called \textbf{Fiat--Shamir with aborts}.
+The tool that computes the right abort probability is the following lemma.
+
+\begin{lemma}[Rejection Sampling]\label{lemma:rejection-sampling}
+    Let $f$ and $g$ be probability distributions over a set $V$ such that $f(z) \leq M g(z)$ for all $z \in V$ and some constant $M \geq 1$.
+    Consider the following procedure:
+    \begin{algoen}
+        \item sample $z \leftarrowS g$;
+        \item with probability $\frac{f(z)}{Mg(z)}$, \textbf{output} $z$; otherwise, go back to step 1.
+    \end{algoen}
+    The output of this procedure is distributed exactly according to $f$, and the expected number of iterations is $M$.
+\end{lemma}
+
+\begin{proof}
+    In a single iteration, the procedure samples a particular $z$ and accepts it with probability $g(z) \cdot \frac{f(z)}{Mg(z)} = \frac{f(z)}{M}$.
+    Summing over all $z$, one iteration succeeds with probability $\frac{1}{M}$, so the expected number of iterations is $M$.
+    Conditioned on success, $z$ is output with probability $\frac{f(z)/M}{1/M} = f(z)$.
+\end{proof}
+
+\begin{intuition}
+    Think of the ``graph'' of $Mg$ as a tent that covers the graph of $f$ everywhere.
+    Sampling from $g$ and accepting with probability $f(z)/Mg(z)$ is equivalent to throwing a uniformly random point under the tent and keeping it only if it also lies under the graph of $f$.
+    The kept points are uniformly distributed under the graph of $f$, and so their $z$-coordinates are distributed according to $f$.
+    The ratio of the two areas is $M$, which is the expected number of throws.
+\end{intuition}
+
+In the signature scheme, $g$ is the distribution of the candidate $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$ (which depends on $\mathbf{S}\mathbf{c}$), and $f$ is a fixed target distribution that does not depend on $\mathbf{S}$.
+The lemma requires $f \leq Mg$ for a small constant $M$ and \emph{every} possible shift $\mathbf{S}\mathbf{c}$, and this determines how to choose the distribution of $\mathbf{r}$.
+We now present two standard choices.
+
+\subsubsection{Rejection Sampling with Uniform Distributions}
+
+The simplest choice, used in ML-DSA, samples $\mathbf{r}$ uniformly from a box $[-\gamma,\gamma]^m$ that is much wider than the shift.
+Fix a shift $\mathbf{v} := \mathbf{S}\mathbf{c}$ with $\|\mathbf{v}\|_{\infty} \leq \beta := \eta\kappa$ and consider a single coordinate $z_i = r_i + v_i$.
+This coordinate is uniform over the interval $[-\gamma+v_i, \gamma+v_i]$, which depends on $v_i$ but always contains the smaller interval $[-(\gamma-\beta), \gamma-\beta]$.
+
+Accept $\mathbf{z}$ if and only if $\|\mathbf{z}\|_{\infty} \leq \gamma - \beta$.
+Conditioned on acceptance, $\mathbf{z}$ is uniform over the box $[-(\gamma-\beta),\gamma-\beta]^m$, which does not depend on $\mathbf{v}$.
+This is precisely \Cref{lemma:rejection-sampling} with $f$ uniform over the small box, $g$ uniform over the shifted large box, and $M = \left(\frac{2\gamma+1}{2(\gamma-\beta)+1}\right)^m$.
+The acceptance probability is
+\begin{equation*}
+    \frac{1}{M} = \left(\frac{2(\gamma-\beta)+1}{2\gamma+1}\right)^m \approx \left(1 - \frac{\beta}{\gamma}\right)^m \approx e^{-m\beta/\gamma},
+\end{equation*}
+so choosing $\gamma \approx m\beta$ gives $M \approx e$, \textit{i.e.}, fewer than three attempts per signature on average.
+
+\begin{exercise}
+    Let $m = 1$, $\beta = 1$, and $\gamma = 3$.
+    List the distribution of $z = r + v$ for $v = -1$, $v = 0$, and $v = 1$, and check that after rejecting $|z| > 2$ all three distributions coincide.
+\end{exercise}
+
+\subsubsection{Rejection Sampling with Discrete Gaussians}
+
+The uniform box forces $\gamma$ to grow linearly with $m$.
+Lyubashevsky's original scheme instead uses the discrete Gaussian distribution, which leads to a width that grows only with $\sqrt{m}$ and therefore to shorter signatures.
+
+\begin{definition}[Discrete Gaussian]
+    For $\sigma > 0$ and $\mathbf{v} \in \mathbb{Z}^m$, let $\rho_{\mathbf{v},\sigma}(\mathbf{x}) := \exp\left(-\frac{\|\mathbf{x}-\mathbf{v}\|_2^2}{2\sigma^2}\right)$ for $\mathbf{x} \in \mathbb{R}^m$.
+    The \textbf{discrete Gaussian distribution} over $\mathbb{Z}^m$ with center $\mathbf{v}$ and width $\sigma$ assigns to each $\mathbf{x} \in \mathbb{Z}^m$ the probability
+    \begin{equation*}
+        D^m_{\mathbf{v},\sigma}(\mathbf{x}) := \frac{\rho_{\mathbf{v},\sigma}(\mathbf{x})}{\sum_{\mathbf{y} \in \mathbb{Z}^m}\rho_{\mathbf{0},\sigma}(\mathbf{y})}.
+    \end{equation*}
+    We omit $\mathbf{v}$ when $\mathbf{v} = \mathbf{0}$ and write $D^m_{\sigma}$.
+\end{definition}
+
+The normalization is the same for every integer center $\mathbf{v}$, since shifting by $\mathbf{v}$ permutes $\mathbb{Z}^m$.
+Informally, $D^m_{\mathbf{v},\sigma}$ is the usual bell-shaped Gaussian centered at $\mathbf{v}$, restricted to integer points\footnote{Some works, including parts of the lattice literature, write the Gaussian as $\exp(-\pi\|\mathbf{x}\|_2^2/s^2)$. The two conventions are related by $s = \sqrt{2\pi}\sigma$.}.
+We need two facts about it.
+First, samples are short: for $\mathbf{z} \leftarrowS D^m_{\sigma}$ and any $\tau > 1$, one has $\Pr[\|\mathbf{z}\|_2 > \tau\sigma\sqrt{m}] \leq \tau^m e^{m(1-\tau^2)/2}$~\cite[Lemma 4.4]{EC:Lyubashevsky12}, which is negligible already for $\tau = 2$.
+Second, one-dimensional projections are also Gaussian: for any fixed $\mathbf{v}$ and $t > 0$, one has $\Pr[|\langle \mathbf{z},\mathbf{v} \rangle| > t] \leq 2\exp\left(-\frac{t^2}{2\|\mathbf{v}\|_2^2\sigma^2}\right)$.
+
+Now let $\mathbf{r} \leftarrowS D^m_{\sigma}$, so that the candidate $\mathbf{z} = \mathbf{r} + \mathbf{v}$ follows the shifted distribution $g := D^m_{\mathbf{v},\sigma}$.
+The target is the centered distribution $f := D^m_{\sigma}$.
+The ratio between them is
+\begin{equation*}
+    \frac{D^m_{\sigma}(\mathbf{z})}{D^m_{\mathbf{v},\sigma}(\mathbf{z})} = \exp\left(\frac{\|\mathbf{z}-\mathbf{v}\|_2^2 - \|\mathbf{z}\|_2^2}{2\sigma^2}\right) = \exp\left(\frac{\|\mathbf{v}\|_2^2 - 2\langle \mathbf{z},\mathbf{v} \rangle}{2\sigma^2}\right).
+\end{equation*}
+This ratio is \emph{not} bounded for all $\mathbf{z}$, since $\langle \mathbf{z},\mathbf{v} \rangle$ can be arbitrarily negative.
+However, by the second fact with $t = 12\sigma\|\mathbf{v}\|_2$, the event $|\langle \mathbf{z},\mathbf{v} \rangle| \leq 12\sigma\|\mathbf{v}\|_2$ holds except with probability $2e^{-72} < 2^{-100}$.
+On this event, writing $\sigma = \alpha\|\mathbf{v}\|_2$, we get
+\begin{equation*}
+    \frac{D^m_{\sigma}(\mathbf{z})}{D^m_{\mathbf{v},\sigma}(\mathbf{z})} \leq \exp\left(\frac{12\|\mathbf{v}\|_2}{\sigma} + \frac{\|\mathbf{v}\|_2^2}{2\sigma^2}\right) = \exp\left(\frac{12}{\alpha} + \frac{1}{2\alpha^2}\right) =: M.
+\end{equation*}
+The shift satisfies $\|\mathbf{S}\mathbf{c}\|_2 \leq \sqrt{m}\|\mathbf{S}\mathbf{c}\|_{\infty} \leq \eta\kappa\sqrt{m} =: T$.
+Choosing $\sigma = 12T$ makes $\alpha \geq 12$ for every possible shift, which gives $M \leq e^{1+1/288} \approx 2.72$.
+
+Therefore, the condition $f \leq Mg$ of \Cref{lemma:rejection-sampling} holds except with probability below $2^{-100}$.
+A slight generalization of the lemma~\cite[Lemma 4.7]{EC:Lyubashevsky12} shows that this failure event only adds a negligible statistical distance between the output and $D^m_{\sigma}$.
+
+\subsubsection{The Lyubashevsky Signature Scheme}
+
+We are now ready to state the scheme.
+The matrix $\mathbf{A} \leftarrowS \mathbb{Z}_q^{n \times m}$ is a public parameter, $\mathsf{H}: \{0,1\}^* \to B_{\kappa}$ is a hash function modelled as a random oracle, and $\sigma = 12\eta\kappa\sqrt{m}$ and $M = e^{1+1/288}$ are as computed above.
+
+\begin{tcolorbox}[title=Lyubashevsky Signature Scheme,
+    breakable,
+    colback=blue!5!white,
+    colframe=blue!75!black,
+    colbacktitle=blue!25!white,
+    coltitle=blue!20!black,
+    fonttitle=\bfseries,
+    boxrule=1.25pt,
+    subtitle style={boxrule=0pt,
+    colback=blue!20!white,
+    colupper=blue!75!gray} ]
+
+    \tcbsubtitle{$\mathsf{KeyGen}(1^{\lambda})$}
+    \begin{itemize}[label=\ding{51}]
+        \item Sample $\mathbf{S} \leftarrowS S_{\eta}^{m \times k}$ and compute $\mathbf{T} \gets \mathbf{A}\mathbf{S} \in \mathbb{Z}_q^{n \times k}$.
+        \item \textbf{Output} $\mathsf{pk} \gets \mathbf{T}$ and $\mathsf{sk} \gets \mathbf{S}$.
+    \end{itemize}
+    \tcbsubtitle{$\mathsf{Sign}(\mathsf{sk}, \mu)$}
+    \begin{itemize}[label=\ding{51}]
+        \item Sample the mask $\mathbf{r} \leftarrowS D^m_{\sigma}$.
+        \item Compute the challenge $\mathbf{c} \gets \mathsf{H}(\mu, \mathbf{A}\mathbf{r} \bmod q)$.
+        \item Compute $\mathbf{z} \gets \mathbf{r} + \mathbf{S}\mathbf{c}$ over $\mathbb{Z}$ \commentgray{no reduction modulo $q$!}
+        \item With probability $\min\left\{1, \frac{D^m_{\sigma}(\mathbf{z})}{M \cdot D^m_{\mathbf{S}\mathbf{c},\sigma}(\mathbf{z})}\right\}$, \textbf{output} $(\mathbf{z},\mathbf{c})$; otherwise, restart from the first step.
+    \end{itemize}
+    \tcbsubtitle{$\mathsf{Verify}(\mathsf{pk}, \mu, (\mathbf{z},\mathbf{c}))$}
+    \begin{itemize}[label=\ding{51}]
+        \item Check that $\|\mathbf{z}\|_2 \leq 2\sigma\sqrt{m}$.
+        \item Check that $\mathbf{c} = \mathsf{H}(\mu, \mathbf{A}\mathbf{z} - \mathbf{T}\mathbf{c} \bmod q)$.
+    \end{itemize}
+\end{tcolorbox}
+
+\textbf{Correctness.}
+For an honest signature, $\mathbf{A}\mathbf{z} - \mathbf{T}\mathbf{c} = \mathbf{A}\mathbf{r} + \mathbf{A}\mathbf{S}\mathbf{c} - \mathbf{A}\mathbf{S}\mathbf{c} = \mathbf{A}\mathbf{r}$, so the hash check passes.
+The output $\mathbf{z}$ is distributed (up to negligible statistical distance) as $D^m_{\sigma}$, so the norm check passes except with probability $2^m e^{-3m/2} = e^{-(3/2-\ln 2)m}$ by the first Gaussian fact.
+The signer needs $M \approx 2.72$ attempts on average.
+
+\textbf{Security (sketch).}
+The proof follows the Schnorr proof and has two steps.
+\begin{enumerate}
+    \item[\textit{(i)}] \textbf{Simulation.} The reduction must answer signing queries without $\mathbf{S}$.
+    Thanks to rejection sampling, it samples $\mathbf{c} \leftarrowS B_{\kappa}$ and $\mathbf{z} \leftarrowS D^m_{\sigma}$ directly, outputs them with probability $1/M$, and programs the random oracle as $\mathsf{H}(\mu, \mathbf{A}\mathbf{z}-\mathbf{T}\mathbf{c}) := \mathbf{c}$.
+    By the rejection sampling lemma, these simulated signatures are statistically indistinguishable from real ones.
+    Without rejection sampling, the real $\mathbf{z}$ would depend on $\mathbf{S}$ and this simulation would fail.
+    \item[\textit{(ii)}] \textbf{Extraction.} By the forking lemma, a successful forger can be rewound to produce two valid signatures $(\mathbf{z},\mathbf{c})$ and $(\mathbf{z}',\mathbf{c}')$ with $\mathbf{c} \neq \mathbf{c}'$ and the same value $\mathbf{A}\mathbf{z}-\mathbf{T}\mathbf{c} = \mathbf{A}\mathbf{z}'-\mathbf{T}\mathbf{c}'$.
+    Substituting $\mathbf{T} = \mathbf{A}\mathbf{S}$ gives
+    \begin{equation*}
+        \mathbf{A}\left(\mathbf{z}-\mathbf{z}' + \mathbf{S}(\mathbf{c}'-\mathbf{c})\right) = \mathbf{0} \pmod q,
+    \end{equation*}
+    and the vector in parentheses has $\ell^2$ norm at most $4\sigma\sqrt{m} + 2\eta\kappa\sqrt{m}$.
+    It is a solution to SIS in the $\ell^2$ norm, provided it is non-zero\footnote{Non-zeroness is the subtle part of the proof. The parameter $m$ is chosen large enough that many secret keys $\mathbf{S}'$ with $\mathbf{A}\mathbf{S}' = \mathbf{T}$ exist, and the forger cannot tell which one the reduction holds. Hence, with probability at least $1/2$, the vector is non-zero for the key the reduction actually uses.}.
+\end{enumerate}
+
+\begin{remark}[Relaxed extraction]\label{remark:relaxed-extraction}
+    Notice what the extractor in step \textit{(ii)} actually obtains: not the secret $\mathbf{S}$, but the pair $(\bar{\mathbf{z}}, \bar{\mathbf{c}}) := (\mathbf{z}-\mathbf{z}', \mathbf{c}-\mathbf{c}')$ with $\mathbf{A}\bar{\mathbf{z}} = \mathbf{T}\bar{\mathbf{c}}$.
+    The extracted vector $\bar{\mathbf{z}}$ is about $\sigma/\eta$ times longer than the honest secret, and it satisfies the relation only after multiplying $\mathbf{T}$ by the difference of challenges $\bar{\mathbf{c}}$.
+    This gap between what the honest prover knows and what the extractor can guarantee is inherent to all lattice-based proofs of knowledge (it is often called \emph{soundness slack}), and we will meet it again when building lattice-based zero-knowledge proofs.
+\end{remark}
+
+\paragraph{Performance}
+For about $100$ bits of security, Lyubashevsky~\cite{EC:Lyubashevsky12} proposes, among others, the parameters $n = 512$, $q = 2^{27}$, $m = 8786$, $k = 80$, $\eta = 1$, and $\kappa = 28$, which give $\sigma \approx 31495$.
+The resulting signatures take about $19.9$~KB and the keys about $128$~KB each, which is far from practical.
+The size comes mostly from the unstructured matrix and the large dimension $m$.
+Moving to Module-SIS and Module-LWE over $\mathcal{R}_q$ (\Cref{section:structured-lattices}), using the uniform rejection sampling, and compressing the public key and the signature yield ML-DSA (Dilithium)~\cite{TCHES:DKLLSS18}, standardized in FIPS~204~\cite{FIPS204}, with signatures of about $2.4$~KB and public keys of about $1.3$~KB at its lowest security level.
+
+\end{document}

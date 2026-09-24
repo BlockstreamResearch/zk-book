@@ -330,6 +330,13 @@
 \DeclareMathOperator{\Im}{\text{Im}}
 \DeclareMathOperator{\diag}{\text{diag}}
 
+% Some commands for the lattice section
+\newcommand{\GS}[1]{\ensuremath{\widehat{#1}}\xspace}
+\newcommand{\A}{\ensuremath{\mathcal{A}}\xspace}
+\newcommand{\GAME}{\ensuremath{\mathsf{Game}}\xspace}
+\newcommand{\Adv}{\ensuremath{\mathsf{Adv}}\xspace}
+\newcommand{\negl}{\ensuremath{\mathsf{negl}}\xspace}
+
 \newcommand{\Circ}{\textit{\texttt{C}}}
 
 % --- Theorem environments ---
@@ -457,6 +464,12 @@
 \SetKwComment{Comment}{/* }{ */}
 \newcommand\mycommentstyle[1]{\footnotesize\ttfamily\textcolor{red!70!black}{#1}}
 \SetCommentSty{mycommentstyle}
+
+% --- Settings for making Algorithm floating environment ---
+\RequirePackage{mdframed}
+\DeclareCaptionType{algoproto}[Algorithm][List of Algorithms]
+\crefname{algoproto}{Algorithm}{Algorithms}
+\Crefname{algoproto}{Algorithm}{Algorithms}
 
 % --- Cleverref Custom Names ---
 \crefname{algocf}{alg.}{algs.}
