@@ -184,7 +184,7 @@ We give an affirmative answer by means of the following proposition.
     Let $\Lambda \subseteq \mathbb{R}^d$ be a full-rank lattice with successive minima $\lambda_1, \dots, \lambda_d$.
     Then, the following two facts are true:
     \begin{enumerate}
-        \item $\lambda_d > \ldots > \lambda_1 > 0$;
+        \item $\lambda_d \geq \ldots \geq \lambda_1 > 0$;
         \item there exists a set of linearly independent vectors $\mathbf{v}_1, \dots, \mathbf{v}_d \in \Lambda$ such that
         $\|\mathbf{v}_i\| = \lambda_i$ for all $i \in [d]$.
     \end{enumerate}
@@ -619,9 +619,9 @@ The owner of $\mathbf{s}$ cancels the $\mathbf{A}$-part, leaving the message plu
 
 \textbf{Correctness.} Expanding $\delta$ gives
 \begin{equation*}
-    \delta = \mathbf{x}^{\top}(\mathbf{A}\mathbf{s}+\mathbf{e}) + \mu\lceil q/2 \rfloor - \mathbf{s}^{\top}\mathbf{A}^{\top}\mathbf{x} = \textcolor{oc-green-7}{\langle \mathbf{e},\mathbf{x} \rangle} + \mu\lceil q/2 \rfloor.
+    \delta = \mathbf{x}^{\top}(\mathbf{A}\mathbf{s}+\mathbf{e}) + \mu\lceil q/2 \rfloor - \mathbf{s}^{\top}\mathbf{A}^{\top}\mathbf{x} = \textcolor{oc-teal-9}{\langle \mathbf{e},\mathbf{x} \rangle} + \mu\lceil q/2 \rfloor.
 \end{equation*}
-Since $\mathbf{x}$ is binary, the error term \textcolor{oc-green-7}{$\langle \mathbf{e},\mathbf{x} \rangle$} is a sum of at most $m$ values from $S_{\eta}$, so $\|\langle \mathbf{e},\mathbf{x} \rangle\|_{\infty} \leq m\eta$.
+Since $\mathbf{x}$ is binary, the error term \textcolor{oc-teal-9}{$\langle \mathbf{e},\mathbf{x} \rangle$} is a sum of at most $m$ values from $S_{\eta}$, so $\|\langle \mathbf{e},\mathbf{x} \rangle\|_{\infty} \leq m\eta$.
 If $m\eta < q/4$, then $\delta$ is close to $0$ for $\mu = 0$ and close to $q/2$ for $\mu = 1$, and decryption is always correct.
 
 \textbf{Security.} The scheme is IND-CPA secure under DLWE, and the argument has two steps.
@@ -789,7 +789,7 @@ The idea is to encode $n$ message bits $\mu_0,\dots,\mu_{n-1}$ as the coefficien
             \begin{algoen}
                 \item Parse $(u, v) \gets c$;
                 \item $\delta \gets v - su$;
-                \item $\mu_i \gets 1$ iff $\|\delta_i\|_{\infty} < q/4$ for each $i \in (n)$;
+                \item $\mu_i \gets 1$ iff $\|\delta_i\|_{\infty} \geq q/4$ for each $i \in (n)$;
                 \item \textbf{return} $(\mu_0,\dots,\mu_{n-1})$.
             \end{algoen}
         \end{minipage}
@@ -803,13 +803,172 @@ Since $\mathcal{R}_q$ is commutative, the terms $asr$ and $sar$ coincide, and we
 \begin{align*}
     \delta &= v - su \\
     &= (as + e)r + e_2 + \lceil q/2 \rfloor \mu - s(ar + e_1) \\
-    &= \textcolor{oc-green-7}{er + e_2 - se_1} + \lceil q/2 \rfloor \mu.
+    &= \textcolor{oc-teal-9}{er + e_2 - se_1} + \lceil q/2 \rfloor \mu.
 \end{align*}
-By the bound $\|fg\|_{\infty} \leq n\|f\|_{\infty}\|g\|_{\infty}$, every coefficient of the error \textcolor{oc-green-7}{$er + e_2 - se_1$} has absolute value at most $2n\eta^2 + \eta$.
+By the bound $\|fg\|_{\infty} \leq n\|f\|_{\infty}\|g\|_{\infty}$, every coefficient of the error \textcolor{oc-teal-9}{$er + e_2 - se_1$} has absolute value at most $2n\eta^2 + \eta$.
 Hence, decryption recovers every bit $\mu_i$ whenever $2n\eta^2 + \eta < q/4$.
 
 \textbf{Security.} Security follows from Decisional Ring-LWE, applied twice: once to replace $b$ with a uniform element, and once to replace $(u,v)$, which is itself a pair of Ring-LWE samples with secret $r$.
 
 The ciphertext now consists of two ring elements, \textit{i.e.}, $2n\log q$ bits for $n$ message bits, instead of $n(n+1)\log q$ bits in Regev's scheme.
 Encryption costs a few multiplications in $\mathcal{R}_q$, each taking $O(n\log n)$ time with the NTT.
+
+\subsection{Exercises}
+
+\begin{xexercise}
+    {Exercise 1.}
+    {Which of the following matrices (with basis vectors written as columns) is a basis of the lattice $\mathbb{Z}^2$?}
+    {3}
+    {
+        \item $\begin{bmatrix} 2 & 0 \\ 0 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 1 & 1 \\ 1 & -1 \end{bmatrix}$
+        \item $\begin{bmatrix} 2 & 1 \\ 1 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 3 & 1 \\ 1 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 1 & 1 \\ 0 & 2 \end{bmatrix}$
+    }
+\end{xexercise}
+ 
+\begin{exbox}{Exercises 2--3. A Toy SIS Lattice.}
+    Consider the SIS instance with $n=1$, $m=2$, $q=5$ and the row-matrix $\mathbf{A} = \begin{bmatrix} 1 & 2 \end{bmatrix} \in \mathbb{Z}_5^{1 \times 2}$.
+    The corresponding $q$-ary lattice is
+    \begin{equation*}
+        \Lambda^{\perp}_5(\mathbf{A}) = \{(x,y) \in \mathbb{Z}^2: x + 2y \equiv 0 \pmod 5\}.
+    \end{equation*}
+\end{exbox}
+ 
+\begin{xexercise}
+    {Exercise 2.}
+    {What is the first minimum $\lambda_1(\Lambda^{\perp}_5(\mathbf{A}))$ in the $\ell^2$ norm?}
+    {4}
+    {
+        \item $1$
+        \item $\sqrt{2}$
+        \item $\sqrt{5}$
+        \item $5$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 3.}
+    {What is the smallest bound $\beta$ for which $\mathsf{SIS}_{1,2,5,\beta}$ with the matrix $\mathbf{A}$ above has a solution (in the $\ell^{\infty}$ norm)?}
+    {4}
+    {
+        \item $1$
+        \item $2$
+        \item $3$
+        \item $5$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 4.}
+    {Let $(\mathbf{A},\mathbf{b} = \mathbf{A}\mathbf{s}+\mathbf{e})$ be an LWE instance with an error distribution $\chi$. Which of the following statements is \textbf{false}?}
+    {1}
+    {
+        \item An algorithm solving Search-LWE can be used to solve Decisional-LWE.
+        \item If $\chi$ always outputs $0$ and $\mathbf{A}$ has full column rank, then $\mathbf{s}$ can be recovered by Gaussian elimination.
+        \item In short-secret LWE, the secret $\mathbf{s}$ is sampled from $\chi^n$.
+        \item The vector $\mathbf{b}$ lies on the lattice $\Lambda_q(\mathbf{A})$.
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 5.}
+    {Compute $(1 + T^3) \cdot T^2$ in the ring $\mathbb{Z}[T]/(T^4+1)$.}
+    {3}
+    {
+        \item $T^2 + T$
+        \item $T^2 - T$
+        \item $1 + T^2$
+        \item $T^2 - 1$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 6.}
+    {What is the smallest positive integer $k$ such that $T^k = 1$ in the ring $\mathbb{Z}[T]/(T^8+1)$?}
+    {3}
+    {
+        \item $8$
+        \item $9$
+        \item $16$
+        \item $256$
+        \item No such $k$ exists.
+    }
+\end{xexercise}
+ 
+\begin{exbox}{Exercises 7--8. Gaussian Integers as an Ideal Lattice.}
+    Let $n = 2$, so that $\mathcal{R} = \mathbb{Z}[T]/(T^2+1)$.
+    Since $T^2 = -1$, the ring $\mathcal{R}$ is exactly the ring of Gaussian integers $\mathbb{Z}[i]$, with $T$ playing the role of $i$.
+    Consider the element $g := 3+4T$ and the principal ideal $(g) = \{gf: f \in \mathcal{R}\}$.
+\end{exbox}
+ 
+\begin{xexercise}
+    {Exercise 7.}
+    {What is the covolume of the ideal lattice $\mathsf{vec}((g)) \subseteq \mathbb{Z}^2$?}
+    {4}
+    {
+        \item $5$
+        \item $7$
+        \item $12$
+        \item $25$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 8*.}
+    {What are the successive minima $(\lambda_1, \lambda_2)$ of the ideal lattice $\mathsf{vec}((g))$ with respect to the $\ell^2$ norm?}
+    {4}
+    {
+        \item $(1, 5)$
+        \item $(5, 5)$
+        \item $(5, 5\sqrt{2})$
+        \item $(5, 25)$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 9.}
+    {Consider the lattice $D_3 := \{\mathbf{x} \in \mathbb{Z}^3: x_1 + x_2 + x_3 \equiv 0 \pmod 2\}$. How many vectors of length $\lambda_1(D_3)$ does it contain?}
+    {5}
+    {
+        \item $3$
+        \item $6$
+        \item $8$
+        \item $12$
+        \item $24$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 10.}
+    {In $\mathcal{R} = \mathbb{Z}[T]/(T^4+1)$, the element $T$ is invertible, so for $f \in \mathcal{R}$ we can define the \emph{adjoint map} $f^{\ast}(T) := f(T^{-1})$. What is the constant coefficient of $f \cdot f^{\ast}$ for $f = 1 + 2T + 3T^2$?}
+    {5}
+    {
+        \item $0$
+        \item $6$
+        \item $14$
+        \item $36$
+        \item $-14$
+    }
+\end{xexercise}
+
+\begin{remark}
+    The adjoint operator defined above is a crucial part of the further considered proving system~\cite{C:LyuNguPla22}.
+    Moreover, it is used extensively in the Falcon signature scheme~\cite{falcon-spec}.
+\end{remark}
+ 
+\begin{xexercise}
+    {Exercise 11*.}
+    {Consider the ring $\mathbb{Z}_{17}[T]/(T^2+1)$. For which $\alpha \in \mathbb{Z}_{17}$ is the evaluation map $f \mapsto f(\alpha)$ a ring homomorphism $\mathbb{Z}_{17}[T]/(T^2+1) \to \mathbb{Z}_{17}$?}
+    {5}
+    {
+        \item $1$
+        \item $2$
+        \item $4$
+        \item $8$
+        \item $16$
+    }
+\end{xexercise}
+
 \end{document}
