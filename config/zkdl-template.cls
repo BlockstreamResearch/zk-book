@@ -417,6 +417,7 @@
 
 % Load custom environment 
 \input{config/x-environments.cls}
+\input{config/quote-style.cls}
 
 % --Warning environment--
 \newtheoremstyle{warn}{}{}{}{}{\normalfont}{}{ }{}
@@ -534,11 +535,12 @@
 \setlength{\parskip}{0pt}
 \setlength{\columnseprule}{0pt}
 
-% --- Nice comments ---
+% --- Nice comments and keywords ---
 \newcommand{\commentgray}[1]{%
   \hspace{3px}%
   {\textcolor{gray!70!black}{\small\textit{// #1}}}%
 }
+\newcommand{\keyword}[1]{\textnormal{\small\sffamily\bfseries\textcolor{gray!70!black}{#1}}}
 
 % --- Nice algorithmic enumerate lists ---
 \newlist{algoen}{enumerate}{1}
@@ -552,3 +554,7 @@
     labelindent=0.5em,
     nosep
 }
+
+% --- Nice discrete Gaussian symbol ---
+\RequirePackage{mathrsfs}
+\newcommand{\dgaussian}{\mathscr{D}}
