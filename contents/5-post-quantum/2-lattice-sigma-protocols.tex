@@ -995,26 +995,54 @@ For vectors in $\mathcal{R}_q^n$, the conjugate is applied component-wise.
 
 \begin{proof}
     We have $f^{\ast}g = \sum_{i,j} f_ig_jT^{j-i}$.
-    For $0 \leq i,j < d$, the monomial $T^{j-i}$ equals $\pm T^{k}$ for some $0 < k < d$ unless $i = j$, so only the terms with $i = j$ contribute to the constant coefficient.
+    For $0 \leq i,j < d$, the monomial $T^{j-i}$ equals $\pm T^{k}$ for some $k>0$ unless $i = j$, so only the terms with $i = j$ contribute to the constant coefficient.
     The second fact follows by summing the first over all components.
 \end{proof}
 
 The special case $f = g$ is exactly Exercise~10 in \Cref{section:lattices-exercises}: the constant coefficient of $f^{\ast}f$ is $\|f\|_2^2$.
 The lemma turns every $\mathbb{Z}_q$-linear or $\mathbb{Z}_q$-quadratic relation among the coefficients of committed polynomials into the statement that one constant coefficient of an $\mathcal{R}_q$-expression vanishes.
-For example, the relation $\sum_i a_ix_i = b$ for public $a = \sum_i a_iT^i$ and a committed $x = \sum_i x_iT^i$ becomes $\mathsf{ct}(a^{\ast}x - b) = 0$, and taking $a = T^j$ shows that any individual coefficient $x_j = \mathsf{ct}((T^j)^{\ast}x)$ of a committed polynomial is a constant-coefficient statement.
+Let us consider the following examples.
+\begin{example}\label{ex:linear-ct-constraints}
+    Here is a couple of examples how we can encode statements over $\mathbb{Z}_q^d$ using just a couple of polynomials in $\mathcal{R}_q$:
+    \begin{enumerate}
+        \item Suppose we want to show that $\sum_{i \in [d]}a_ix_i = b$ for some fixed constants $a_0,\dots,a_{d-1},b \in \mathbb{Z}_q$ and witness $x_0,\dots,x_{d-1} \in \mathbb{Z}_q$.
+        To convert this check over cyclotomic ring $\mathcal{R}_q$, one introduces two polynomials: $a := \sum_{i \in [d]}a_iT^i$, $x := \sum_{i \in [d]} x_iT^i$, and requires $\mathsf{ct}(a^*x-b) = 0$.
+        \item Suppose that for the given witness $x_0,\dots,x_{d-1} \in \mathbb{Z}_q$ we want to verify that $x_i=0$ for all $i>\nu$. 
+        One again lets $x := \sum_{i \in [d]}x_iT^i$ and enforces multiple constraints $\mathsf{ct}((T^i)^*x)=0$ for all $i>\nu$.
+    \end{enumerate}
+\end{example}
 
-The difficulty is that the proof of \Cref{fig:lnp22-linear} certifies an entire polynomial equation, while we want to certify only one coefficient of a polynomial $F(\mathbf{x}, \mathbf{m})$ and keep the other coefficients secret.
-LNP22 solve this with masking polynomials.
-The prover commits (in the BDLOP part) to polynomials $g_1, \dots, g_k$ whose constant coefficients are zero and whose other coefficients are uniformly random, receives random challenges $\gamma_{i,j} \in \mathbb{Z}_q$, and sends
+In both cases, the statement has the same shape.
+There are public $\mathcal{R}_q$-affine functions $F_1, \dots, F_M$ of the committed messages, and we need to show that
 \begin{equation*}
-    h_i := g_i + \sum_{j \in [M]} \gamma_{i,j} F_j(\mathbf{x}, \mathbf{m}), \quad i \in [k].
+    \mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) = 0 \quad \text{for all} \; j \in [M],
 \end{equation*}
-The verifier checks that $\mathsf{ct}(h_i) = 0$, and the prover proves with \Cref{fig:lnp22-linear} that each $h_i$ was computed correctly, which is a linear relation among the committed values $\mathbf{x}$, $\mathbf{m}$, and $\mathbf{g}$.
-Zero-knowledge holds because all non-constant coefficients of $h_i$ are masked by $g_i$, and the constant coefficient is zero anyway.
-For soundness, if $\mathsf{ct}(F_j) \neq 0$ for some $j$, then $\mathsf{ct}(h_i) = \sum_j \gamma_{i,j}\mathsf{ct}(F_j)$ is uniformly random over the choice of $\gamma_{i,\cdot}$, so it vanishes with probability $1/q$, and $k$ independent masks reduce the soundness error to $q^{-k}$.
+where $F_j(\mathbf{x}, \mathbf{m}) = a^{\ast}x - b$ in the first example and $F_j(\mathbf{x}, \mathbf{m}) = (T^{\nu+j})^{\ast}x$ in the second.
+Quadratic relations lead to the same shape with quadratic $F_j$, which we treat in the next subsection.
+
+\paragraph{Proving a constant coefficient}
+Unfortunately, we cannot directly employ \Cref{fig:lnp22-linear} to prove linear statements obtained from \Cref{lemma:constant-coefficient} (for instance those specified in \Cref{ex:linear-ct-constraints}).
+Indeed, this algorithm can only prove that the linear relation between $\mathbf{x}$ and $\mathbf{m}$ vanishes, but it states nothing about coefficients separately.
+So our goal is to be able to prove a set of $M$ statements $\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) = 0$ where $F_j$'s are $\mathcal{R}_q$-linear (affine) functions. 
+
+Consider first a single function $F$.
+If the prover simply revealed the polynomial $F(\mathbf{x}, \mathbf{m})$, the verifier could check its constant coefficient, but the remaining $d-1$ coefficients would leak information about the witness.
+The idea of LNP22 is to hide these coefficients with a \textbf{mask}: a committed polynomial $g$ whose constant coefficient is zero and whose other coefficients are uniformly random.
+The prover then reveals $h := g + F(\mathbf{x}, \mathbf{m})$ and proves with \Cref{fig:lnp22-linear} that $h$ is computed correctly, which is now an ordinary linear relation among the committed $\mathbf{x}$, $\mathbf{m}$, $g$ with a public right-hand side $h$.
+Since $\mathsf{ct}(h) = \mathsf{ct}(F(\mathbf{x}, \mathbf{m}))$, the verifier learns exactly whether the constant coefficient vanishes, and nothing else.
+
+Now suppose we have multiple statements. Applying this to each $F_j$ separately would cost $M$ masks, and hence $M$ extra commitment slots.
+Instead, the prover commits to only $k \ll M$ masks $g_1, \dots, g_k$. After that, the verifier sends random $\gamma_{i,j} \leftarrowS \mathbb{Z}_q$, and the prover combines all functions into $k$ random linear combinations:
+\begin{equation*}
+    h_i := g_i + \sum_{j \in [M]} \gamma_{i,j}F_j(\mathbf{x}, \mathbf{m}), \quad i \in [k].
+\end{equation*}
+The verifier checks that $\mathsf{ct}(h_i) = 0$ for all $i \in [k]$, and the prover shows with \Cref{fig:lnp22-linear} that each $h_i$ is computed correctly, as before.
+
+Why does it work though? Suppose $\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) \neq 0$ for some $j$. Then $\mathsf{ct}(h_i) = \sum_j \gamma_{i,j}\,\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m}))$ is uniformly random over the choice of $\gamma_{i,\cdot}$, since $g_i$ was committed before the challenges, so it vanishes with probability $1/q$.
+Hence, $k$ independent combinations give soundness error $q^{-k}$.
 The protocol is specified in \Cref{fig:lnp22-ct}.
 
-\begin{algoproto}[ht]
+\begin{algoproto}[H]
     \small
     \centering
     \begin{mdframed}[linecolor=black, linewidth=1pt,
@@ -1024,7 +1052,7 @@ The protocol is specified in \Cref{fig:lnp22-ct}.
             \colorbox{oc-blue-1}{$\mathcal{P}(\mathsf{pp}, \mathbbm{x}=\mathsf{T}, \mathbbm{w}=(\mathbf{x}, \mathbf{m}, \boldsymbol{\rho}))$:}
             \begin{algoen}
                 \item $g_1, \dots, g_k \leftarrowS \{f \in \mathcal{R}_q: \mathsf{ct}(f) = 0\}$;
-                \item \keyword{send} $\mathbf{t}_g \gets \mathbf{B}_g\boldsymbol{\rho} + \mathbf{g}$; \commentgray{no hiding needed}
+                \item \keyword{send} $\mathbf{t}_g \gets \mathbf{B}_g\boldsymbol{\rho} + \mathbf{g}$; \commentgray{commitment}
                 \item \keyword{receive} $\{\gamma_{i,j}\}_{i \in [k], j \in [M]}$;
                 \item $h_i \gets g_i + \sum_{j} \gamma_{i,j}F_j(\mathbf{x}, \mathbf{m})$ for $i \in [k]$;
                 \item \keyword{send} $\mathbf{h} = (h_1, \dots, h_k)$;
@@ -1050,29 +1078,31 @@ The protocol is specified in \Cref{fig:lnp22-ct}.
 
 \subsubsection{Quadratic Relations}
 
-It remains to prove \emph{quadratic} relations, which are needed for norms ($\|\vec{x}\|_2^2 = \mathsf{ct}(\mathbf{x}^{\ast\top}\mathbf{x})$ by \Cref{lemma:constant-coefficient}) and for bits.
-These relations involve both the committed messages and their conjugates, so we collect them into the \textbf{extended witness}
+It remains to prove \emph{quadratic} relations since for now we only considered linear relations.
+These relations involve both the committed messages and their conjugates (thus enabling using the powerful results of \Cref{lemma:constant-coefficient}), so we collect them into the so-called \emph{extended witness}
 \begin{equation*}
     \mathbf{x}_{\varphi} := \varphi(\mathbf{x}, \mathbf{m}) := (\mathbf{x}, \mathbf{x}^{\ast}, \mathbf{m}, \mathbf{m}^{\ast}).
 \end{equation*}
-Fix a public quadratic function $f(\mathbf{x}_{\varphi}) = \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{x}_{\varphi} \rangle + p_0$; the goal is to prove that $f(\mathbf{x}_{\varphi}) = 0$.
+Recall that an arbitrary quadratic function of $\mathbf{x}_{\varphi}$ can be expressed as follows: $f(\mathbf{x}_{\varphi}) = \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{x}_{\varphi} \rangle + p_0$; our goal is to prove that $f(\mathbf{x}_{\varphi}) = 0$.
 
-The approach is the one of ALS20: build a masked opening of $\mathbf{x}_{\varphi}$ that is affine in $c$, evaluate $f$ on it, and cancel the linear term with a garbage commitment.
-From the opening proof, the verifier knows the masked openings $\mathbf{z} = c\mathbf{x} + \mathbf{y}$ and $c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho} = c\mathbf{m} - \mathbf{B}\mathbf{y}_{\rho}$.
+The approach is the one of ALS20: build a masked opening of $\mathbf{x}_{\varphi}$ that is affine in $c$, evaluate $f$ on it, and cancel the linear term with a garbage commitment along the way.
+From the opening proof, the verifier knows the masked openings $\mathbf{z} = c\mathbf{x} + \mathbf{y}$ and that $c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho} = c\mathbf{m} - \mathbf{B}\mathbf{y}_{\rho}$.
 Taking conjugates gives
 \begin{equation*}
     \mathbf{z}^{\ast} = c^{\ast}\mathbf{x}^{\ast} + \mathbf{y}^{\ast},
 \end{equation*}
 which is a masked opening of $\mathbf{x}^{\ast}$ with the \emph{same} challenge only if $c^{\ast} = c$.
-This is why LNP22 restrict the challenges to polynomials fixed by conjugation, \textit{i.e.}, of the form $c = c_0 + \sum_{i=1}^{d/2-1} c_i(T^i - T^{d-i})$.
+This is why LNP22 restrict the challenges to polynomials fixed by conjugation.
 With such challenges, the verifier can compute
 \begin{equation*}
-    \mathbf{z}_{\varphi} := \varphi\bigl(\mathbf{z}, c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho}\bigr) = c\mathbf{x}_{\varphi} + \mathbf{y}_{\varphi}, \quad \text{where} \; \mathbf{y}_{\varphi} := \varphi(\mathbf{y}, -\mathbf{B}\mathbf{y}_{\rho}).
+    \mathbf{z}_{\varphi} := \varphi\bigl(\mathbf{z}, c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho}\bigr) = c\mathbf{x}_{\varphi} + \mathbf{y}_{\varphi} \; \text{where} \; \mathbf{y}_{\varphi} := \varphi(\mathbf{y}, -\mathbf{B}\mathbf{y}_{\rho}).
 \end{equation*}
 Substituting $\mathbf{z}_{\varphi} = c\mathbf{x}_{\varphi} + \mathbf{y}_{\varphi}$ into the quadratic function gives
 \begin{equation*}
-    \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 = \textcolor{oc-orange-8}{f(\mathbf{x}_{\varphi})}c^2 + \textcolor{oc-teal-8}{a_1}c + a_0,
-    \quad
+    \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 = \textcolor{oc-orange-8}{f(\mathbf{x}_{\varphi})}c^2 + \textcolor{oc-teal-8}{a_1}c + a_0
+\end{equation*}
+where
+\begin{equation*}
     \begin{aligned}
         a_1 &:= \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi} + \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{y}_{\varphi} \rangle, \\
         a_0 &:= \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi}.
@@ -1100,30 +1130,33 @@ The protocol is specified in \Cref{fig:lnp22-quadratic}.
                 \item $\mathbf{x}_{\varphi} \gets \varphi(\mathbf{x}, \mathbf{m})$, $\mathbf{y}_{\varphi} \gets \varphi(\mathbf{y}, -\mathbf{B}\mathbf{y}_{\rho})$;
                 \item $a_1 \gets \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi} + \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{y}_{\varphi} \rangle$;
                 \item $a_0 \gets \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi}$;
-                \item $t \gets \langle \mathbf{b}, \boldsymbol{\rho} \rangle + a_1$; \commentgray{garbage commitment}
+                \item \commentgray{garbage commitment} \\ $t \gets \langle \mathbf{b}, \boldsymbol{\rho} \rangle + a_1$;
                 \item $v \gets \langle \mathbf{b}, \mathbf{y}_{\rho} \rangle + a_0$;
-                \item \textbf{send} $(\mathbf{w}, t, v)$;
-                \item \textbf{receive} $c$;
+                \item \keyword{send} $(\mathbf{w}, t, v)$;
+                \item \keyword{receive} $c$;
                 \item $\mathbf{z} \gets c\mathbf{x} + \mathbf{y}$, $\mathbf{z}_{\rho} \gets c\boldsymbol{\rho} + \mathbf{y}_{\rho}$;
-                \item \textbf{if} $\mathsf{Rej}(\mathbf{z}, c\mathbf{x}, \sigma) = 0$ \textbf{or} $\mathsf{Rej}(\mathbf{z}_{\rho}, c\boldsymbol{\rho}, \sigma_{\rho}) = 0$: \textbf{abort};
-                \item \textbf{send} $(\mathbf{z}, \mathbf{z}_{\rho})$.
+                \item \keyword{if} $\mathsf{Rej}((\mathbf{z},\mathbf{z}_{\rho}), (c\mathbf{x},c\boldsymbol{\rho}), (\sigma,\sigma_{\rho})) = 0$: 
+                \item \hspace{5px} \keyword{abort};
+                \item \keyword{send} $(\mathbf{z}, \mathbf{z}_{\rho})$.
             \end{algoen}
         \end{minipage}
         \hfill
         \begin{minipage}[t]{0.47\linewidth}
             \colorbox{oc-blue-1}{$\mathsf{Verify}(\mathsf{pp}, \mathsf{T}, \mathbf{Q}, \mathbf{p}, p_0) \to \{0,1\}$:}
             \begin{algoen}
-                \item \textbf{receive} $(\mathbf{w}, t, v)$;
-                \item \textbf{send} $c \leftarrowS \mathcal{C}$; \commentgray{$c^{\ast} = c$}
-                \item \textbf{receive} $(\mathbf{z}, \mathbf{z}_{\rho})$;
-                \item \textbf{assert} $\|\mathbf{z}\|_2 \leq \sigma\sqrt{2md}$ \textbf{and} $\|\mathbf{z}_{\rho}\|_2 \leq \sigma_{\rho}\sqrt{2rd}$;
-                \item \textbf{assert} $\mathbf{A}\mathbf{z} + \mathbf{A}_{\rho}\mathbf{z}_{\rho} - c\mathbf{t}_A = \mathbf{w}$;
+                \item \keyword{receive} $(\mathbf{w}, t, v)$;
+                \item \keyword{send} $c \leftarrowS \mathcal{C}$; \commentgray{$c^{\ast} = c$}
+                \item \keyword{receive} $(\mathbf{z}, \mathbf{z}_{\rho})$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \sigma\sqrt{2md}$;
+                \item \keyword{assert} $\|\mathbf{z}_{\rho}\|_2 \leq \sigma_{\rho}\sqrt{2rd}$;
+                \item \keyword{assert} $\mathbf{A}\mathbf{z} + \mathbf{A}_{\rho}\mathbf{z}_{\rho} - c\mathbf{t}_A = \mathbf{w}$;
                 \item $\mathbf{z}_{\varphi} \gets \varphi(\mathbf{z}, c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho})$;
-                \item \textbf{return} $\llbracket \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 - (ct - \langle \mathbf{b}, \mathbf{z}_{\rho} \rangle) = v \rrbracket$.
+                \item \keyword{return} $\llbracket \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 - (ct - \langle \mathbf{b}, \mathbf{z}_{\rho} \rangle) = v \rrbracket$.
             \end{algoen}
         \end{minipage}
     \end{mdframed}
-    \caption{Proof of a quadratic relation $f(\mathbf{x}_{\varphi}) = 0$ over $\mathcal{R}_q$ for the extended witness $\mathbf{x}_{\varphi} = (\mathbf{x}, \mathbf{x}^{\ast}, \mathbf{m}, \mathbf{m}^{\ast})$~\cite[Fig.~6]{C:LyuNguPla22}. Every challenge $c \in \mathcal{C}$ satisfies $c^{\ast} = c$.}
+    \caption{Proof of a quadratic relation $f(\mathbf{x}_{\varphi}) = 0$ over $\mathcal{R}_q$ for the extended witness $\mathbf{x}_{\varphi} = (\mathbf{x}, \mathbf{x}^{\ast}, \mathbf{m}, \mathbf{m}^{\ast})$~\cite[Fig.~6]{C:LyuNguPla22}. 
+    Note that $\mathcal{C} \subseteq \{c \in \mathcal{R}_q: c^{\ast}=c\}$.}
     \label{fig:lnp22-quadratic}
 \end{algoproto}
 
@@ -1134,63 +1167,37 @@ As a result, the cost of the whole proof is essentially that of \Cref{fig:lnp22-
 \subsubsection{Lifting from $\mathbb{Z}_q$ to $\mathbb{Z}$: Approximate Range Proofs}
 
 All the proofs above certify relations modulo $q$, while norm and range statements are about integers.
-To see why this matters, consider the encoding of an amount $u \in [0, 2^{\tau})$ with binary decomposition $u = \sum_{i<\tau} u_i2^i$ by its \textbf{bit polynomial} $u(T) := \sum_{i<\tau} u_iT^i$, together with the public gadget polynomials
+To see why this matters, suppose we want to prove that some integer $u$ lies in range $[0,2^{\tau})$.
+Here is how we may do it: let the binary decomposition be $u = \sum_{i<\tau} u_i2^i$; we encode this binary decomposition into the \emph{bit polynomial} $u(T) := \sum_{i<\tau} u_iT^i$. 
+Introduce the following helper (publicly computable) gadget polynomials:
 \begin{equation*}
     \mathsf{g}_1 := \sum_{i<\tau} T^i, \qquad \mathsf{g}_2 := \sum_{i<\tau} 2^iT^i.
 \end{equation*}
 For a polynomial $u$ with integer coefficients $u_0, \dots, u_{d-1}$, \Cref{lemma:constant-coefficient} gives
 \begin{equation*}
-    \mathsf{ct}\bigl(u^{\ast}(u - \mathsf{g}_1)\bigr) = \sum_{i < \tau} u_i(u_i - 1) + \sum_{i \geq \tau} u_i^2, \qquad \mathsf{ct}(\mathsf{g}_2^{\ast}u) = \sum_{i<\tau} 2^iu_i = u(2).
+    \mathsf{ct}\bigl(u^{\ast}(u - \mathsf{g}_1)\bigr) = \sum_{i < \tau} u_i(u_i - 1) + \sum_{i \geq \tau} u_i^2, \; \mathsf{ct}(\mathsf{g}_2^{\ast}u) = \sum_{i<\tau} 2^iu_i = u(2).
 \end{equation*}
-Over $\mathbb{Z}$, every term of the first sum is non-negative, so it vanishes if and only if $u_i \in \{0,1\}$ for $i < \tau$ and $u_i = 0$ for $i \geq \tau$, \textit{i.e.}, if and only if $u$ is a bit polynomial.
+
+Notice that the second statement is nothing but an original integer $u$ computed from the corresponding bit polynomial.
+For the first sum, over $\mathbb{Z}$, every term is non-negative, so it vanishes if and only if $u_i \in \{0,1\}$ for $i < \tau$ and $u_i = 0$ for $i \geq \tau$, \textit{i.e.}, if and only if $u$ is a bit polynomial.
 So a single constant coefficient certifies \emph{both} binarity and vanishing above $\tau$, and the range $u(2) \in [0, 2^{\tau})$ is a consequence of binarity.
+
 Over $\mathbb{Z}_q$, however, the first sum may be a non-zero multiple of $q$, for example when $u$ has large coefficients.
-The relation holds over $\mathbb{Z}$ as soon as we additionally know that $\|\vec{u}\|_2$ is small enough for the sum to stay below $q$.
+The relation holds over $\mathbb{Z}$ as soon as we additionally know that $\|\mathbf{u}\|_2$ is small enough for the sum to stay below $q$.
 
 LNP22 obtain such a bound with an \emph{approximate range proof} based on random projections.
-Let $\mathcal{B}$ denote the distribution on $\{0, \pm 1\}$ with $\Pr[0] = 1/2$ and $\Pr[\pm 1] = 1/4$.
+Further let $\mathcal{B}$ denote the distribution on $\{0, \pm 1\}$ with $\Pr[0] = 1/2$ and $\Pr[\pm 1] = 1/4$.
 
-\begin{lemma}[{\cite[Lemma 2.9]{C:LyuNguPla22}}, informal]\label{lemma:jl-projection}
-    Fix $m$ and $B \leq q/(41m)$.
-    Let $\vec{x} \in \mathbb{Z}_q^m$ with $\|\vec{x}\|_2 \geq B$, and let $\vec{y} \in \mathbb{Z}_q^{256}$ be \emph{arbitrary}.
-    Then, for $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times m}$, one has $\|\mathbf{R}\vec{x} + \vec{y} \bmod q\|_2 < \frac{1}{2}B\sqrt{26}$ with probability less than $2^{-128}$.
+\begin{lemma}[{\cite[Lemma 2.9]{C:LyuNguPla22}}]\label{lemma:jl-projection}
+    Fix $m$ and $B \leq q/41m$.
+    Let $\mathbf{x} \in \mathbb{Z}_q^m$ with $\|\mathbf{x}\|_2 \geq B$, and let $\mathbf{y} \in \mathbb{Z}_q^{256}$ be \emph{arbitrary}.
+    Then, for $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times m}$, one has $\|\mathbf{R}\mathbf{x} + \mathbf{y} \bmod q\|_2 < \frac{1}{2}B\sqrt{26}$ with probability less than $2^{-128}$.
 \end{lemma}
 
-The mask $\vec{y}$ is quantified over without any norm restriction, and this is what makes the lemma usable.
-The prover commits to a Gaussian mask $\vec{y}_B \leftarrowS \dgaussian_{\sigma_B}^{256}$ in the BDLOP part, receives $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times md}$ from the verifier, and responds with $\vec{z}_B := \mathbf{R}\vec{x} + \vec{y}_B$, where rejection sampling removes the dependence on $\vec{x}$.
-It then proves, with $256$ constant-coefficient statements, that $\vec{z}_B$ was computed correctly, and the verifier checks that $\|\vec{z}_B\|_2$ is small.
-By \Cref{lemma:jl-projection}, a prover who reveals a masked $\mathbf{R}\vec{x}$ of small norm cannot have a long $\vec{x}$, whatever mask it used.
+The mask $\mathbf{y}$ is quantified over without any norm restriction, and this is what makes the lemma usable.
+The prover commits to a Gaussian mask $\mathbf{y}_B \leftarrowS \dgaussian_{\sigma_B}^{256}$ in the BDLOP part, receives $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times md}$ from the verifier, and responds with $\mathbf{z}_B := \mathbf{R}\mathbf{x} + \mathbf{y}_B$, where rejection sampling removes the dependence on $\mathbf{x}$.
+It then proves, with $256$ constant-coefficient statements, that $\mathbf{z}_B$ was computed correctly, and the verifier checks that $\|\mathbf{z}_B\|_2$ is small.
+By \Cref{lemma:jl-projection}, a prover who reveals a masked $\mathbf{R}\mathbf{x}$ of small norm cannot have a long $\mathbf{x}$, whatever mask it used.
 The proof is only approximate (the certified bound is a constant factor larger than the true norm), but this suffices to rule out wraparound modulo $q$, and it costs only $256$ integers and one rejection step.
-
-\paragraph{Putting everything together}
-To prove knowledge of $\vec{s}$ with $\mathbf{A}\vec{s} = \vec{t}$ over $\mathbb{Z}_q$ and $\|\vec{s}\|_2 \leq \beta$, the prover places $\vec{s}$ into the Ajtai part of an ABDLOP commitment and proves:
-\begin{itemize}
-    \item the linear relation $\mathbf{A}\vec{s} = \vec{t}$, via constant coefficients (\Cref{fig:lnp22-ct});
-    \item the exact norm bound, by committing to the binary decomposition of $\beta^2 - \|\vec{s}\|_2^2$ and proving the quadratic relation linking it to $\mathsf{ct}(\mathbf{s}^{\ast\top}\mathbf{s})$, together with the bit relations for the decomposition (\Cref{fig:lnp22-quadratic});
-    \item an approximate range proof that rules out wraparound modulo $q$.
-\end{itemize}
-All these statements are batched into a single quadratic proof.
-For the standard benchmark of a $1024 \times 2048$ matrix $\mathbf{A}$ over a $32$-bit modulus and a ternary $\vec{s}$, the resulting proof is about $14$~KB, compared to $33$~KB for the previous approach based on NTT packing, and about $8$~KB of it is the unavoidable commitment to $\vec{s}$ and its opening proof~\cite{C:LyuNguPla22}.
-
-\Cref{tab:lattice-sigma-summary} summarizes the three protocols of this chapter.
-
-\begin{table}[ht]
-    \centering
-    \small
-    \renewcommand{\arraystretch}{1.3}
-    \begin{tabular}{p{2.6cm} p{3.6cm} p{3.6cm} p{3.6cm}}
-        \hline
-         & \textbf{Lyubashevsky~\cite{EC:Lyubashevsky12}} & \textbf{ALS20~\cite{C:AttLyuSei20}} & \textbf{LNP22~\cite{C:LyuNguPla22}} \\
-        \hline
-        Statement & $\mathbf{A}\mathbf{S} = \mathbf{T}$, $\mathbf{S}$ short (relaxed) & products $m_1m_2 = m_3$ over $\mathcal{R}_q$ & linear and quadratic relations over $\mathbb{Z}_q$, exact norms \\
-        Commitment & none (public key) & BDLOP & ABDLOP \\
-        $\mathbb{Z}_q$-values in & --- & NTT slots & coefficients \\
-        Ring splitting & any & fully splitting & two factors ($q \equiv 5 \bmod 8$) \\
-        Key trick & rejection sampling & masked openings and a garbage commitment & constant coefficients via $f^{\ast}g$ \\
-        \hline
-    \end{tabular}
-    \caption{Comparison of the lattice-based $\Sigma$-protocols presented in this chapter.}
-    \label{tab:lattice-sigma-summary}
-\end{table}
 
 \end{document}
