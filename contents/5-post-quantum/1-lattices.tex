@@ -352,7 +352,7 @@ Moreover, turns out that the most current protocols are based on the decisional 
 
 \begin{remark}
     A core characteristic of these lattice problems is their presumed resistance not only against classical adversaries but quantum as well. 
-    Specifically, currently one of the best attacks against $\mathsf{SVP}_{\gamma}$ is given by BDGL sieve algorithms, requiring time $2^{0.292n+\overline{o}(n)}$ for classical computers and $2^{0.257n+\overline{o}(n)}$ for quantum adversaries (with the lower bound of $2^{0.2075n+\overline{o}(n)}$)~\cite{sieve-complexity}.
+    Specifically, currently one of the best attacks against $\mathsf{SVP}_{\gamma}$ is given by BDGL sieve algorithms, requiring time $2^{0.292n+\overline{o}(n)}$ for classical computers and $2^{0.257n+\overline{o}(n)}$ for quantum adversaries (with the lower bound of $2^{0.2075n+\overline{o}(n)}$).
     For more comprehensive review, see \cite{KoenWessel25}.
     That said, taking $n \gtrapprox 1024$ typically suffices to ensure $\geq 128$ bits of security.
 \end{remark}
@@ -465,7 +465,7 @@ We define it as follows.
 
 Binding follows from SIS exactly as in the proof above: two openings $(\mathbf{x},\mathbf{r}) \neq (\mathbf{x}',\mathbf{r}')$ give the short solution $(\mathbf{x}-\mathbf{x}',\mathbf{r}-\mathbf{r}')$.
 
-\begin{exercise}
+\begin{exercise}\label{exercise:ajtai-collision}
     Which SIS instance does this collision solve?
     Specify the matrix and the parameters $(n', m', q', \beta')$ of $\mathsf{SIS}_{n',m',q',\beta'}$ (\Cref{def:sis}).
 
@@ -954,8 +954,8 @@ Encryption costs a few multiplications in $\mathcal{R}_q$, each taking $O(n\log 
 \end{xexercise}
 
 \begin{remark}
-    The adjoint operator defined above is a crucial part of the further considered proving system~\cite{C:LyuNguPla22}.
-    Moreover, it is used extensively in the Falcon signature scheme~\cite{falcon-spec}.
+    The adjoint operator defined above is a crucial part of the further considered proving system~\cite{C:LyuNguPla22} (see \Cref{section:lnp22}).
+    Moreover, it is used extensively in the Falcon signature scheme~\cite{falcon-spec} and many other lattice protocols.
 \end{remark}
  
 \begin{xexercise}
