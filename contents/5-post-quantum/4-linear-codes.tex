@@ -219,4 +219,84 @@ To overcome this limitation, we allow the prover to participate. In \emph{Reed-S
 
 The \emph{Fast Reed-Solomon IOPP} (FRI) is precisely this type of protocol. It achieves linear prover complexity in $n$, while keeping both the verifier's computational effort and the query complexity strictly logarithmic in $n$.
 
+\subsection{Exercises}
+
+\begin{xexercise}
+  {Exercise 1.}
+  {Over $\mathbb{F}_3$, consider $\mathbf{u} = (1,0,2,2,1)$ and $\mathbf{v} = (1,2,2,0,1)$. What are the
+  Hamming distance $\Delta(\mathbf{u},\mathbf{v})$ and the relative Hamming distance $\delta(\mathbf{u},\mathbf{v})$?}
+  {2}
+  {
+    \item $\Delta = 2$, $\delta = 2/5$
+    \item $\Delta = 3$, $\delta = 3/5$
+    \item $\Delta = 2$, $\delta = 2/3$
+    \item $\Delta = 4$, $\delta = 4/5$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 2.}
+  {Let $C \subseteq \mathbb{F}_2^4$ be the linear code spanned by $(1,1,0,1)$ and $(0,1,1,1)$. What is its
+  minimum distance $d_{\min}(C)$?}
+  {4}
+  {
+    \item $1$
+    \item $2$
+    \item $3$
+    \item $4$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 3.}
+  {Which of the following parameters $[n,k,d]_q$ cannot be achieved by any linear code?}
+  {4}
+  {
+    \item $[7,4,4]_q$
+    \item $[7,4,5]_q$
+    \item $[5,1,5]_q$
+    \item $[6,3,4]_q$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 4.}
+  {Consider the Reed--Solomon code $\mathsf{RS}_7[\bm{\alpha},2]$ with $\bm{\alpha} = (0,1,2,3,4,5,6)$.
+  What is the encoding of the message $\mathbf{m} = (3,2)$?}
+  {2}
+  {
+    \item $(2,5,1,4,0,3,6)$
+    \item $(3,5,7,9,11,13,15)$
+    \item $(3,5,0,2,4,6,1)$
+    \item $(3,2,0,0,0,0,0)$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 5.}
+  {Consider $\mathsf{RS}_7[\bm{\alpha},2]$ with $\bm{\alpha} = (0,1,\ldots,6)$, and let
+  $\mathbf{u} = (0,1,4,2,2,4,1)$ be the evaluations of $T^2$. What is $\delta(\mathbf{u}, \mathsf{RS})$?}
+  {4}
+  {
+    \item $2/7$
+    \item $3/7$
+    \item $5/7$
+    \item $6/7$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 6.}
+  {Suppose $\mathbf{u}$ is $1/2$-far from a code $C$, and the verifier compares $\mathbf{u}$ with a fixed
+  codeword at $t$ independent uniformly random positions. What is the smallest $t$ for which the bound
+  $(1-\delta)^t$ guarantees that the probability of missing every discrepancy is at most $2^{-40}$?}
+  {4}
+  {
+    \item $20$
+    \item $40$
+    \item $80$
+    \item $128$
+  }
+\end{xexercise}
+
 \end{document}
