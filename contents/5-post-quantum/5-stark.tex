@@ -1,0 +1,417 @@
+\documentclass[../../book]{subfiles}
+
+\begin{document}
+%--------------------------------
+\subsection{FRI protocol}\label{subsec:fri}
+%--------------------------------
+Unlike the polynomial commitment schemes from \Cref{section:commitment-schemes}, FRI is not formalized as a static tuple of algorithms (such as $\mathsf{Setup}$ and $\mathsf{Com}$). Instead, it operates as a two-phase interactive protocol, as outlined in \Cref{fig:fri-scheme}.
+
+\begin{figure}[h!]
+    \centering
+    \scalebox{0.8}{
+    \begin{tikzpicture}[
+        arr/.style   = {-{Stealth[length=2.5mm]}, line width=0.4mm},
+        act/.style   = {draw=oc-blue-7, fill=oc-blue-1, rounded corners=2pt,
+                        line width=0.4mm, inner sep=4pt, font=\small},
+        data/.style  = {font=\small, inner sep=2pt},
+        phase/.style = {draw=gray, dashed, rounded corners=8pt, line width=0.4mm},
+        halo/.style  = {preaction={draw, white, line width=2.2mm}},
+    ]
+        % --- Verifier column
+        \draw[fill=gray!20!white, ultra thick, rounded corners=4pt] (8.6,-3.9) rectangle (10.4,6.0);
+        \node[inner sep=0pt, align=center] at (9.5,7.0)
+            {\includegraphics[width=1.0cm]{contents/images/common/verifier.png}\\ Verifier $\mathcal{V}$};
+
+        % --- Prover
+        \node[inner sep=0pt, align=center] at (0,7.0)
+            {\includegraphics[width=1.0cm]{contents/images/common/prover.png}\\ Prover $\mathcal{P}$};
+
+        % --- Phase frames
+        \draw[phase] (-1.9,0.55) rectangle (8.3,6.0);
+        \draw[phase] (-1.9,-3.9) rectangle (8.3,0.15);
+        \node[font=\scriptsize\scshape, text=gray] at (6.9,5.6) {Commit phase};
+        \node[font=\scriptsize\scshape, text=gray] at (6.9,-0.25) {Query phase};
+
+        % --- Commit phase
+        \node[data] (poly)  at (0,5.45) {polynomial $f$};
+        \node[act]  (eval)  at (0,4.55) {evaluate on $D_0$};
+        \node[data] (cw)    at (0,3.65) {codeword $f_i$ on $D_i$};
+        \node[act]  (merk)  at (3.3,2.85) {Merkle commit};
+        \node[data] (root)  at (6.3,2.85) {Merkle root};
+        \node[act]  (fold)  at (0,2.0) {split-and-fold};
+        \node[data] (beta)  at (6.3,2.0) {challenge $\beta_i$};
+        \node[data] (final) at (0,1.1) {final value $f_r$};
+
+        \draw[arr] (poly) -- (eval);
+        \draw[arr] (eval) -- (cw);
+        \draw[arr] (cw.south east) -- (merk.north west);
+        \draw[arr] (merk) -- (root);
+        \draw[arr] (root) -- (8.6,2.85);
+        \draw[arr] (8.6,2.0) -- (beta);
+        \draw[arr] (beta) -- (fold);
+        \draw[arr] (fold) -- (cw);
+        \draw[arr] (fold) -- (final);
+        \draw[arr] (final) -- (8.6,1.1);
+
+        % --- Query phase
+        \node[data] (trees) at (3.3,-0.7) {Merkle trees};
+        \node[act]  (open)  at (3.3,-1.75) {open};
+        \node[data] (idx)   at (6.3,-1.75) {query points $s$};
+        \node[data] (vals)  at (1.4,-2.8) {values};
+        \node[data] (paths) at (5.0,-2.8) {authentication paths};
+
+        \draw[arr, halo] (merk) -- (trees);
+        \draw[arr] (trees) -- (open);
+        \draw[arr] (8.6,-1.75) -- (idx);
+        \draw[arr] (idx) -- (open);
+        \draw[arr] (open) -- (vals);
+        \draw[arr] (open) -- (paths);
+        \draw[arr, rounded corners=4pt] (vals.south) |- (8.6,-3.45);
+        \draw[line width=0.4mm, rounded corners=4pt] (paths.south) |- (5.6,-3.45);
+    \end{tikzpicture}
+    }
+    \caption{Overview of the FRI protocol. In the commit phase, the prover repeatedly commits to the
+    current codeword and folds it using the verifier's challenge, until a final value remains.
+    In the query phase, the verifier asks to open the committed codewords at random points and checks
+    the authentication paths. Adapted from~\cite{szepieniec2021anatomy}.}
+    \label{fig:fri-scheme}
+\end{figure}
+
+To see how the protocol works, we first describe its main building block.
+
+\subsubsection{Split-and-Fold scheme}
+FRI follows a split-and-fold strategy: a claim is split into two claims of half the size, the verifier sends a random challenge, and the prover merges the two claims into one using this challenge. Then, after logarithmically many steps, the claim has been reduced to one of trivial size. If the original claim is false, then with high probability the final claim is false as well.
+
+In the FRI case, this claim asserts that the given codeword corresponds to a polynomial of low degree. Let $n$ be the length of the codeword, and let $f(T)=\sum_{i=0}^{k-1} c_i\cdot T^i$ be a polynomial of degree less than $k$.
+
+Following the divide-and-conquer strategy of the fast Fourier transform, we split a polynomial $f$ into its even and odd parts:
+\begin{gather*}
+  f(T) = f_E(T^2) + T \cdot f_O(T^2),
+  \qquad
+  f_E(T^2) = \frac{f(T) + f(-T)}{2},
+  \\
+  f_O(T^2) = \frac{f(T) - f(-T)}{2T}.
+\end{gather*}
+Indeed, the odd terms cancel in $f(T) + f(-T)$ and the even terms cancel in $f(T) - f(-T)$.
+If $\deg f < k$ for an even $k$, then both $f_E$ and $f_O$ have degree less than $k/2$.
+Given a random challenge $\beta \in \mathbb{F}_q$ from the verifier, the prover derives a codeword for
+\begin{equation*}
+  f^\star(T) := f_E(T) + \beta \cdot f_O(T)
+\end{equation*}
+from the codeword for $f(T)$.
+
+Let $D$ be a subgroup of even order $n$ of the multiplicative group of the field, and let $\omega$ be a generator of this subgroup. Let $\{f(\omega^i)\}_{i=0}^{n-1}$ be the codeword for $f(T)$, corresponding to evaluation on $D$. Let $D^\star=\langle \omega^2\rangle$ be another domain of half the length, and let $\{f_E(\omega^{2i})\}_{i=0}^{n/2-1}$, $\{f_O(\omega^{2i})\}_{i=0}^{n/2-1}$ and $\{f^\star(\omega^{2i})\}_{i=0}^{n/2-1}$ be the codewords for $f_E(T)$, $f_O(T)$ and $f^\star(T)$, respectively, corresponding to evaluation on $D^\star$. As a result, we can rewrite the definition of $f^\star(T)$:
+\begin{gather*}
+  \{f^\star(\omega^{2i})\}_{i=0}^{n/2-1} = \left\{f_E(\omega^{2i})+\beta\cdot f_O(\omega^{2i})\right\}_{i=0}^{n/2-1} = \\
+  \left\{\frac{f(\omega^i)+f(-\omega^i)}{2}+\beta \cdot\frac{f(\omega^i)-f(-\omega^i)}{2\omega^i}\right\}_{i=0}^{n/2-1} = \\
+  \left\{2^{-1}\cdot \big((1+\beta\cdot \omega^{-i})\cdot f(\omega^i)+(1-\beta\cdot \omega^{-i})\cdot f(-\omega^i)\big)\right\}_{i=0}^{n/2-1}.
+\end{gather*}
+
+Note that, since $\omega^{n/2}=-1$, we have $f(-\omega^i)=f(\omega^{n/2+i})$. This makes it clear that even though the index iterates over half the range, all $n$ points of the codeword for $f(T)$ are involved.
+
+At this point it is possible to describe one round of FRI: the prover commits to $f(T)$ by sending the Merkle root of its codeword to the verifier. The verifier responds with the random challenge $\beta$. The prover computes $f^\star(T)$ and commits to it by sending the Merkle root of $\{f^\star(\omega^{2i})\}_{i=0}^{n/2-1}$ to the verifier.
+
+In turn, having received the two commitments, the verifier can check that they are correctly related, and rejects the proof if for some $x \in D$
+\begin{equation}\label{eq:fri-fold}
+  f^\star(x^2)\neq 2^{-1}\cdot \big((1+\beta x^{-1})\cdot f(x)+(1-\beta x^{-1})\cdot f(-x)\big).
+\end{equation}
+To do this, the verifier randomly samples an index $i \leftarrowS [n/2]$, sets $x := \omega^i$, and thus defines $3$ points:
+\begin{itemize}
+  \item $A:\quad (\omega^i, f(\omega^i))$,
+  \item $B:\quad (\omega^{n/2+i}, f(\omega^{n/2+i}))$,
+  \item $C:\quad (\beta, f^\star(\omega^{2i}))$.
+\end{itemize}
+Upon receiving the index $i$ from the verifier, the prover provides the $y$-coordinates along with their Merkle authentication paths. The verifier checks these paths against the corresponding roots and then verifies that $A$, $B$ and $C$ lie on a straight line. This is called the \emph{collinearity check}.
+
+%Add exercise A and B on the same line.
+
+After the first round is complete, the verifier and the prover return to the starting point. The prover wishes to establish that a given Merkle root decommits to a codeword whose defining polynomial has a bounded degree. However, as a result of the previous round, the length of the codeword and the number of possible non-zero coefficients of the polynomial have both been halved. Now they set $f := f^\star$ and $D := D^\star$ and repeat the process with a fresh challenge. If $k = 2^r$, then after $r = \log_2 k$ rounds of FRI, the prover and the verifier end up with a constant polynomial whose codeword is also constant, so the prover simply sends this constant to the verifier.
+
+\begin{definition}[FRI protocol]\label{def:fri}
+  Let $f_0 := f$ be given on $D_0 := D = \langle \omega \rangle$ of order $n$, with $\deg f < k = 2^r$.
+  \begin{itemize}
+    \item \textbf{Commit phase.} For $i = 0, 1, \ldots, r-1$:
+    \begin{algoen}
+      \item the prover sends the Merkle root of the codeword of $f_i$ on $D_i$;
+      \item the verifier sends a random challenge $\beta_i \leftarrowS \mathbb{F}_q$;
+      \item the prover computes $f_{i+1} := f_{i,E} + \beta_i \cdot f_{i,O}$ on $D_{i+1} := \{x^2 : x \in D_i\}$.
+    \end{algoen}
+    Finally, the prover sends the constant $f_r$.
+    \item \textbf{Query phase.} Repeat $t$ times:
+    \begin{algoen}
+      \item the verifier samples $x_0 \leftarrowS D_0$ and sets $x_{i+1} := x_i^2$ for $i \in [r]$;
+      \item for every $i \in [r]$, the prover opens $f_i(x_i)$ and $f_i(-x_i)$ together with their
+      authentication paths;
+      \item the verifier checks all paths and \eqref{eq:fri-fold} for every $i \in [r]$, where
+      $f_r(x_r)$ is the constant sent by the prover.
+    \end{algoen}
+  \end{itemize}
+  The verifier accepts if and only if all checks pass.
+\end{definition}
+
+\begin{remark}
+  As described, FRI is interactive. In STARKs it is made non-interactive using the Fiat-Shamir
+  transformation (\Cref{subsection:fiat-shamir}): each challenge $\beta_i$ and each starting point $x_0$
+  is derived by hashing the Merkle roots sent so far.
+\end{remark}
+
+\subsection{Arithmetic Intermediate Representation (AIR)}\label{subsec:air}
+Similar to SNARK, the STARK proof system involves intermediate stages, the first two of which are the \emph{arithmetic constraint system} and the \emph{IOP}.
+
+\begin{definition}\label{def:air}
+  The \emph{arithmetic intermediate representation (AIR)} or arithmetic internal representation, is a way of describing a computation in terms of an execution trace that satisfies a number of constraints induced by the correct evolution of the state.
+\end{definition}
+
+\begin{definition}\label{def:aet}
+  Let $\mathbb{F}_q$ be the field of definition, and the computation describes the evolution of a state of $w$ registers for $\tau$ cycles. Then we define the \emph{algebraic execution trace (AET)} is the table of $\tau \times w$ field elements where every row describes the state of the system at the given point in time, and every column tracks the value of the given register.
+\end{definition}
+
+\begin{definition}\label{def:st-function}
+  A \emph{state transition function} $\phi:\mathbb{F}_q^{w}\rightarrow\mathbb{F}_q^{w}$ determines the state at the next cycle as a function of the state at the previous cycle. Furthermore, a set of boundary conditions 
+  \begin{equation*}
+    \mathcal{B}\subseteq \mathbb{Z}_\tau \times\mathbb{Z}_w\times\mathbb{F}_q
+  \end{equation*}
+  fixes the values of some registers at some cycles: a triple $(i,j,e) \in \mathcal{B}$ means that register $j$ holds the value $e$ at cycle $i$.
+\end{definition}
+
+The \emph{computational integrity claim} consists of the state transition function and the boundary conditions. The \emph{witness} to this claim is the algebraic execution trace. The claim is \emph{true} if there is a witness $W\in \mathbb{F}_q^{\tau \times w}$ such that:
+\begin{itemize}
+  \item For every cycle, the state evolves correctly: $\forall i\in [\tau-1], \phi(W_{[i, :]})=W_{[i+1, :]}$
+  \item All boundary conditions are satisfied: $\forall (i, j, e)\in \mathcal{B}, W_{[i, j]}=e$
+\end{itemize}
+Actually, the state transition function hides a lot of complexity and requires to be describable as low degree polynomials that are independent of the cycle.
+However, this list of polynomials does not need to compute the next state from the current one; it merely needs to distinguish correct evolutions from incorrect ones. Specifically, the state transition function $\phi$ is represented by a list of polynomials $\mathbf{p}(x_0,\ldots,x_{w-1}, y_0,\ldots,y_{w-1})$ such that $\phi(\mathbf{x})=\mathbf{y}$ if and only if $\mathbf{p}(\mathbf{x},\mathbf{y})=0$. Say there are $m$ such state transition verification polynomials. Then the transition constraint become:
+\begin{equation*}
+  \forall i\in[\tau-1],\forall  \ell\in[m]: p_\ell(W_{[i, 0]},\ldots,W_{[i, w-1]},W_{[i+1, 0]},\ldots,W_{[i+1, w-1]})=0
+\end{equation*}
+This representation admits non-determinism: the verification polynomials may have much lower degree than any polynomial that computes the next state. For instance, the transition $y = x^{-1}$ requires computing $x^{q-2}$, but it is verified by the degree-$2$ polynomial $xy - 1$.
+
+\subsubsection{Trace interpolation}
+We saw that the arithmetic constraint system described above represents the computational integrity claim as a bunch of polynomials, where each such polynomial corresponds to a constraint. However, we need to extend terms of polynomials to the witness for transformation this constraint system into an IOP, and extending the notion of valid witnesses to witness polynomials.
+
+Let $H = \langle h \rangle$ be a multiplicative subgroup of $\mathbb{F}_q^{\times}$ of order $\tau$, which we call the \emph{trace evaluation domain}. For simplicity, we assume that $\tau$ is a power of two; otherwise the trace is padded. The trace domain is smaller than the FRI evaluation domain $D$ by a factor exactly equal to the blowup factor $1/\rho$.
+
+For every register $j \in [w]$, the \emph{trace polynomial} $t_j \in \mathbb{F}_q[T]$ is the unique polynomial of degree less than $\tau$ such that
+\begin{equation*}
+  t_j(h^i) = W_{[i,j]} \quad \forall i \in [\tau].
+\end{equation*}
+In practice, it is computed with the inverse NTT (\Cref{section:ntt}). The trace polynomials
+$t_0, \ldots, t_{w-1}$ represent the algebraic execution trace in terms of univariate polynomials.
+
+Translating the computational integrity claim to the trace polynomials, we get:
+\begin{itemize}
+  \item All boundary constraints are satisfied: $\forall (i,j,e)\in \mathcal{B}, t_j(h^i)=e$.
+  \item For all cycles, all transition constraints are satisfied: $\forall i\in [\tau-1],\forall \ell\in[m]$
+  \begin{equation*}
+    p_\ell(t_0(h^i),\dots,t_{w-1}(h^i),t_0(h^{i+1}),\dots,t_{w-1}(h^{i+1}))=0
+  \end{equation*}
+\end{itemize}
+If we look at the left-hand side of the equation, we can see that it corresponds to a univariate polynomial $p_\ell(t_0(T),\dots,t_{w-1}(T),t_0(h\cdot T),\dots,t_{w-1}(h\cdot T))$. Which just means that all $m$ of these transition polynomials evaluate to $0$ in $H$.
+
+Then we can build the following high-level protocol:
+This observation gives rise to the following high-level protocol:
+\begin{algoen}
+  \item The prover commits to the trace polynomials $t_0(T), \ldots, t_{w-1}(T)$.
+  \item The verifier checks that $t_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$.
+  \item The prover commits to the transition polynomials
+  \begin{equation*}
+    c_\ell(T) := p_\ell\big(t_0(T), \ldots, t_{w-1}(T), t_0(h \cdot T), \ldots, t_{w-1}(h \cdot T)\big),
+    \quad \ell \in [m].
+  \end{equation*}
+  \item The verifier checks that $c_\ell(T)$ and $t_j(T)$ are correctly related by:
+  \begin{itemize}
+    \item choosing a random point $z \leftarrowS \mathbb{F}_q^{\times}$;
+    \item querying the values $t_j(z)$ and $t_j(h \cdot z)$ $\forall j \in [w]$;
+    \item evaluating the transition verification polynomials $p_\ell$ at
+    \begin{equation*}
+      \big(t_0(z), \ldots, t_{w-1}(z), t_0(h \cdot z), \ldots, t_{w-1}(h \cdot z)\big)
+    \end{equation*}
+    \item querying the values $c_\ell(z)$;
+    \item checking that the values obtained in the previous two steps match.
+  \end{itemize}
+  \item The verifier checks that the transition polynomials $c_\ell(T)$ evaluate to zero on
+  $\{h^i : i \in [\tau-1]\}$.
+\end{algoen}
+
+In fact, the commitment to the transition polynomials can be omitted. Instead, the verifier uses
+the values of $t_j$ at $z$ and $h \cdot z$ to compute the value of $c_\ell(T)$ at the one point
+needed to verify that $c_\ell(T)$ evaluates to $0$ on $\{h^i : i \in [\tau-1]\}$.
+
+We could use the protocol above if it did not have a flaw: the verifier cannot perform steps 2 and 5, because he sees the values of the polynomials only on the domain $D$, while these checks concern the trace domain $H$. That is why we use FRI to simulate these evaluation checks, with a trick similar to the one used for KZG polynomial commitments. By \Cref{th:root-div}, $g(x) = y$ if and only if $(T - x) \mid g(T) - y$. Hence an evaluation check can be simulated by:
+\begin{itemize}
+  \item subtracting the $y$-coordinate;
+  \item dividing out the \emph{zerofier}, which is the minimal polynomial that vanishes at the $x$-coordinate;
+  \item proving with FRI that the resulting quotient has a bounded degree.
+\end{itemize}
+
+This procedure happens twice for the STARK polynomials: (1) first, applied to the trace polynomials to show satisfaction of the boundary constraints and (2) second, applied to the transition polynomials to show that the transition constraints are satisfied. We call the resulting lists of quotient polynomials the \emph{boundary quotients} and the \emph{transition quotients} respectively.
+
+Both kinds of constraints are instances of a single, more general notion.
+
+\begin{definition}[Generalized AIR constraint]\label{def:gen-air}
+  A \emph{generalized AIR constraint} is given by two polynomials:
+  \begin{itemize}
+    \item The \emph{numerator} determines which equation between elements of the algebraic execution
+    trace holds, in a manner that is independent of the cycle. For transition constraints, the numerator
+    is exactly the transition polynomial $c_\ell(T)$. For a boundary constraint $(i,j,e) \in \mathcal{B}$,
+    the numerator is simply $t_j(T) - e$.
+    \item The \emph{denominator} is a zerofier that determines where the equation is supposed to hold,
+    by vanishing in those points. For transition constraints, this zerofier vanishes on all points of the
+    trace evaluation domain except the last. For boundary constraints, it vanishes only on the boundary points.
+  \end{itemize}
+  The constraint is satisfied if and only if the numerator is divisible by the denominator, that is,
+  if the \emph{quotient} of the numerator by the denominator is a polynomial.
+\end{definition}
+
+For every register $j \in [w]$, let $\mathcal{B}_j := \{h^i : (i,j,e) \in \mathcal{B}\}$ be its set of
+boundary points, let the \emph{boundary interpolant} $I_j$ be the polynomial of degree less than
+$|\mathcal{B}_j|$ such that $I_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$, and let
+$Z_{\mathcal{B}_j}(T) := \prod_{x \in \mathcal{B}_j} (T - x)$ be the \emph{boundary zerofier}.
+The \emph{transition zerofier} is
+\begin{equation*}
+  Z(T) := \prod_{i \in [\tau-1]} (T - h^i) = \frac{T^\tau - 1}{T - h^{\tau-1}},
+\end{equation*}
+where the second equality follows from \Cref{lemma:vanishing-polynomial}. The quotients are
+\begin{equation*}
+  q^{\mathcal{B}}_j(T) := \frac{t_j(T) - I_j(T)}{Z_{\mathcal{B}_j}(T)}, \quad j \in [w],
+  \qquad
+  q^{\mathcal{T}}_\ell(T) := \frac{c_\ell(T)}{Z(T)}, \quad \ell \in [m].
+\end{equation*}
+
+The degree bounds are $\deg q^{\mathcal{B}}_j < \tau - |\mathcal{B}_j|$ and, if $p_\ell$ has degree $d_\ell$, $\deg q^{\mathcal{T}}_\ell \leq (d_\ell - 1)(\tau - 1)$. As a result, we can summarize the discussion as follows.
+
+\begin{proposition}\label{prop:stark-quotients}
+  The trace $W$ satisfies all boundary and transition constraints if and only if all boundary quotients $q^{\mathcal{B}}_j$ and all transition quotients $q^{\mathcal{T}}_\ell$ are polynomials.
+\end{proposition}
+
+\begin{proof}
+  A quotient is a polynomial if and only if its numerator vanishes at every root of its denominator (\Cref{th:root-div}, applied to each root in turn). For the boundary quotients this means $t_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$, and for the transition quotients it means $c_\ell(h^i) = 0$ for all $i \in [\tau-1]$, which are exactly the constraints.
+\end{proof}
+
+The trace polynomial $t_j$ appears in both types of quotients, while $I_j$ and $Z_{\mathcal{B}_j}$ are public. Therefore, the trace can be reconstructed from the boundary quotient,
+\begin{equation*}
+  t_j(T) = q^{\mathcal{B}}_j(T) \cdot Z_{\mathcal{B}_j}(T) + I_j(T),
+\end{equation*}
+and the prover commits to the boundary quotients instead of the trace polynomials. After opening $q^{\mathcal{B}}_j$ at the points $x$ and $h \cdot x$, the verifier computes $t_j$ itself, then derives $c_\ell$ from it, and finally derives $q^{\mathcal{T}}_\ell$ from $c_\ell$.
+
+\begin{remark}
+  The zerofiers $Z$ and $Z_{\mathcal{B}_j}$ vanish on points of $H$, so the quotients cannot be evaluated there. Since $H = \langle h \rangle$ is a subgroup of $\langle \omega \rangle$, we take the FRI domain to be a coset $D = c \cdot \langle \omega \rangle$ with $c \notin \langle \omega \rangle$, which does not intersect $H$. Moreover, $h = \omega^{1/\rho}$, so $h \cdot x \in D$ for every $x \in D$. FRI works on a coset in exactly the same way: $-x \in D$ for every $x \in D$, and since $(cx)^2 = c^2 x^2$, squaring maps $D$ onto the coset $c^2 \cdot \langle \omega^2 \rangle$ of half the size.
+\end{remark}
+
+\subsubsection{Nonlinear Combination}
+
+Instead of running FRI separately for every quotient, the prover combines all of them into a single polynomial. For simplicity, we assume from now on that all transition verification polynomials have degree at most $2$, as in~\cite{szepieniec2021anatomy}. Then every quotient has degree less than $\tau$, and we run FRI with the degree bound $k := \tau$, so that $n = \tau/\rho$.
+
+Let $\mathcal{Q}$ denote the list of all boundary and transition quotients, and for $q \in \mathcal{Q}$ let $d_q$ be its degree bound: $d_q = \tau - |\mathcal{B}_j| - 1$ for $q = q^{\mathcal{B}}_j$, and $d_q = (d_\ell - 1)(\tau - 1)$ for $q = q^{\mathcal{T}}_\ell$. After receiving random weights $\alpha_q, \beta_q \leftarrowS \mathbb{F}_q$ from the verifier, the prover computes
+\begin{equation*}
+  g(T) := \sum_{q \in \mathcal{Q}} \big( \alpha_q \cdot q(T) + \beta_q \cdot T^{\,k-1-d_q} \cdot q(T) \big).
+\end{equation*}
+
+Each quotient enters the sum twice. The first term alone would not be enough: a quotient whose degree exceeds its own bound $d_q$ but is still less than $k$ would not affect the degree of $g$ and would go unnoticed. The second term shifts $q$ so that its degree bound becomes exactly $k-1$: if $\deg q > d_q$, this term has degree at least $k$. Hence, with high probability over the choice of the weights, $\deg g < k$ if and only if $\deg q \leq d_q$ for every $q \in \mathcal{Q}$. Likewise, if some quotient is not a polynomial at all, then with high probability the codeword of $g$ on $D$ is far from $\mathsf{RS}_q[D,k]$. Following~\cite{szepieniec2021anatomy}, we call $g$ a \emph{nonlinear combination}, because of the factors $T^{\,k-1-d_q}$. It therefore suffices to run FRI once, on $g$.
+
+\subsection{The STARK Protocol}\label{subsec:stark-protocol}
+
+We can now put everything together. Note that the random point $z$ from the high-level protocol is no
+longer needed: its role is played by the points that the verifier queries in the query phase of FRI.
+
+\begin{definition}[STARK protocol]\label{def:stark}
+  The AIR $\big(\tau, w, \{p_\ell\}_{\ell \in [m]}, \mathcal{B}\big)$, the domains $H$ and $D$, and the
+  degree bound $k$ are public; the prover knows a trace $W$.
+  \begin{algoen}
+    \item The prover computes the trace polynomials $t_j$ and the boundary quotients $q^{\mathcal{B}}_j$,
+    and sends the Merkle roots of the codewords of $q^{\mathcal{B}}_j$ on $D$ for all $j \in [w]$.
+    \item The verifier sends random weights $\alpha_q, \beta_q \leftarrowS \mathbb{F}_q$ for all
+    $q \in \mathcal{Q}$.
+    \item The prover computes the transition quotients $q^{\mathcal{T}}_\ell$ and the nonlinear
+    combination $g$, and runs the commit phase of FRI (\Cref{def:fri}) with $f_0 := g$.
+    \item The parties run the query phase of FRI. For every point $x \in D$ at which the verifier reads
+    $f_0$, the prover additionally opens $q^{\mathcal{B}}_j(x)$ and $q^{\mathcal{B}}_j(h \cdot x)$ for all
+    $j \in [w]$, together with their authentication paths.
+    \item For every such $x$, the verifier checks the authentication paths, recovers $t_j(x)$ and
+    $t_j(h \cdot x)$ from the boundary quotients, computes $c_\ell(x)$,
+    $q^{\mathcal{T}}_\ell(x) = c_\ell(x)/Z(x)$ and $g(x)$, and checks that $g(x) = f_0(x)$.
+  \end{algoen}
+  The verifier accepts if and only if all these checks and all checks of FRI pass.
+\end{definition}
+
+\begin{figure}[h!]
+    \centering
+    \scalebox{0.74}{
+    \begin{tikzpicture}[
+        arr/.style   = {-{Stealth[length=2.5mm]}, line width=0.4mm},
+        act/.style   = {draw=oc-blue-7, fill=oc-blue-1, rounded corners=2pt,
+                        line width=0.4mm, inner sep=4pt, font=\small},
+        data/.style  = {draw=gray, rounded corners=2pt, line width=0.4mm,
+                        inner sep=4pt, font=\small},
+        lbl/.style   = {font=\scriptsize, inner sep=2pt},
+        phase/.style = {draw=gray, dashed, rounded corners=8pt, line width=0.4mm},
+        proc/.style  = {draw=gray, fill=gray!20!white, rounded corners=2pt,
+                        line width=0.4mm, inner sep=4pt, font=\small},
+        check/.style = {draw=black, rounded corners=2pt, line width=0.6mm,
+                        inner sep=4pt, font=\small},
+    ]
+        % ---------------- Prover row
+        \draw[phase] (-0.8,1.05) rectangle (13.1,-2.3);
+        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,0.95) {Prover};
+        \node[inner sep=0pt, align=center] at (-1.6,-0.6)
+            {\includegraphics[width=1.0cm]{contents/images/common/prover.png}\\ $\mathcal{P}$};
+
+        \node[data] (W)  at (-0.15,0)   {$W$};
+        \node[data] (tj) at (2.3,0)     {$t_j$};
+        \node[act]  (qB) at (6.7,0)     {$q^{\mathcal{B}}_j$};
+        \node[data] (cl) at (4.6,-1.55) {$c_\ell$};
+        \node[data] (qT) at (6.7,-1.55) {$q^{\mathcal{T}}_\ell$};
+        \node[act]  (g)  at (9.2,-0.78) {$g$};
+        \node[proc] (fri) at (11.8,-0.78) {FRI (\Cref{fig:fri-scheme})};
+
+        \draw[arr] (W) -- node[lbl, above] {inverse NTT} (tj);
+        \draw[arr] (tj) -- node[lbl, above] {$(t_j - I_j)/Z_{\mathcal{B}_j}$} (qB);
+        \draw[arr, rounded corners=4pt] (tj.south) |- node[lbl, pos=0.75, below] {$p_\ell$} (cl.west);
+        \draw[arr] (cl) -- node[lbl, above] {$\div Z$} (qT);
+        \draw[arr] (qB.east) -- (g.north west);
+        \draw[arr] (qT.east) -- (g.south west);
+        \draw[arr] (g) -- (fri);
+        \node[lbl, above=1mm of g] {$\alpha_q, \beta_q$};
+
+        % ---------------- Verifier row
+        \draw[phase] (-0.8,-2.75) rectangle (13.1,-5.35);
+        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,-2.85)
+            {Verifier, at every point $x$ queried by FRI};
+        \node[inner sep=0pt, align=center] at (-1.6,-4.05)
+            {\includegraphics[width=1.0cm]{contents/images/common/verifier.png}\\ $\mathcal{V}$};
+
+        \node[data] (v1) at (1.05,-3.9) {$q^{\mathcal{B}}_j(x),\ q^{\mathcal{B}}_j(h x)$};
+        \node[data] (v2) at (4.6,-3.9)  {$t_j(x),\ t_j(h x)$};
+        \node[data] (v3) at (6.9,-3.9)  {$c_\ell(x)$};
+        \node[data] (v4) at (8.8,-3.9)  {$q^{\mathcal{T}}_\ell(x)$};
+        \node[check] (v5) at (11.5,-3.9) {$g(x) \stackrel{?}{=} f_0(x)$};
+
+        \draw[arr] (v1) -- (v2);
+        \draw[arr] (v2) -- (v3);
+        \draw[arr] (v3) -- (v4);
+        \draw[arr] (v4) -- (v5);
+        \draw[arr, rounded corners=4pt] (v1.south) -- ++(0,-0.55) -| (v5.south);
+    \end{tikzpicture}
+    }
+    \caption{Overview of the STARK protocol. The prover commits only to the highlighted polynomials:
+    the boundary quotients $q^{\mathcal{B}}_j$ and, through FRI, the nonlinear combination $g$. The trace
+    polynomials $t_j$, the transition polynomials $c_\ell$ and the transition quotients
+    $q^{\mathcal{T}}_\ell$ are never committed. At every point queried by FRI, the verifier recomputes
+    them from the opened values of the boundary quotients and compares the result with the first layer
+    of FRI. Adapted from~\cite{szepieniec2021anatomy}.}
+    \label{fig:stark-scheme}
+\end{figure}
+
+If the trace is correct, the honest prover is always accepted. If it is not, then by
+\Cref{prop:stark-quotients} at least one quotient is not a polynomial of bounded degree, so with high
+probability the codeword of $g$ is far from $\mathsf{RS}_q[D,k]$, and FRI rejects. The prover cannot
+avoid this by running FRI on a different function that is close to a codeword: step 5 ties the values
+of $f_0$ at the queried points to the committed boundary quotients.
+
+\begin{remark}
+  As with FRI, the whole protocol is made non-interactive using the Fiat--Shamir transformation
+  (\Cref{subsection:fiat-shamir}). Practical STARKs also add several details that we omit: randomization
+  of the trace for zero-knowledge, and additional checks that improve soundness, such as DEEP.
+\end{remark}
+
+\end{document}
