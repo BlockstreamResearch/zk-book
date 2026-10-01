@@ -57,7 +57,7 @@ However, for our applications (with the only exception of \Cref{def:pedersen-pol
 so there is no need to define it separately from $\mathsf{Setup}(\cdot)$ and $\mathsf{Com}(\cdot)$.
 
 \begin{remark}
-    In many applications, the commitment scheme also includes the random component $r$ together with a message, which we write as $\mathsf{Com}(m;r)$.
+    In many applications, the commitment scheme also includes the random component $r$ together with a message, which we write as $\mathsf{Com}(\mathsf{pp}, m; r)$.
     Such a component is necessary to satisfy the \emph{hiding} property (see \Cref{def:hiding}) of a commitment scheme.
 \end{remark}
 
@@ -70,7 +70,7 @@ The formal definition is the following.
     \begin{algoen}
         \item Challenger and adversary set up public parameters: $\mathsf{pp} \gets \mathsf{Setup}(1^{\lambda})$.
         \item Adversary chooses two messages $m_0,m_1$ and sends to the challenger.
-        \item Challenger chooses a random bit $b$, commits to $b$th message by computing\footnote{If randomness is included in the commitment scheme, the challenger additionally passes random $r$ to $\mathsf{Com}(\cdot)$ without revealing it to $\mathcal{A}$.} $c_b \gets \mathsf{Com}(pp, m_b)$, and sends $c_b$ to the adversary.
+        \item Challenger chooses a random bit $b$, commits to $b$th message by computing\footnote{If randomness is included in the commitment scheme, the challenger additionally passes random $r$ to $\mathsf{Com}(\cdot)$ without revealing it to $\mathcal{A}$.} $c_b \gets \mathsf{Com}(\mathsf{pp}, m_b)$, and sends $c_b$ to the adversary.
         \item Adversary guesses a bit $\hat{b}$.
     \end{algoen}
 
@@ -90,7 +90,7 @@ To put it formally, we give the following definition.
         
     Define the advantage in the binding game as:
     \begin{equation*}
-        \mathsf{Adv}^{\text{Bind}}_{\mathcal{A}, \Pi}(\lambda) = \Pr[\text{Com}(m_0;r_0) = \text{Com}(m_1;r_1) \; \text{and} \; m_0 \neq m_1].
+        \mathsf{Adv}^{\text{Bind}}_{\mathcal{A}, \Pi}(\lambda) = \Pr[\mathsf{Com}(\mathsf{pp}, m_0; r_0) = \mathsf{Com}(\mathsf{pp}, m_1; r_1) \; \text{and} \; m_0 \neq m_1].
     \end{equation*}
 
     We say that the commitment scheme is \textbf{binding} if $\mathsf{Adv}^{\text{Bind}}_{\mathcal{A}, \Pi}(\lambda)=\text{negl}(\lambda)$ for all efficient adversaries $\mathcal{A}$.
@@ -104,6 +104,15 @@ To put it formally, we give the following definition.
      Note that \textbf{no} commitment scheme can be perfectly binding and perfectly hiding at the same time. 
 \end{remark}
 
+\begin{proof}
+  Suppose that a commitment scheme is perfectly hiding. 
+  Let us take any two distinct messages $m_0 \neq m_1$. Perfect hiding means that the distribution of $\mathsf{Com}(\mathsf{pp}, m_0; r)$ is identical to the distribution of $\mathsf{Com}(\mathsf{pp}, m_1; r)$, where $r$ is chosen uniformly at random.
+
+  In particular, every value that $\mathsf{Com}(\mathsf{pp}, m_0; r)$ can take is also a value of
+  $\mathsf{Com}(\mathsf{pp}, m_1; r)$. Hence, for any $r_0$ there exists $r_1$ such that $\mathsf{Com}(\mathsf{pp}, m_0; r_0) = \mathsf{Com}(\mathsf{pp}, m_1; r_1)$, that is, the same commitment opens to two
+  different messages. An unbounded adversary can find such $r_0, r_1$ and win the binding game with probability $1$, so the scheme is not perfectly binding.
+\end{proof}
+
 \subsection{Simple Hash-based Commitment Scheme}
 
 We introduce the most basic class of commitment schemes: \emph{hash-based commitments}.
@@ -113,14 +122,10 @@ Define the basic hash-based commitment as follows.
 \begin{definition}\label{def:hash-based-commitment}
     The \textbf{hash-based commitment} $\Pi_{\mathsf{H}}$ is defined as follows:
     \begin{enumerate}
-        \item $\mathsf{Setup}(1^{\lambda})$ initializes the hash function $\mathsf{H}$ and outputs $\mathsf{pp} \gets (\mathsf{H}, \mathcal{R})$, where $\mathcal{R} := \{0,1\}^{k}$ is the space of blinding factors.
-        \item $\mathsf{Com}(\mathsf{pp}, m; r) \to c$ samples the blinding factor $r\xleftarrow{\$}\{0,1\}^k$ and outputs $c \gets \mathsf{H}(m \,\|\, r)$.
+        \item $\mathsf{Setup}(1^{\lambda})$ initializes the hash function $\mathsf{H}$, fixes the message length $\ell$ and the blinding factor length $k$, and outputs $\mathsf{pp} \gets (\mathsf{H}, \ell, k)$.
+        \item $\mathsf{Com}(\mathsf{pp}, m; r) \to c$, for a message $m \in \{0,1\}^{\ell}$, samples the blinding factor $r\leftarrowS\{0,1\}^k$ and outputs $c \gets \mathsf{H}(m \,\|\, r)$.
     \end{enumerate}
 \end{definition}
-
-\begin{remark}
-     To satisfy the \emph{binding} property, the blinding factor length $k$ must be fixed to avoid the situation where the adversary could find two distinct messages $m_0 \neq m_1$ and blinding factors $r_0, r_1$ such that $(m_0 \,\|\, r_0) = (m_1 \,\|\, r_1)$. Such a pair breaks binding without being a collision of $\mathsf{H}$.
-\end{remark}
 
 We then claim the following.
 
@@ -141,7 +146,7 @@ Moreover, given a slightly broader background in cryptanalysis, one can show the
 
 \subsection{Pedersen Commitment Scheme}
 
-Pedersen commitments \cite{pedersen1991} allow us to represent arbitrarily large vectors with a single elliptic curve point, while optionally hiding any information about the vector. Pedersen commitment uses a public group $\mathbb{G}$ of order $q$ (written multiplicatively further on) and two random public generators $g$ and $h$ with $h=g^{\rho}$. The secret parameter $\rho$ should be unknown to anyone, otherwise the $\textit{Binding}$ property of the commitment scheme will be violated.
+Pedersen commitments~\cite{C:Pedersen91} allow us to represent arbitrarily large vectors with a single elliptic curve point, while optionally hiding any information about the vector. Pedersen commitment uses a public group $\mathbb{G}$ of order $q$ (written multiplicatively further on) and two random public generators $g$ and $h$ with $h=g^{\rho}$. The secret parameter $\rho$ should be unknown to anyone, otherwise the $\textit{Binding}$ property of the commitment scheme will be violated.
 Elliptic curve point $h$ is chosen randomly using ``Nothing-up-my-sleeve'' technique to assure no one knows the discrete logarithm of $h$.
 
 \begin{remark}
@@ -159,7 +164,7 @@ Now, we provide the definition of the Pedersen commitment scheme.
     \begin{itemize}
         \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: prover and verifier agree on points $g$ and $h$ on the selected elliptic curve $\mathbb{G}$.
         Let $q:=\#\mathbb{G}=\Theta(2^{\lambda})$.
-        \item $\mathsf{Com}(m \in \mathbb{Z}_q; r) \to (c \in \mathbb{G})$: to generate a commitment to $m \in \mathbb{Z}_q$, the prover selects a blinding factor $r \leftarrowS \mathbb{Z}_q$ and outputs $c \gets g^m h^r$.
+        \item $\mathsf{Com}(\mathsf{pp}, m \in \mathbb{Z}_q; r) \to (c \in \mathbb{G})$: to generate a commitment to $m \in \mathbb{Z}_q$, the prover selects a blinding factor $r \leftarrowS \mathbb{Z}_q$ and outputs $c \gets g^m h^r$.
     \end{itemize}
 \end{definition}
 
@@ -198,7 +203,7 @@ Suppose we commit to them separately:
 
 Notice that $c_0c_1$ is a commitment to $(m_0+m_1,r_0+r_1)$. Indeed,
 \begin{align*}
-    c_0c_1 &= g^{m_0}h^{r_0}g^{m_1}h^{r_1} = g^{m_0+m_1}h^{r_0+r_1} = \text{Com}(m_0+m_1;r_0+r_1).
+    c_0c_1 &= g^{m_0}h^{r_0}g^{m_1}h^{r_1} = g^{m_0+m_1}h^{r_0+r_1} = \mathsf{Com}(m_0+m_1;r_0+r_1).
 \end{align*}
 
 This works for any (reasonable) number of commitments, so we can encode as many points as we like in a single one.
@@ -210,7 +215,7 @@ This allows to introduce the following definition.
     Let $\Pi=(\mathsf{Setup},\mathsf{Com})$ be a commitment scheme over message space $(\mathcal{M},\times)$ and commitment space $(\mathcal{C},\star)$, both being abelian groups.
     $\Pi$ is called \textbf{homomorphic} if
     \begin{equation*}
-        \mathsf{Com}(m_0 \times m_1; r_0 \times r_1) = \mathsf{Com}(m_0; r_0) \star \mathsf{Com}(m_1; r_1) \; \commentgray{for any $m_0,m_1 \in \mathcal{M}$.}
+        \mathsf{Com}(m_0 \times m_1; r_0 \times r_1) = \mathsf{Com}(m_0; r_0) \star \mathsf{Com}(m_1; r_1) \; \commentgray{for any $m_0,m_1, r_0,r_1$.}
     \end{equation*}
 \end{definition}
 
@@ -231,7 +236,7 @@ Instead of committing to messages in $\mathbb{Z}_q$, we can easily commit to mes
     \begin{itemize}
         \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: prover and verifier agree on the cyclic elliptic curve $\mathbb{G}$ of order $q:=\#\mathbb{G}=\Theta(2^{\lambda})$.
         They select $g_0,\dots,g_{n-1},h \leftarrowS \mathbb{G}$.
-        \item $\mathsf{Com}(\mathbf{m} \in \mathbb{Z}_q^n; r \in \mathbb{Z}_q) \to (c \in \mathbb{G})$: to commit to $\mathbf{m} \in \mathbb{Z}_q^n$, the prover selects a blinding factor $r \leftarrowS \mathbb{Z}_q$ and outputs
+        \item $\mathsf{Com}(\mathsf{pp}, \mathbf{m} \in \mathbb{Z}_q^n; r \in \mathbb{Z}_q) \to (c \in \mathbb{G})$: to commit to $\mathbf{m} \in \mathbb{Z}_q^n$, the prover selects a blinding factor $r \leftarrowS \mathbb{Z}_q$ and outputs
         \begin{equation*}
             c \gets h^r\prod_{i \in [n]} g_i^{m_i}.
         \end{equation*}
@@ -296,13 +301,13 @@ Let $g,h \in \mathbb{G}$ be points with unknown discrete logarithms between them
     The \textbf{Pedersen polynomial commitment scheme} $\Pi_{\text{poly}}$ is defined as follows:
     \begin{enumerate}
         \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: the prover and verifier agree on a cyclic group $\mathbb{G}$ of order $q = \Theta(2^{\lambda})$ and two random points $g,h \leftarrowS \mathbb{G}$.
-        \item $\mathsf{Com}(f \in \mathbb{F}_q[T]^{<d}) \to ((y,z) \in \mathbb{Z}_q^2, \mathbf{c} \in \mathbb{G}^d)$: given $f=\sum_{i \in [d]}f_iT^i$, the prover and verifier interact as follows:
+        \item $\mathsf{Com}(\mathsf{pp}, f \in \mathbb{F}_q[T]^{<d}) \to ((y,z) \in \mathbb{Z}_q^2, \mathbf{c} \in \mathbb{G}^d)$: given $f=\sum_{i \in [d]}f_iT^i$, the prover and verifier interact as follows:
         \begin{algoen}
             \item the prover selects random $\bm{\gamma} \leftarrowS \mathbb{F}_q^d$ and computes $d$ Pedersen commitments $c_i \gets g^{f_i}h^{\gamma_i}$ for $i \in [d]$;
             \item the verifier samples $\rho \leftarrowS \mathbb{F}_q$ and sends it to prover;
             \item the prover constructs the blinded polynomial $\gamma = \sum_{i \in [d]}\gamma_i T^i$ and outputs $(y,z) \gets (f(\rho), \gamma(\rho))$.
         \end{algoen}
-        \item $\mathsf{Open}(\mathbf{c}, \rho, y, z) \to \{0,1\}$: the verifier outputs $1$ if and only if the following check passes: $\prod_{i \in [d]} c_i^{\rho^i} = g^yh^z$.
+        \item $\mathsf{Open}(\mathsf{pp}, \mathbf{c}, \rho, y, z) \to \{0,1\}$: the verifier outputs $1$ if and only if the following check passes: $\prod_{i \in [d]} c_i^{\rho^i} = g^yh^z$.
     \end{enumerate}
 \end{definition}
 
@@ -349,24 +354,24 @@ Analyzing the scheme, one can notice that the Pedersen polynomial commitment sch
 
 \subsubsection{KZG Commitment Scheme}
 
-In this section, we describe the KZG commitment scheme \cite{kate2010constant}. This scheme is succinct and requires only a single point in $\mathbb{G}$ to commit to the whole polynomial, with pairings (\Cref{section:ecpairing}) used to verify openings.
+In this section, we describe the KZG commitment scheme~\cite{AC:KatZavGol10}. This scheme is succinct and requires only a single point in $\mathbb{G}$ to commit to the whole polynomial, with pairings (\Cref{section:ecpairing}) used to verify openings.
 
 \textbf{Basic idea.} As before, suppose the prover wants to convince the verifier that $f(\rho)=y$ for some random point $\rho \leftarrowS \mathbb{F}_q$ chosen by the verifier.
 Now we employ \Cref{th:root-div}. Notice that $\rho$ is a zero of a polynomial $f(T)-y$. 
 Consequently, there exists some polynomial $u \in \mathbb{F}_q[T]^{<d}$ (commonly referred to as a \emph{quotient polynomial}) such that $f(T)-y = (T-\rho)u(T)$.
 
-To turn this into a sound scheme, before receiving $\rho$, the prover must first \emph{commit} to polynomial $f$ (call it $\mathsf{com}(f)$).
-After obtaining $\rho$, the prover commits to $u$ (call it $\mathsf{com}(u)$) and then the verifier must check the identity $f(T)-y = (T-\rho)u(T)$.
+To turn this into a sound scheme, before receiving $\rho$, the prover must first \emph{commit} to polynomial $f$ (call it $\mathsf{Com}(f)$).
+After obtaining $\rho$, the prover commits to $u$ (call it $\mathsf{Com}(u)$) and then the verifier must check the identity $f(T)-y = (T-\rho)u(T)$.
 This check is most efficiently done using \textit{Schwartz-Zippel lemma} (\Cref{lemma:one-sz}).
-Specifically, the verifier samples another challenge $\tau \leftarrowS \mathbb{F}_q$ and checks whether $f(\tau)-y=(\tau-\rho)u(\tau)$ using $\mathsf{com}(f)$ and $\mathsf{com}(u)$.
+Specifically, the verifier samples another challenge $\tau \leftarrowS \mathbb{F}_q$ and checks whether $f(\tau)-y=(\tau-\rho)u(\tau)$ using $\mathsf{Com}(f)$ and $\mathsf{Com}(u)$.
 However, how exactly can we commit to these polynomials?
 
 \textbf{Committing to polynomials.} Let $\mathbb{G}_1$ and $\mathbb{G}_2$ be two cyclic groups with corresponding generators $g_1,g_2$.
 Assume that we have a secure and efficient pairing $e: \mathbb{G}_1 \times \mathbb{G}_2 \to \mathbb{G}_T$.
-To commit to a polynomial $f \in \mathbb{F}_q[T]^{<d}$, we compute $\mathsf{com}(f) \gets g_1^{f(\tau)}$.
-Then, using two commitments $\mathsf{com}(f)$ and $\mathsf{com}(u)$, we can do the main using
+To commit to a polynomial $f \in \mathbb{F}_q[T]^{<d}$, we compute $\mathsf{Com}(f) \gets g_1^{f(\tau)}$.
+Then, using two commitments $\mathsf{Com}(f)$ and $\mathsf{Com}(u)$, we can do the main using
 \begin{equation*}
-    e(\mathsf{com}(f)/g_1^y, g_2) = e(\mathsf{com}(u), g_2^{\tau-\rho}).
+    e(\mathsf{Com}(f)/g_1^y, g_2) = e(\mathsf{Com}(u), g_2^{\tau-\rho}).
 \end{equation*}
 
 However, notice the following crucial problem: the commitment uses point $\tau$ \emph{before} the verifier sends the challenge $\rho$.
@@ -399,7 +404,7 @@ This way, we give the following definition of the KZG commitment.
             \item the prover and verifier agree on the group $\mathbb{G}$ of order $q := \Theta(2^{\lambda})$;
             \item the trusted party chooses a \emph{toxic parameter} $\tau \leftarrowS \mathbb{Z}_q$ and outputs $\mathsf{pp} \gets \{g_1^{\tau^i}\}_{i \in [d]}$. It then \emph{deletes $\tau$};
         \end{algoen}
-        \item $\mathsf{Com}(f \in \mathbb{F}_q^{<d}[T]) \to \mathbb{G}$: given a polynomial $f = \sum_i f_iT^i$, the prover parses $\{h_i\}_{i \in [d]} \gets \mathsf{pp}$ and outputs $\prod_{i \in [d]} h_i^{f_i}$.
+        \item $\mathsf{Com}(\mathsf{pp}, f \in \mathbb{F}_q^{<d}[T]) \to \mathbb{G}$: given a polynomial $f = \sum_i f_iT^i$, the prover parses $\{h_i\}_{i \in [d]} \gets \mathsf{pp}$ and outputs $\prod_{i \in [d]} h_i^{f_i}$.
     \end{itemize}
 \end{definition}
 
@@ -430,11 +435,11 @@ Consequently, we build the following evaluation proof protocol.
         \item $\mathsf{Prove}(\mathsf{pp},f,\rho,y) \to \pi$: the prover conducts the following steps: 
         \begin{algoen}
             \item compute $u(T) \gets (f(T)-y)/(T-\rho)$ over $\mathbb{F}_q[T]$;
-            \item \textbf{output} $\pi \gets (\Pi_{\text{KZG}}.\mathsf{Com}(f), \Pi_{\text{KZG}}.\mathsf{Com}(u))$.
+            \item \textbf{output} $\pi \gets (\Pi_{\text{KZG}}.\mathsf{Com}(\mathsf{pp}, f), \Pi_{\text{KZG}}.\mathsf{Com}(\mathsf{pp}, u))$.
         \end{algoen}
-        \item $\mathsf{Verify}(\pi, \rho, y)$: verifier parses $(\mathsf{com}(f), \mathsf{com}(u)) \gets \pi$ and checks
+        \item $\mathsf{Verify}(\pi, \rho, y)$: verifier parses $(\mathsf{Com}(f), \mathsf{Com}(u)) \gets \pi$ and checks
         \begin{equation*}
-            e(\mathsf{com}(f)/g_1^y, g_2) = e(\mathsf{com}(u), g_2^{\tau}/g_2^{\rho}).
+            e(\mathsf{Com}(f)/g_1^y, g_2) = e(\mathsf{Com}(u), g_2^{\tau}/g_2^{\rho}).
         \end{equation*}
     \end{itemize}
 \end{definition}
