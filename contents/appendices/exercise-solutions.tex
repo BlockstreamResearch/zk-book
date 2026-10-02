@@ -523,9 +523,21 @@ group elements.
 
 \textbf{Exercise 10. Answer: A.} $c \gets H((u,v,w),(v_r,w_r))$.
 
+\subsection*{Introduction to Code-based Cryptography}
+
+\textbf{Exercise 1. Answer: A.} The vectors differ in the 2nd and 4th positions, so $\Delta(\mathbf{u},\mathbf{v}) = 2$ and $\delta(\mathbf{u},\mathbf{v}) = 2/5$.
+
+\textbf{Exercise 2. Answer: B.} The code consists of $0000$, $1101$, $0111$ and $1010$. The smallest weight of a non-zero codeword is $w(1010) = 2$, so by \Cref{prop:dist-eq-weight} we get $d_{\min}(C) = 2$.
+
+\textbf{Exercise 3. Answer: B.} By the Singleton bound, $k \leq n-d+1$. For $[7,4,5]_q$ this gives $4 \leq 3$, which is false. The other three parameter sets satisfy the bound with equality, so they are MDS and are attained by Reed--Solomon codes over any field with $q \geq n$.
+
+\textbf{Exercise 4. Answer: C.} The message corresponds to $f_{\mathbf{m}}(T) = 3 + 2T$. Evaluating it at $0,1,\ldots,6$ modulo $7$ gives $(3,5,0,2,4,6,1)$.
+
+\textbf{Exercise 5. Answer: C.} For every $g$ of degree at most $1$, the polynomial $T^2 - g(T)$ is non-zero of degree $2$ and thus has at most $2$ roots, so $\Delta(\mathbf{u}, \mathsf{RS}) \geq 5$. The constant codeword $(1,\ldots,1)$ agrees with $\mathbf{u}$ at $T = 1$ and $T = 6$, so $\Delta(\mathbf{u}, \mathsf{RS}) = 5$ and $\delta(\mathbf{u}, \mathsf{RS}) = 5/7$.
+
+\textbf{Exercise 6. Answer: B.} The probability of missing every discrepancy is less than $(1/2)^t = 2^{-t}$, which is at most $2^{-40}$ exactly when $t \geq 40$.
 
 \subsection*{Lattice-Based Cryptography}
- 
  
 \textbf{Exercise 1. Answer: C.} A matrix $\mathbf{U} \in \mathbb{Z}^{2 \times 2}$ is a basis of $\mathbb{Z}^2$ if and only if $\mathbf{U}$ is unimodular, \textit{i.e.}, $\det \mathbf{U} = \pm 1$.
 The determinants of the options are $2, -2, 1, 2, 2$, respectively, so only (C) works.
