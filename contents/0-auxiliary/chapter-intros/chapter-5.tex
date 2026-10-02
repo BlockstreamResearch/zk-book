@@ -2,26 +2,43 @@
 
 \begin{document}
 
-This section introduces a new class of zero-knowledge protocols which are based
-on post-quantum assumptions.
+With the recent developments in quantum computing, there is a large concern that assumptions such as discrete logarithm or $q$-Diffie-Hellman (which many previously considered systems such as Groth16 or PlonK rely on) might be broken with the introduction of cryptographically relevant quantum computer (CRQC).
+Consequently, this raises the question: how can we build $\Sigma$-protocols or more general SNARK systems using cryptographic assumptions resistant against CRQC?
+Additionally, we need to introduce exactly such type of assumptions called \emph{post-quantum assumptions}.
 
-% TODO: Add bla-bla-bla here later
+This section introduces two families of post-quantum zero-knowledge (PQZK) protocols:
+\begin{enumerate}
+    \item \textbf{Lattice-based.} Such protocols are based on difficulty of solving certain problems over so-called \emph{lattices}, such as finding short vectors lying on a ``grid'' in a high-dimensional space.
+    Such protocols resemble the classical elliptic curve-based approaches most; for instance, one can directly rewrite $\Sigma$-protocols (see \Cref{section:lattice-sigma-protocols}) using the lattice-based machinery.
+    Assumptions such as SIS and LWE are considered highly secure and conservative while folding schemes on lattices are more efficient than many other PQ constructions.
+    \item \textbf{Hash-based.} These protocols are based on arguably the most conservative assumptions such as hash preimage resistance.
+    The primary construction we are going to consider is \emph{ZK-STARK}.
+    We introduce the notions of error-correcting codes, fast Reed-Solomon Interactive Oracle Proof of Proximity (FRI), and Algebraic Intermediate Representation (AIR).
+\end{enumerate}
 
+The full table of contents is given below.
 
 \begin{table}[H]
     \centering
     \begin{tabularx}{\textwidth}{ccX}
         \Xhline{3\arrayrulewidth}
-        \rowcolor{yellow!30}\textbf{Section} & \textbf{Topic} & \textbf{Key Concepts} \\
+        \rowcolor{oc-cyan-3}\textbf{Section} & \textbf{Topic} & \textbf{Key Concepts} \\
         \Xhline{3\arrayrulewidth}
-        \rowcolor{yellow!10}\ref{section:lattices} & Lattice-based Cryptography & Lattice, SIS, LWE, ideal and module lattices  \\
+        \rowcolor{oc-cyan-1}\ref{section:lattices} & Lattice-based Cryptography & Lattice, SIS, LWE, Ajtai commitments, ideal and module lattices  \\
         \hline
-        \rowcolor{yellow!20}\ref{section:lattice-sigma-protocols} & Lattice Sigma Protocols &
-        Discrete Gaussians, Lyubashevsky Signature Scheme, ALS20 and LNP22 \\
+        \rowcolor{oc-cyan-2}\ref{section:lattice-sigma-protocols} & Lattice-based $\Sigma$-Protocols &
+        Discrete Gaussians, Lyubashevsky Identification, proving quadratic relations using ALS20 and LNP22 \\
+        \hline
+        \rowcolor{oc-cyan-1}\ref{section:labrador} & LaBRADOR &
+        Reduction of Knowledge and succinct recursive proving system  \\
         \Xhline{3\arrayrulewidth}
     \end{tabularx}
     \caption{Topics covered in Part V}
     \label{tab:essentialls-5}
 \end{table}
+
+\begin{remark}
+    As of version \texttt{0.6.1}, the ZK-STARK section is in active progress.
+\end{remark}
 
 \end{document}
