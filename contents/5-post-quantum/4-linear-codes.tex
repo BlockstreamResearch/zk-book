@@ -1,16 +1,26 @@
 \documentclass[../../book]{subfiles}
 
 \begin{document}
-In previous section, the verifier relied on algebraic structures: pairings in KZG, and group homomorphisms in Pedersen commitments. Here, we rely on nothing but hash functions. We need to verify that a committed function is a low-degree polynomial by examining only a few of its evaluations. Verifying this directly is impossible: the function could perfectly match a polynomial everywhere except at a single, unchecked point.
+Error-correcting codes date back to 1948, when Shannon showed that information can be transmitted reliably over noisy channels, provided that redundancy is added~\cite{shannon1948}. A few years later, Hamming showed that one can build codes that not only detect possible errors but also correct them~\cite{hamming1950}.
 
-This is precisely why we need to reformulate the problem: if we extend a polynomial over a domain much larger than its degree, any function that is not a valid polynomial will end up being 'far away' from actual polynomials. To leverage this property and solve our problem, we will turn to coding theory~\cite{guruswami23}.
+The idea behind error-correcting codes is quite simple: encode a message of $k$ symbols into a longer \emph{codeword} of $n > k$ symbols, so that any two codewords differ in many positions. Then a few corrupted symbols cannot turn one codeword into another, and the original message can still be recovered.
+
+The same idea turns out to be useful in cryptography. Shamir's secret sharing (\Cref{fig:shamir}) is, in fact, a Reed--Solomon code~\cite{mceliece1981}, and the Reed--Solomon fingerprinting from \Cref{section:toolkit} relies on the same property of polynomials. McEliece used codes to build one of the first public-key encryption schemes~\cite{McEliece78}, and code-based schemes are today among the main candidates for post-quantum cryptography.
+
+In proof systems, codes play a different role. The simplest commitment that relies only on hash functions is a Merkle tree (\Cref{section:commitment-schemes}), but it gives the verifier only local access: it can open individual positions of the committed vector, and nothing more. If the prover committed to the message itself, a change in a single symbol would affect a single position, which the verifier would almost certainly miss. Committing to an encoding of the message with a code of large distance makes local access sufficient: a committed vector is either close to a single codeword, which binds the prover to a single message, or far from all codewords, which can be detected by checking only a few random positions using a test of proximity to the code. Many modern proof systems are built on this principle, including STARKs~\cite{EPRINT:BBHR18}, Ligero~\cite{CCS:AHIV17}, Brakedown~\cite{C:GLSTW23} and Binius~\cite{EC:DiaPos25}. Since they rely only on hash functions, they need no trusted setup and are believed to be secure against quantum adversaries.
+
+In this section, we introduce linear codes and Reed-Solomon codes~\cite{guruswami23}, together with the notion of proximity to a code, which is the central tool behind STARKs (\Cref{section:stark}).
+
+%This is precisely why we need to reformulate the problem: if we extend a polynomial over a domain much larger than its degree, any function that is not a valid polynomial will end up being 'far away' from actual polynomials. To leverage this property and solve our problem, we will turn to coding theory~\cite{guruswami23}.
 %--------------------------------
 \subsection{Linear Codes}
 %--------------------------------
+Let us first explain the basic idea of error-correcting codes.
 \begin{intuition}
-  Suppose the sender wants to send a message $m$ over a noisy channel. The sender first uses an encoding function to map the $k$ message symbols into $n$ symbols, called a \emph{codeword}, and then sends it over the channel. The receiver gets a \emph{received word} of $n$ symbols and tries to decode it, recovering the original $k$ message symbols.
+   Fix an alphabet $\Sigma$. Our goal is to send an encoded message $m \in \mathcal{A}^k$ over a noisy channel, which may corrupt some of the symbols. First, we use an encoder (encoding function) $\mathcal{E}$ to map $k$ digits to the $n$ encoded symbols, called a \emph{codeword}. In this way, we add $n-k$ redundant symbols to the message. Then, we transmitted the codeword over the noisy channel. The receiver gets a \emph{received word} of $n$ symbols, which may differ from the original codeword in some positions. The receiver then uses a decoder $\mathcal{D}$ to recover the original message $m$ from the received word. 
 \end{intuition}
 
+Now we can formalize the notion of a code and its encoding function.
 \begin{definition}[Code]\label{def:code}
   A \emph{code} of block length $n$ over an alphabet $\Sigma$ is a subset $C \subseteq \Sigma^n$, whose elements are called \emph{codewords}. We write $M := |C|$ for the number of codewords and $k := \log_{|\Sigma|} M$ for the number of message symbols. An \emph{encoding} for $C$ is an injective map $E : \Sigma^k \to \Sigma^n$ whose image is $C$.
 \end{definition}
