@@ -330,6 +330,13 @@
 \DeclareMathOperator{\Im}{\text{Im}}
 \DeclareMathOperator{\diag}{\text{diag}}
 
+% Some commands for the lattice section
+\newcommand{\GS}[1]{\ensuremath{\widehat{#1}}\xspace}
+\newcommand{\A}{\ensuremath{\mathcal{A}}\xspace}
+\newcommand{\GAME}{\ensuremath{\mathsf{Game}}\xspace}
+\newcommand{\Adv}{\ensuremath{\mathsf{Adv}}\xspace}
+\newcommand{\negl}{\ensuremath{\mathsf{negl}}\xspace}
+
 \newcommand{\Circ}{\textit{\texttt{C}}}
 
 % --- Theorem environments ---
@@ -410,6 +417,7 @@
 
 % Load custom environment 
 \input{config/x-environments.cls}
+\input{config/quote-style.cls}
 
 % --Warning environment--
 \newtheoremstyle{warn}{}{}{}{}{\normalfont}{}{ }{}
@@ -457,6 +465,12 @@
 \SetKwComment{Comment}{/* }{ */}
 \newcommand\mycommentstyle[1]{\footnotesize\ttfamily\textcolor{red!70!black}{#1}}
 \SetCommentSty{mycommentstyle}
+
+% --- Settings for making Algorithm floating environment ---
+\RequirePackage{mdframed}
+\DeclareCaptionType{algoproto}[Algorithm][List of Algorithms]
+\crefname{algoproto}{Algorithm}{Algorithms}
+\Crefname{algoproto}{Algorithm}{Algorithms}
 
 % --- Cleverref Custom Names ---
 \crefname{algocf}{alg.}{algs.}
@@ -521,11 +535,12 @@
 \setlength{\parskip}{0pt}
 \setlength{\columnseprule}{0pt}
 
-% --- Nice comments ---
+% --- Nice comments and keywords ---
 \newcommand{\commentgray}[1]{%
   \hspace{3px}%
   {\textcolor{gray!70!black}{\small\textit{// #1}}}%
 }
+\newcommand{\keyword}[1]{\textnormal{\small\sffamily\bfseries\textcolor{gray!70!black}{#1}}}
 
 % --- Nice algorithmic enumerate lists ---
 \newlist{algoen}{enumerate}{1}
@@ -539,3 +554,7 @@
     labelindent=0.5em,
     nosep
 }
+
+% --- Nice discrete Gaussian symbol ---
+\RequirePackage{mathrsfs}
+\newcommand{\dgaussian}{\mathscr{D}}
