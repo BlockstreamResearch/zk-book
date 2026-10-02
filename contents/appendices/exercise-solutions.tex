@@ -523,8 +523,6 @@ group elements.
 
 \textbf{Exercise 10. Answer: A.} $c \gets H((u,v,w),(v_r,w_r))$.
 
-\subsection{Introduction to Code-based Cryptography}
-
 \subsection*{Introduction to Code-based Cryptography}
 
 \textbf{Exercise 1. Answer: A.} The vectors differ in the 2nd and 4th positions, so $\Delta(\mathbf{u},\mathbf{v}) = 2$ and $\delta(\mathbf{u},\mathbf{v}) = 2/5$.
@@ -538,4 +536,67 @@ group elements.
 \textbf{Exercise 5. Answer: C.} For every $g$ of degree at most $1$, the polynomial $T^2 - g(T)$ is non-zero of degree $2$ and thus has at most $2$ roots, so $\Delta(\mathbf{u}, \mathsf{RS}) \geq 5$. The constant codeword $(1,\ldots,1)$ agrees with $\mathbf{u}$ at $T = 1$ and $T = 6$, so $\Delta(\mathbf{u}, \mathsf{RS}) = 5$ and $\delta(\mathbf{u}, \mathsf{RS}) = 5/7$.
 
 \textbf{Exercise 6. Answer: B.} The probability of missing every discrepancy is less than $(1/2)^t = 2^{-t}$, which is at most $2^{-40}$ exactly when $t \geq 40$.
+
+\subsection*{Lattice-Based Cryptography}
+ 
+\textbf{Exercise 1. Answer: C.} A matrix $\mathbf{U} \in \mathbb{Z}^{2 \times 2}$ is a basis of $\mathbb{Z}^2$ if and only if $\mathbf{U}$ is unimodular, \textit{i.e.}, $\det \mathbf{U} = \pm 1$.
+The determinants of the options are $2, -2, 1, 2, 2$, respectively, so only (C) works.
+For instance, the matrix in (A) generates only the vectors with an even first coordinate and therefore misses $(1,0)$.
+ 
+ 
+\textbf{Exercise 2. Answer: C.} The vectors $(\pm 1, 0)$, $(0, \pm 1)$, and $(\pm 1, \pm 1)$ give $x + 2y \in \{\pm 1, \pm 2, \pm 3\}$, none of which is divisible by $5$.
+Hence, $\lambda_1 > \sqrt{2}$, and the next candidates have length $2$ or $\sqrt{5}$.
+The vectors $(\pm 2, 0)$ and $(0,\pm 2)$ do not lie in the lattice, while $(1,2)$ does, since $1 + 4 = 5$.
+Therefore, $\lambda_1 = \sqrt{5}$.
+ 
+ 
+\textbf{Exercise 3. Answer: B.} As shown in the previous solution, no non-zero vector with entries in $\{-1,0,1\}$ lies in the lattice, so $\beta = 1$ does not suffice.
+The vector $(1,2)$ is a solution with $\|(1,2)\|_{\infty} = 2$.
+Notice that this matches the pigeonhole bound $(\beta+1)^m > q^n$: for $\beta = 1$ we have $2^2 = 4 < 5$, while for $\beta = 2$ we have $3^2 = 9 > 5$.
+ 
+ 
+\textbf{Exercise 4. Answer: D.} The vector $\mathbf{b}$ lies \emph{close} to the lattice point $\mathbf{A}\mathbf{s} \bmod q$ of $\Lambda_q(\mathbf{A})$, at distance at most $\|\mathbf{e}\|_2$, but it lies on the lattice only when the error is (essentially) zero.
+This is exactly why Search-LWE is a bounded distance decoding problem.
+All other statements are true: (A) is the easy direction of the search-to-decision equivalence, (B) is the reason we need the error in the first place, and (C) is stated in the text.
+ 
+ 
+\textbf{Exercise 5. Answer: C.} We have $(1+T^3) \cdot T^2 = T^2 + T^5$.
+Since $T^4 = -1$, we get $T^5 = T \cdot T^4 = -T$, so the result is $T^2 - T$.
+ 
+ 
+\textbf{Exercise 6. Answer: C.} We have $T^8 = -1$, so $T^{16} = (T^8)^2 = 1$.
+For $0 < k < 8$, the element $T^k$ is a monomial different from $1$, and for $8 \leq k < 16$ we have $T^k = -T^{k-8} \neq 1$.
+Hence, the smallest such $k$ is $16 = 2n$.
+In particular, $T$ is invertible with $T^{-1} = T^{15} = -T^7$, and multiplying by $T^k$ is simply a cyclic shift of the coefficients with some signs flipped.
+This is why sparse challenges such as $\pm T^k$ are cheap to multiply by.
+ 
+ 
+\textbf{Exercise 7. Answer: D.} Since $Tg = 3T + 4T^2 = -4 + 3T$, we have $\mathsf{rot}(g) = \begin{bmatrix} 3 & -4 \\ 4 & 3 \end{bmatrix}$, which is exactly the matrix of multiplication by the complex number $3+4i$.
+Since $\mathsf{vec}((g)) = \mathcal{L}(\mathsf{rot}(g))$, the covolume is $|\det \mathsf{rot}(g)| = 3 \cdot 3 + 4 \cdot 4 = 25$.
+In the language of complex numbers, this is $|3+4i|^2$.
+ 
+ 
+\textbf{Exercise 8. Answer: B.} For Gaussian integers, the length of the coefficient vector is the complex absolute value, which is multiplicative: $\|\mathsf{vec}(gf)\|_2 = |g| \cdot |f| = 5|f|$.
+Every non-zero Gaussian integer $f$ has $|f| \geq 1$, so every non-zero lattice vector has length at least $5$, with equality for $f = \pm 1, \pm T$.
+The vectors $\mathsf{vec}(g) = (3,4)$ and $\mathsf{vec}(Tg) = (-4,3)$ are linearly independent and both have length $5$, so $\lambda_1 = \lambda_2 = 5$.
+This is a general phenomenon: in an ideal lattice of $\mathbb{Z}[T]/(T^n+1)$, multiplication by $T$ permutes the coefficients up to sign and therefore preserves length.
+Hence, if $\mathbf{v}$ is a shortest vector, then $\mathbf{v}, T\mathbf{v}, \dots, T^{n-1}\mathbf{v}$ are $n$ linearly independent vectors of the same length, and $\lambda_1 = \lambda_2 = \dots = \lambda_n$.
+This extra symmetry is the reason why problems such as $\mathsf{GapSVP}_{\gamma}$ become easier on ideal lattices.
+ 
+ 
+\textbf{Exercise 9. Answer: D.} A vector with a single entry $\pm 1$ has an odd coordinate sum, so it does not lie in $D_3$; hence $\lambda_1(D_3) \geq \sqrt{2}$.
+The vectors $\pm\mathbf{e}_i \pm \mathbf{e}_j$ for $i < j$ lie in $D_3$ and have length $\sqrt{2}$, so $\lambda_1(D_3) = \sqrt{2}$.
+There are $\binom{3}{2} = 3$ pairs $\{i,j\}$ and $4$ choices of signs, which gives $12$ shortest vectors (vectors with an entry $\pm 2$ have length at least $2$).
+
+\textbf{Exercise 10. Answer: C.} Write $f = \sum_i f_iT^i$, so that $f \cdot f^{\ast} = \sum_{i,j} f_if_jT^{i-j}$.
+Since $T^{i-j}$ is $\pm$ a non-constant monomial unless $i = j$, the constant coefficient is $\sum_i f_i^2 = 1 + 4 + 9 = 14$.
+In other words, the constant coefficient of $f \cdot f^{\ast}$ is exactly $\|f\|_2^2$.
+One can also compute everything explicitly: $T^{-1} = -T^3$, so $f^{\ast} = 1 - 3T^2 - 2T^3$ and $f \cdot f^{\ast} = 14 + 8T - 8T^3$.
+Note that the adjoint plays the role of complex conjugation (for $n = 2$ it is literally $\overline{a+bi} = a-bi$).
+ 
+\textbf{Exercise 11. Answer: C.} Evaluation at $\alpha$ is well defined on the quotient ring only if it sends $T^2 + 1$ to zero, \textit{i.e.}, $\alpha^2 = -1 = 16$ in $\mathbb{Z}_{17}$.
+Among the options, only $\alpha = 4$ works, since $4^2 = 16$; the other square root of $-1$ is $13 = -4$.
+The two evaluations together give the map $f \mapsto (f(4), f(-4))$, which is an isomorphism $\mathbb{Z}_{17}[T]/(T^2+1) \cong \mathbb{Z}_{17} \times \mathbb{Z}_{17}$ that turns polynomial multiplication into coordinate-wise multiplication.
+This is precisely the NTT for $n = 2$, and it exists because $17 \equiv 1 \pmod{2n}$ for $n=2$. 
+
 \end{document}

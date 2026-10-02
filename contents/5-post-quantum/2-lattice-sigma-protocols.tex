@@ -1,0 +1,1203 @@
+\documentclass[../../book.tex]{subfiles}
+
+\begin{document}
+
+With SIS and LWE at hand, we can build lattice-based analogues of the discrete-logarithm (DL) protocols from the previous chapters (specifically, \Cref{section:sigma}).
+Surprisingly, the considered techniques greatly resemble DL-based protocols, to the point that they follow exactly the same steps with the only exception of the so-called \emph{rejection sampling}.
+That said, the key idea of this section is as follows:
+
+\begin{bookquote}
+    One can translate the majority of existing DL-based protocols to lattice-based assumptions by employing the rejecting sampling technique.
+\end{bookquote}
+
+Of course, there is a caveat: resulting schemes are commonly largely inefficient.
+However, by exploiting the algebraic structure of cyclotomic rings (\Cref{subsec:cyclotomic-rings}), one can significantly optimize these protocols.
+
+\subsection{Lattice-Based Identification and Rejection Sampling}\label{section:lyubashevsky}
+
+We begin with arguably the most basic construction: Schnorr identification protocol.
+By translating DL-based approach to lattices, one obtains the Lyubashevsky~\cite{EC:Lyubashevsky12} identification protocol. 
+After applying the Fiat-Shamir transform it becomes a signature scheme.
+
+\begin{remark}
+    Interestingly, one almost immediately obtains the NIST-standardized Dilithium signature scheme~\cite{TCHES:DKLLSS18} by changing the underlying Gaussian distribution to the uniform one.
+\end{remark}
+
+In \Cref{section:als20,section:lnp22} we then extend the same protocol from proving knowledge of a secret key to proving linear and quadratic relations among committed values.
+
+For simplicity, in this section we work over $\mathbb{Z}_q$; the ring and module versions are obtained by replacing $\mathbb{Z}_q$ with $\mathcal{R}_q$.
+Besides the set of short elements $S_{\eta}$, we use the \textbf{challenge set}
+\begin{equation*}
+    B_{\omega} := \{\mathbf{c} \in \{-1,0,1\}^k: \mathbf{c} \; \text{has exactly} \; \omega \; \text{non-zero entries}\}.
+\end{equation*}
+where the weight $\omega$ is chosen so that $\#B_{\omega} \geq 2^{\lambda}$.
+
+\begin{exercise}\label{exercise:challenge-set}
+    Verify the following two facts:
+    \begin{enumerate}
+        \item $\#B_{\omega} = 2^{\omega}\binom{k}{\omega}$;
+        \item $\|\mathbf{S}\mathbf{c}\|_{\infty} \leq \eta\omega$ for every $\mathbf{S} \in S_{\eta}^{m \times k}$ and $\mathbf{c} \in B_{\omega}$.
+    \end{enumerate}
+    These two facts will be used when describing the Lyubashevsky scheme.
+\end{exercise}
+
+Finally, in the subsequent interactive protocols, we use \colorbox{oc-blue-1}{$\mathcal{P}(\mathbbm{x}, \mathbbm{w})$} to denote prover's actions while \colorbox{oc-blue-1}{$\mathcal{V}(\mathbbm{x})$} to denote verifier's actions.
+
+\subsubsection{From Schnorr to Lattices}
+
+Recall the Schnorr identification protocol over a group $\mathbb{G} = \langle g \rangle$ of prime order $q$.
+The prover holds a secret key $\alpha \in \mathbb{Z}_q$, the verifier holds the public key $h = g^{\alpha}$, and the prover wants to convince the verifier that it knows $\alpha$.
+The protocol is specified in \Cref{fig:schnorr-id}.
+For more details, make sure to check \Cref{subsec:schnorr-identification}.
+
+\begin{algoproto}[h]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.28\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item $\alpha \leftarrowS \mathbb{Z}_q$;
+                \item $h \gets g^{\alpha}$;
+                \item \keyword{return} $(h, \alpha)$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.33\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(h \in \mathbb{G}, \alpha \in \mathbb{Z}_q)$:}
+            \begin{algoen}
+                \item $r \leftarrowS \mathbb{Z}_q$;
+                \item \commentgray{form commitment} \\ \keyword{send} $w \gets g^r$;
+                \item \keyword{receive} $c$;
+                \item \commentgray{form response} \\ \keyword{send} $z \gets r + \alpha c$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.33\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(h \in \mathbb{G}) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $w$;
+                \item \commentgray{sample challenge} \\ \keyword{send} $c \leftarrowS \mathbb{Z}_q$;
+                \item \keyword{receive} $z$;
+                \item \keyword{return} $\llbracket g^z = wh^c \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{The Schnorr identification protocol.}
+    \label{fig:schnorr-id}
+\end{algoproto}
+
+Two properties make this protocol secure.
+First, the map $\alpha \mapsto g^{\alpha}$ is one-way, and from two accepting transcripts $(w,c,z)$ and $(w,c',z')$ with $c \neq c'$ one extracts $\alpha = (z-z')/(c-c')$ (special soundness).
+Second, $z = r + \alpha c$ is uniform in $\mathbb{Z}_q$ for every fixed $\alpha$, so the transcript reveals nothing about $\alpha$ (zero-knowledge).
+We now try to preserve both properties in the lattice setting.
+
+\paragraph{Attempt \#1: replace exponentiation with a matrix}
+A good candidate for the lattice analogue of $\alpha \mapsto g^{\alpha}$ is the linear map $\mathbf{S} \mapsto \mathbf{A}\mathbf{S}$ for a public random matrix $\mathbf{A} \in \mathbb{Z}_q^{n \times m}$.
+The secret key becomes $\mathbf{S} \in \mathbb{Z}_q^{m \times k}$, the public key becomes $\mathbf{T} := \mathbf{A}\mathbf{S}$, and the challenge becomes a vector $\mathbf{c} \in \mathbb{Z}_q^k$.
+Otherwise, the protocol in \Cref{fig:attempt-1} is a line-by-line copy of \Cref{fig:schnorr-id}; we highlight the changes with \colorbox{oc-orange-1}{orange boxes}.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \setlength{\fboxsep}{1.5pt}
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.26\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item \colorbox{oc-orange-1}{$\mathbf{S} \leftarrowS \mathbb{Z}_q^{m \times k}$};
+                \item \colorbox{oc-orange-1}{$\mathbf{T} \gets \mathbf{A}\mathbf{S}$};
+                \item \keyword{return} $(\mathbf{T}, \mathbf{S})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.29\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathbf{T}, \mathbf{S})$:}
+            \begin{algoen}
+                \item \colorbox{oc-orange-1}{$\mathbf{r} \leftarrowS \mathbb{Z}_q^m$};
+                \item \keyword{send} \colorbox{oc-orange-1}{$\mathbf{w} \gets \mathbf{A}\mathbf{r}$};
+                \item \keyword{receive} $\mathbf{c}$;
+                \item \keyword{send} \colorbox{oc-orange-1}{$\mathbf{z} \gets \mathbf{r} + \mathbf{S}\mathbf{c}$}.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.38\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathbf{T}) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $\mathbf{w}$;
+                \item \keyword{send} \colorbox{oc-orange-1}{$\mathbf{c} \leftarrowS \mathbb{Z}_q^k$};
+                \item \keyword{receive} $\mathbf{z}$;
+                \item \keyword{return} \colorbox{oc-orange-1}{$\llbracket \mathbf{A}\mathbf{z} = \mathbf{w} + \mathbf{T}\mathbf{c} \rrbracket$}.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Attempt \#1: a direct translation of the Schnorr protocol. Changes compared to \Cref{fig:schnorr-id} are highlighted.}
+    \label{fig:attempt-1}
+\end{algoproto}
+
+The protocol is correct, since $\mathbf{A}\mathbf{z} = \mathbf{A}\mathbf{r} + \mathbf{A}\mathbf{S}\mathbf{c} = \mathbf{w} + \mathbf{T}\mathbf{c}$.
+It is also zero-knowledge, since $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$ is uniform in $\mathbb{Z}_q^m$ for every fixed $\mathbf{S}$, exactly as in Schnorr.
+However, it is completely unsound: the verification equation is linear, so anyone can pass it without knowing $\mathbf{S}$.
+For example, since $m > n$, a cheating prover can find \emph{some} matrix $\mathbf{S}'$ with $\mathbf{A}\mathbf{S}' = \mathbf{T}$ by Gaussian elimination and then run the honest prover with $\mathbf{S}'$.
+The underlying reason is that the map $\mathbf{S} \mapsto \mathbf{A}\mathbf{S}$ is one-way only on \emph{short} inputs, by (I)SIS (see corresponding paragraph in \Cref{section:sis}).
+
+\paragraph{Attempt \#2: make everything short}
+We therefore make the secret short, $\mathbf{S} \leftarrowS S_{\eta}^{m \times k}$, and require the verifier to check that $\mathbf{z}$ is short, so that a long $\mathbf{S}'$ found by Gaussian elimination is useless.
+For an honest $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$ to pass this check, both terms must be short:
+\begin{itemize}
+    \item the challenge is sampled from $B_{\omega}$, so that $\|\mathbf{S}\mathbf{c}\|_{\infty} \leq \eta\omega$ by \Cref{exercise:challenge-set};
+    \item the masking vector $\mathbf{r}$ is sampled from some \emph{short} distribution $\chi$ over $\mathbb{Z}^m$;
+    \item the response $\mathbf{z}$ is computed over $\mathbb{Z}$, without reduction modulo $q$.
+\end{itemize}
+The resulting protocol is specified in \Cref{fig:attempt-2}.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \setlength{\fboxsep}{1.5pt}
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.26\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item $\mathbf{S} \leftarrowS \colorbox{oc-orange-1}{$S_{\eta}^{m \times k}$}$;
+                \item $\mathbf{T} \gets \mathbf{A}\mathbf{S}$;
+                \item \keyword{return} $(\mathbf{T}, \mathbf{S})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.29\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathbf{T}, \mathbf{S})$:}
+            \begin{algoen}
+                \item $\mathbf{r} \leftarrowS \colorbox{oc-orange-1}{$\chi$}$;
+                \item \keyword{send} $\mathbf{w} \gets \mathbf{A}\mathbf{r}$;
+                \item \keyword{receive} $\mathbf{c}$;
+                \item \colorbox{oc-orange-1}{\commentgray{check over $\mathbb{Z}$}} \\ \keyword{send} $\mathbf{z} \gets \mathbf{r} + \mathbf{S}\mathbf{c}$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.38\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathbf{T}) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $\mathbf{w}$;
+                \item \keyword{send} $\mathbf{c} \leftarrowS \colorbox{oc-orange-1}{$B_{\omega}$}$;
+                \item \keyword{receive} $\mathbf{z}$;
+                \item \colorbox{oc-orange-1}{\keyword{assert} $\|\mathbf{z}\|_2 \leq \beta$};
+                \item \keyword{return} $\llbracket \mathbf{A}\mathbf{z} = \mathbf{w} + \mathbf{T}\mathbf{c} \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Attempt \#2: all secret quantities and the response are short. Here, $\chi$ is a short distribution over $\mathbb{Z}^m$ and $\beta$ is a public norm bound. Changes compared to \Cref{fig:attempt-1} are highlighted.}
+    \label{fig:attempt-2}
+\end{algoproto}
+
+This protocol is now sound, and the argument is the same as for Schnorr.
+Given two accepting transcripts $(\mathbf{w},\mathbf{c},\mathbf{z})$ and $(\mathbf{w},\mathbf{c}',\mathbf{z}')$ with $\mathbf{c} \neq \mathbf{c}'$, subtracting the verification equations gives $\mathbf{A}(\mathbf{z}-\mathbf{z}') = \mathbf{T}(\mathbf{c}-\mathbf{c}')$, and substituting $\mathbf{T} = \mathbf{A}\mathbf{S}$ yields
+\begin{equation*}
+    \mathbf{A}\bigl(\mathbf{z}-\mathbf{z}' - \mathbf{S}(\mathbf{c}-\mathbf{c}')\bigr) = \mathbf{0} \pmod q.
+\end{equation*}
+The vector in parentheses is short (its norm is at most $2\beta + 2\eta\omega\sqrt{m}$), so unless it is zero, it is a solution to SIS.
+This is the same argument as for the binding property of the Ajtai commitment in \Cref{exercise:ajtai-collision}.
+
+Unfortunately, the protocol is no longer zero-knowledge: \emph{the response $\mathbf{z}$ leaks the secret key}.
+A short $\mathbf{r}$ cannot hide the shift $\mathbf{S}\mathbf{c}$ completely.
+For example, if $\chi$ is centered at zero, then $\mathbb{E}[\mathbf{z}] = \mathbf{S}\mathbf{c}$, and since $\mathbf{c}$ is public, a verifier who collects enough transcripts recovers $\mathbf{S}$ by linear regression.
+\Cref{fig:leakage} illustrates the problem: the distribution of $\mathbf{z}$ is the distribution $\chi$ shifted by the secret-dependent vector $\mathbf{S}\mathbf{c}$.
+In Schnorr this problem never arises, because $r$ is uniform over the whole group $\mathbb{Z}_q$, and a uniform distribution shifted by $\alpha c$ is again uniform.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[xscale=0.9, yscale=2.6, scale=0.8]
+        \draw[oc-gray-3, very thin, step={(1,0.25)}] (-5,0) grid (7,1.25);
+        \draw[-stealth, thick, oc-gray-7] (-5,0) -- (7.3,0) node[right, black] {$z$};
+        \draw[domain=-5:7, samples=150, thick, dashed, oc-gray-7] plot (\x, {exp(-(\x)^2/(2*1.5^2))});
+        \draw[domain=-5:7, samples=150, ultra thick, oc-indigo-8] plot (\x, {exp(-(\x-2)^2/(2*1.5^2))});
+        \draw[-stealth, thick, oc-gray-7] (0,0) -- (0,1.2) node[below, black] {};
+        \draw (0,0) node[below, black] {$0$};
+        \draw[dashed, thick, oc-orange-7] (2,1) -- (2,0) node[below, black] {$\mathbf{S}\mathbf{c}$};
+        \node[oc-gray-7, anchor=east, fill=white, inner sep=1pt] at (-1.4,0.75) {distribution $\chi$ of $\mathbf{r}$};
+        \node[oc-indigo-8, anchor=west, fill=white, inner sep=1pt] at (3.4,0.75) {distribution of $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$};
+    \end{tikzpicture}
+    \caption{One-dimensional sketch of the leakage in Attempt \#2. The response $\mathbf{z}$ follows the distribution of the mask $\mathbf{r}$ (dashed), shifted by the secret-dependent vector $\mathbf{S}\mathbf{c}$ (solid). Since $\mathbf{c}$ is public, the location of the peak reveals information about $\mathbf{S}$.}
+    \label{fig:leakage}
+\end{figure}
+
+\paragraph{Attempt \#3: rejection sampling}
+The fix is to let the prover \emph{abort} whenever the candidate response $\mathbf{z}$ reveals too much about $\mathbf{S}$, and restart the protocol with a fresh mask.
+The abort probability is chosen so that every response that the prover \emph{does} send follows a fixed distribution independent of $\mathbf{S}$.
+Since the aborts become restarts of the signing procedure after the Fiat-Shamir transform, this approach is called \textbf{Fiat-Shamir with aborts}.
+The tool that computes the right abort probability is the following classical lemma, going back to von Neumann.
+
+\begin{lemma}[Rejection Sampling]\label{lemma:rejection-sampling}
+    Let $f$ and $g$ be probability distributions over a set $V$ such that $f(z) \leq M g(z)$ for all $z \in V$ and some constant $M \geq 1$.
+    Consider the following procedure:
+    \begin{algoen}
+        \item sample $z \leftarrowS g$;
+        \item with probability $\frac{f(z)}{Mg(z)}$, \keyword{output} $z$; otherwise, \keyword{goto} step 1.
+    \end{algoen}
+    The output of this procedure is distributed exactly according to $f$, and the expected number of iterations is $M$.
+\end{lemma}
+
+\begin{proof}
+    In a single iteration, the procedure samples a particular $z$ and accepts it with probability $g(z) \cdot \frac{f(z)}{Mg(z)} = \frac{f(z)}{M}$.
+    Summing over all $z$, one iteration succeeds with probability $\frac{1}{M}$, so the expected number of iterations is $M$.
+    Conditioned on success, $z$ is output with probability $\frac{f(z)/M}{1/M} = f(z)$.
+\end{proof}
+
+In our setting, $g$ is the \emph{real} distribution of the candidate $\mathbf{z} = \mathbf{r} + \mathbf{S}\mathbf{c}$ (which depends on $\mathbf{S}\mathbf{c}$), and $f$ is a \emph{target} distribution that does not depend on $\mathbf{S}$.
+\Cref{fig:rejection-sampling} gives the geometric picture behind the lemma.
+Sampling $z \leftarrowS g$ and then $u \leftarrowS [0, Mg(z)]$ produces a uniformly random point $(z,u)$ under the graph of $Mg$.
+The point is accepted if and only if it also lies under the graph of $f$, and accepted points are uniform under the graph of $f$, so their first coordinates follow $f$.
+The rejected points form the hatched region, and the ratio between the areas under $Mg$ and under $f$ is exactly $M$.
+Hence, the closer $g$ resembles $f$, the smaller $M$ can be chosen, and the fewer restarts the prover needs.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[xscale=0.85, yscale=2.6, scale=0.8]
+        \draw[oc-gray-3, thin, step={(1,0.25)}] (-4.5,0) grid (6.5,1.5);
+        % rejection area between M*g and f, hatched with diagonal lines
+        \begin{scope}
+            \clip plot[domain=-4.5:6.5, samples=120] (\x, {1.25*exp(-(\x-1)^2/(2*1.6^2))})
+                -- plot[domain=6.5:-4.5, samples=120] (\x, {exp(-(\x-0.6)^2/(2*1.1^2))})
+                -- cycle;
+            \fill[oc-red-0] (-4.5,0) rectangle (6.5,1.5);
+            \foreach \i in {-6.0,-5.7,...,6.5} {
+                \draw[oc-red-6, thick] (\i,0) -- ++(0.9,1.5);
+            }
+        \end{scope}
+        \draw[-stealth, thick, oc-gray-7] (-4.5,0) -- (7,0) node[right, black] {$z$};
+        \draw[-stealth, thick, oc-gray-7] (-4.5,0) -- (-4.5,1.55) node[above, black] {$u$};
+        \draw[domain=-4.5:6.5, samples=150, ultra thick, oc-indigo-8] plot (\x, {1.25*exp(-(\x-1)^2/(2*1.6^2))});
+        \draw[domain=-4.5:6.5, samples=150, ultra thick, oc-teal-7] plot (\x, {exp(-(\x-0.6)^2/(2*1.1^2))});
+        \node[oc-indigo-8, fill=white, inner sep=1pt] at (2.75,1.1) {$M \cdot g$};
+        \node[oc-teal-7, fill=white, inner sep=1pt] at (0.5,0.85) {$f$};
+        \node[oc-red-7, font=\footnotesize, fill=oc-red-1, inner sep=1pt] at (4.4,0.2) {rejection area};
+        % accepted point
+        %\node[circle, fill=oc-teal-7, inner sep=0pt, minimum size=4pt] at (0.3,0.6) {};
+        %\draw[dashed, oc-gray-6, thick] (0.3,0) node[below] {$z_1$} -- (0.3,0.6);
+        %\node[oc-teal-7, font=\footnotesize, anchor=east, fill=oc-teal-1, inner sep=1pt] at (0.22,0.6) {accept};
+        % rejected point
+        %\node[circle, fill=oc-red-7,  inner sep=0pt, minimum size=4pt] at (2.4,0.7) {};
+        %\draw[dashed, oc-gray-6, thick] (2.4,0) node[below] {$z_2$} -- (2.4,0.7);
+        %\node[oc-red-7, font=\footnotesize, anchor=west, fill=oc-red-1, inner sep=1pt] at (2.5,0.7) {reject};
+    \end{tikzpicture}
+    \caption{Rejection sampling, following~\cite{C:DDLL13}. A point $(z,u)$ is sampled uniformly under the graph of $M \cdot g$ and accepted if and only if $u \leq f(z)$. The accepted points are uniform under the graph of $f$; the rejected ones lie in the hatched area.}
+    \label{fig:rejection-sampling}
+\end{figure}
+
+To apply \Cref{lemma:rejection-sampling}, we need $f \leq Mg$ for a small constant $M$ and \emph{every} possible shift $\mathbf{S}\mathbf{c}$, and this condition determines how to choose the distribution $\chi$ of the mask.
+The standard choice, used by Lyubashevsky's scheme and by most lattice-based zero-knowledge proofs, is the discrete Gaussian distribution.
+
+\subsubsection{Discrete Gaussians and Gaussian Rejection Sampling}
+
+\begin{definition}[Discrete Gaussian]\label{def:discrete-gaussian}
+    For $\sigma > 0$ and $\mathbf{v} \in \mathbb{Z}^m$, let 
+    \begin{equation*}
+        \rho_{\mathbf{v},\sigma}(\mathbf{x}) := \exp\left(-\|\mathbf{x}-\mathbf{v}\|_2^2/2\sigma^2\right) \; \text{for $\mathbf{x} \in \mathbb{R}^m$}.   
+    \end{equation*}
+    The \textbf{discrete Gaussian distribution} over $\mathbb{Z}^m$ with center $\mathbf{v}$ and width $\sigma$ assigns to each $\mathbf{x} \in \mathbb{Z}^m$ the probability
+    \begin{equation*}
+        \dgaussian^m_{\mathbf{v},\sigma}(\mathbf{x}) := \frac{\rho_{\mathbf{v},\sigma}(\mathbf{x})}{\sum_{\mathbf{y} \in \mathbb{Z}^m}\rho_{\sigma}(\mathbf{y})}.
+    \end{equation*}
+    We omit $\mathbf{v}$ when $\mathbf{v} = \mathbf{0}$ and write $\rho_{\sigma} := \rho_{\mathbf{0},\sigma}$ and $\dgaussian^m_{\sigma} := \dgaussian^m_{\mathbf{0},\sigma}$.
+\end{definition}
+
+The normalization is the same for every integer center $\mathbf{v}$, since shifting by $\mathbf{v}$ permutes $\mathbb{Z}^m$.
+Informally, $\dgaussian^m_{\mathbf{v},\sigma}$ is the usual bell-shaped Gaussian centered at $\mathbf{v}$, restricted to integer points, as shown in \Cref{fig:discrete-gaussian}\footnote{Some works, including many theoretical lattice papers, write the Gaussian as $\exp(-\pi\|\mathbf{x}\|_2^2/s^2)$ (the latter is more pleasant to work with when applying Fourier-analytic machinery). The two conventions are related by $s = \sqrt{2\pi}\sigma$.}.
+More generally, one can define the discrete Gaussian over any lattice $\Lambda$ by restricting $\rho_{\mathbf{v},\sigma}$ to the points of $\Lambda$; \Cref{fig:discrete-gaussian} uses a non-orthogonal lattice to emphasize this.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    view={300}{30},
+    xlabel={$x$},
+    ylabel={$y$},
+    zlabel={$\dgaussian_{\Lambda,\mathbf{v},\sigma}(x,y)$},
+    grid=major,
+    major grid style={oc-gray-3},
+    domain=-3:3,
+    samples=13,
+    samples y=13,
+    ztick=\empty,
+    colormap={oc}{color=(oc-blue-1) color=(oc-blue-4) color=(oc-blue-8)},
+]
+
+\def\s{1.2}
+\def\mux{1.2}
+\def\muy{0.6}
+
+\addplot3[
+    surf,
+    shader=interp,
+    opacity=0.6,
+    draw=none,
+]
+(
+ {x + 0.5*y},
+ {0.866*y},
+ {exp(
+    -(
+      ((x + 0.5*y)-\mux)^2 +
+      ((0.866*y)-\muy)^2
+    )/(2*\s*\s)
+ )}
+);
+
+\foreach \i in {-3,...,3} {
+  \foreach \j in {-3,...,3} {
+    \addplot3[
+      only marks,
+      mark=*,
+      mark size=1.5pt,
+      oc-gray-8,
+    ]
+    coordinates {({\i + 0.5*\j},{0.866*\j},0)};
+  }
+}
+
+\addplot3[
+    ycomb,
+    dashed,
+    thick,
+    oc-gray-7,
+    opacity=0.6,
+    domain=-2:2,
+    samples=5,
+    samples y=5,
+]
+(
+ {x + 0.5*y},
+ {0.866*y},
+ {exp(
+    -(
+      ((x + 0.5*y)-\mux)^2 +
+      ((0.866*y)-\muy)^2
+    )/(2*\s*\s)
+ )}
+);
+
+\addplot3[
+    only marks,
+    mark=star,
+    thick,
+    oc-orange-8,
+    mark size=2.5pt,
+    domain=-2:2,
+    samples=5,
+    samples y=5,
+]
+(
+ {x + 0.5*y},
+ {0.866*y},
+ {exp(
+    -(
+      ((x + 0.5*y)-\mux)^2 +
+      ((0.866*y)-\muy)^2
+    )/(2*\s*\s)
+ )}
+);
+
+\end{axis}
+\end{tikzpicture}
+\caption{Two-dimensional discrete Gaussian distribution $\dgaussian_{\Lambda,\mathbf{v},\sigma}$ with width $\sigma = 1.2$ and center $\mathbf{v}=(1.2, 0.6)$ over the lattice $\Lambda$ spanned by $\mathbf{b}_1=(1,0)$ and $\mathbf{b}_2=(1/2,\sqrt{3}/2)$. The probability of each lattice point (stars) is proportional to the height of the continuous Gaussian above it.}
+\label{fig:discrete-gaussian}
+\end{figure}
+
+We need two properties of the discrete Gaussian distribution.
+The first one states that samples from the discrete Gaussian are short with overwhelming probability.
+
+\begin{lemma}[Lemma 4.4~\cite{EC:Lyubashevsky12}]\label{lemma:gaussian-norm}
+    For any $\tau > 1$, one has
+    \begin{equation*}
+        \Pr_{\mathbf{z} \leftarrowS \dgaussian^m_{\sigma}}\left[\|\mathbf{z}\|_2 > \tau\sigma\sqrt{m}\right] < \tau^m e^{m(1-\tau^2)/2}.
+    \end{equation*}
+\end{lemma}
+
+The right-hand side is negligible in $m$ even for $\tau = 2$ as $2^me^{-3m/2}< 2^{-m}$.
+Therefore, the verifier can safely reject any response with $\|\mathbf{z}\|_2 > 2\sigma\sqrt{m}$ (although in practice one uses a threshold $\tau\sigma\sqrt{m}$ for some $\tau$ between $1.0$ and $2.0$).
+
+The second property adapts \Cref{lemma:rejection-sampling} to the discrete Gaussian.
+It states that rejection sampling hides a short shift $\mathbf{v}$, and specifies the value of $M$.
+
+\begin{lemma}[Lemma 4.5~\cite{EC:Lyubashevsky12}]\label{lemma:gaussian-rejection}
+    Let $V \subseteq \mathbb{Z}^m$ be a set of vectors with $\|\mathbf{v}\|_2 \leq T$ for all $\mathbf{v} \in V$, and let $h$ be a probability distribution over $V$.
+    Let $\sigma = \alpha T$ for some $\alpha > 0$, and set $M := \exp\left(\frac{12}{\alpha} + \frac{1}{2\alpha^2}\right)$.
+    Then, the statistical distance between the following two algorithms $\mathcal{A}_0$ and $\mathcal{A}_1$ is at most $2^{-100}/M$:
+
+    \medskip
+    \noindent
+    \begin{tabular}{p{0.46\linewidth} p{0.46\linewidth}}
+    \underline{\textbf{Algorithm $\mathcal{A}_0$}} & \underline{\textbf{Algorithm $\mathcal{A}_1$}} \\[-1ex]
+    \begin{algoen}
+        \item $\mathbf{v} \leftarrowS h$;
+        \item $\mathbf{z} \leftarrowS \dgaussian^m_{\mathbf{v},\sigma}$;
+        \item $u \leftarrowS (0,1)$;
+        \item \keyword{if} $u > \frac{\dgaussian^m_{\sigma}(\mathbf{z})}{M\dgaussian^m_{\mathbf{v},\sigma}(\mathbf{z})}$: \keyword{goto} \textcolor{gray}{step 1};
+        \item \keyword{return} $(\mathbf{z}, \mathbf{v})$.
+    \end{algoen}
+    &
+    \begin{algoen}
+        \item $\mathbf{v} \leftarrowS h$;
+        \item $\mathbf{z} \leftarrowS \dgaussian^m_{\sigma}$;
+        \item $u \leftarrowS (0,1)$;
+        \item \keyword{if} $u > 1/M$: \keyword{goto} \textcolor{gray}{step 1};
+        \item \keyword{return} $(\mathbf{z}, \mathbf{v})$.
+    \end{algoen}
+    \end{tabular}
+
+    Moreover, the probability that $\mathcal{A}_0$ outputs something is at least $(1-2^{-100})/M$.
+\end{lemma}
+
+In $\mathcal{A}_1$, the output $\mathbf{z}$ is independent of $\mathbf{v}$.
+Hence, the lemma says that the responses accepted by the real prover ($\mathcal{A}_0$) reveal nothing about the shift, up to statistical distance $2^{-100}/M$.
+
+Let us briefly explain why the lemma holds.
+The ratio between the target and the real distribution is
+\begin{equation*}
+    \frac{\dgaussian^m_{\sigma}(\mathbf{z})}{\dgaussian^m_{\mathbf{v},\sigma}(\mathbf{z})} = \exp\left(\frac{\|\mathbf{v}\|_2^2 - 2\langle \mathbf{z},\mathbf{v} \rangle}{2\sigma^2}\right),
+\end{equation*}
+which depends on $\mathbf{z}$ only through the projection $\langle \mathbf{z}, \mathbf{v} \rangle$.
+In other words, the two distributions coincide along $\mathbf{v}^{\perp}$, and the problem reduces to the one-dimensional Gaussian since $\langle \mathbf{v}, \mathbf{z} \rangle$ behaves like a one-dimensional Gaussian.
+The ratio is not bounded in the far left tail, so the condition $f \leq Mg$ of \Cref{lemma:rejection-sampling} holds only with overwhelming probability.
+However, $\langle \mathbf{z}, \mathbf{v} \rangle$ behaves like a one-dimensional Gaussian of width $\sigma\|\mathbf{v}\|_2$, so $|\langle \mathbf{z}, \mathbf{v} \rangle| \leq 12\sigma\|\mathbf{v}\|_2$ except with probability $2^{-100}$ (this is just a rough technical result; see \cite[Lemma 4.3]{EC:Lyubashevsky12} for more details), and on this event the ratio is at most $M$.
+
+% --- figure fig:gaussian-rejection unchanged ---
+
+In the identification protocol, the shift is $\mathbf{v} = \mathbf{S}\mathbf{c}$ with $\|\mathbf{S}\mathbf{c}\|_2 \leq \sqrt{m}\|\mathbf{S}\mathbf{c}\|_{\infty} \leq \eta\omega\sqrt{m} =: T$ by \Cref{exercise:challenge-set}.
+Taking $\sigma = 12T$, \Cref{lemma:gaussian-rejection} gives $M = e^{1+1/288} \approx \exp(1) \approx 2.72$, so the prover restarts fewer than three times on average.
+We package the acceptance test of $\mathcal{A}_0$ into the algorithm $\mathsf{Rej}$ of \Cref{fig:rej}, which we reuse in all subsequent protocols.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[userdefinedwidth=0.75\linewidth, align=center,
+                     linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \colorbox{oc-blue-1}{$\mathsf{Rej}(\mathbf{z}, \mathbf{v}, \sigma) \to \{0,1\}$:}
+        \begin{algoen}
+            \item $u \leftarrowS [0,1)$;
+            \item \textbf{return} $\left\llbracket u \leq \frac{1}{M}\exp\left(\frac{-2\langle \mathbf{z},\mathbf{v} \rangle + \|\mathbf{v}\|_2^2}{2\sigma^2}\right) \right\rrbracket$. \commentgray{$1$ means accept}
+        \end{algoen}
+    \end{mdframed}
+    \caption{Rejection sampling for a candidate $\mathbf{z} = \mathbf{y} + \mathbf{v}$ with $\mathbf{y} \leftarrowS \dgaussian^m_{\sigma}$. For $\sigma \geq 12\|\mathbf{v}\|_2$ and $M \approx \exp(1)$, accepted vectors $\mathbf{z}$ are within statistical distance $2^{-100}$ of $\dgaussian^m_{\sigma}$, \emph{independently of $\mathbf{v}$}.}
+    \label{fig:rej}
+\end{algoproto}
+
+\subsubsection{The Lyubashevsky Protocol and Signature Scheme}
+
+We are now ready to fix Attempt \#2.
+The prover samples the mask from $\dgaussian^m_{\sigma}$ with $\sigma = 12\eta\omega\sqrt{m}$, and before sending the response, it runs $\mathsf{Rej}$ and aborts on rejection; in an interactive protocol, an abort simply means that both parties restart the protocol.
+The resulting protocol is specified in \Cref{fig:lyu-id}.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \setlength{\fboxsep}{1.5pt}
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.24\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item $\mathbf{S} \leftarrowS S_{\eta}^{m \times k}$;
+                \item $\mathbf{T} \gets \mathbf{A}\mathbf{S}$;
+                \item \keyword{return} $(\mathbf{T}, \mathbf{S})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.35\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathbf{T}, \mathbf{S})$:}
+            \begin{algoen}
+                \item $\mathbf{r} \leftarrowS \colorbox{oc-orange-1}{$\dgaussian^m_{\sigma}$}$;
+                \item \keyword{send} $\mathbf{w} \gets \mathbf{A}\mathbf{r}$;
+                \item \keyword{receive} $\mathbf{c}$;
+                \item $\mathbf{z} \gets \mathbf{r} + \mathbf{S}\mathbf{c}$; \commentgray{over $\mathbb{Z}$}
+                \item \colorbox{oc-orange-1}{\textbf{if} $\mathsf{Rej}(\mathbf{z}, \mathbf{S}\mathbf{c}, \sigma) = 0$:} 
+                \item \hspace{5px} \colorbox{oc-orange-1}{\textbf{abort};}
+                \item \keyword{send} $\mathbf{z}$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.36\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathbf{T}) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $\mathbf{w}$;
+                \item \keyword{send} $\mathbf{c} \leftarrowS B_{\omega}$;
+                \item \keyword{receive} $\mathbf{z}$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \colorbox{oc-orange-1}{$2\sigma\sqrt{m}$}$;
+                \item \keyword{return} $\llbracket \mathbf{A}\mathbf{z} = \mathbf{w} + \mathbf{T}\mathbf{c} \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Attempt \#3: the Lyubashevsky identification protocol with $\sigma = 12\eta\omega\sqrt{m}$. Changes compared to \Cref{fig:attempt-2} are highlighted.}
+    \label{fig:lyu-id}
+\end{algoproto}
+
+Let us check the three properties of a $\Sigma$-protocol.
+\begin{itemize}
+    \item \textbf{Completeness.} The equation $\mathbf{A}\mathbf{z} = \mathbf{w} + \mathbf{T}\mathbf{c}$ holds as before. The accepted $\mathbf{z}$ is distributed (up to negligible statistical distance) as $\dgaussian^m_{\sigma}$, so by \Cref{lemma:gaussian-norm} with $\tau = 2$ the norm check fails with a negligible probability. The prover needs $M \approx 2.72$ attempts on average.
+    \item \textbf{Zero-knowledge.} Conditioned on no abort, $\mathbf{z}$ is distributed as $\dgaussian^m_{\sigma}$ independently of $\mathbf{S}$ thanks to \Cref{lemma:gaussian-rejection}. Hence, a simulator samples $\mathbf{c} \leftarrowS B_{\omega}$ and $\mathbf{z} \leftarrowS \dgaussian^m_{\sigma}$ directly and sets $\mathbf{w} := \mathbf{A}\mathbf{z} - \mathbf{T}\mathbf{c}$, which is the only value consistent with the verification equation.
+    \item \textbf{Soundness.} One applied the extraction argument of Attempt \#2.
+\end{itemize}
+
+\begin{remark}[Relaxed extraction]\label{remark:relaxed-extraction}
+    Notice what the extractor actually obtains: not the secret $\mathbf{S}$ (as in the case of Schnorr), but the pair $(\bar{\mathbf{z}}, \bar{\mathbf{c}}) := (\mathbf{z}-\mathbf{z}', \mathbf{c}-\mathbf{c}')$ with $\mathbf{A}\bar{\mathbf{z}} = \mathbf{T}\bar{\mathbf{c}}$.
+    The extracted vector $\bar{\mathbf{z}}$ is about $\sigma/\eta$ times longer than the honest secret, and it satisfies the relation only after multiplying $\mathbf{T}$ by the difference of challenges $\bar{\mathbf{c}}$.
+    This gap between what the honest prover knows and what the extractor can guarantee is inherent to lattice-based proofs of knowledge (it is often called \emph{soundness slack}), and it will be important in \Cref{section:als20,section:lnp22}.
+\end{remark}
+
+\paragraph{The signature scheme}
+Applying the Fiat-Shamir transform to \Cref{fig:lyu-id} gives the signature scheme of~\cite{EC:Lyubashevsky12}.
+The challenge is computed as $\mathbf{c} \gets \mathsf{H}(\mu, \mathbf{w})$ for a hash function $\mathsf{H}: \{0,1\}^* \to B_{\omega}$ modelled as a random oracle, and on rejection the signer simply starts over with a fresh mask.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.25\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item $\mathbf{S} \leftarrowS S_{\eta}^{m \times k}$;
+                \item $\mathbf{T} \gets \mathbf{A}\mathbf{S}$;
+                \item \keyword{return} $(\mathbf{T}, \mathbf{S})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.38\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Sign}(\mathbf{S}, \mu) \to \mathsf{sig}$:}
+            \begin{algoen}
+                \item $\mathbf{r} \leftarrowS \dgaussian^m_{\sigma}$;
+                \item $\mathbf{c} \gets \mathsf{H}(\mu, \mathbf{A}\mathbf{r} \bmod q)$;
+                \item $\mathbf{z} \gets \mathbf{r} + \mathbf{S}\mathbf{c}$; \commentgray{over $\mathbb{Z}$}
+                \item \keyword{if} $\mathsf{Rej}(\mathbf{z}, \mathbf{S}\mathbf{c}, \sigma) = 0$: 
+                \item \hspace{5px} \keyword{goto} step 1;
+                \item \keyword{return} $\mathsf{sig} = (\mathbf{z}, \mathbf{c})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.33\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Verify}(\mathbf{T}, \mu, \mathsf{sig})$:}
+            \begin{algoen}
+                \item Parse $(\mathbf{z},\mathbf{c}) \gets \mathsf{sig}$;
+                \item $\mathbf{w} \gets \mathbf{A}\mathbf{z} - \mathbf{T}\mathbf{c} \bmod q$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq 2\sigma\sqrt{m}$;
+                \item \keyword{return} $\llbracket \mathbf{c} = \mathsf{H}(\mu, \mathbf{w}) \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{The Lyubashevsky signature scheme~\cite{EC:Lyubashevsky12}. The matrix $\mathbf{A} \leftarrowS \mathbb{Z}_q^{n \times m}$ is a public parameter and $\sigma := 12\eta\omega\sqrt{m}$.}
+    \label{fig:lyu-signature}
+\end{algoproto}
+
+\paragraph{Performance}
+For about $100$ bits of security, Lyubashevsky~\cite{EC:Lyubashevsky12} proposes, among others, the parameters $n = 512$, $q = 2^{27}$, $m = 8786$, $k = 80$, $\eta = 1$, and $\omega = 28$, which give $\sigma \approx 31495$.
+The resulting signatures take about $19.9$~KB and the keys about $128$~KB each, which is far from practical.
+Most of the size comes from the unstructured matrix and the large dimension $m$.
+Moving to Module-SIS and Module-LWE over $\mathcal{R}_q$ (\Cref{section:structured-lattices}), switching to uniform masks, and compressing the public key and the signature yield ML-DSA (Dilithium)~\cite{TCHES:DKLLSS18}, standardized in FIPS~204~\cite{fips-204}, with signatures of about $2.4$~KB and public keys of about $1.3$~KB at its lowest security level.
+
+\subsection{Proving Products of Committed Values}\label{section:als20}
+
+Similarly to Schnorr protocol, the Lyubashevsky protocol proves knowledge of a short preimage of a public value.
+As we have already observed throughout the book, zero-knowledge applications need much more: the prover commits to secret values and then proves that they satisfy some fairly complicated relations.
+For example, a confidential transaction commits to amounts and proves that each amount is in range, which boils down to proving that its bits $b_i$ satisfy \emph{quadratic relations} $b_i(1-b_i) = 0$.
+
+In this section, we present the lattice analogue due to Attema, Lyubashevsky, and Seiler~\cite{C:AttLyuSei20}, which we simply refer to as \emph{ALS20}, which proves multiplicative relations $\mathbf{a} \odot \mathbf{b} = \mathbf{c}$ (for $\mathbf{a},\mathbf{b},\mathbf{c} \in \mathbb{Z}_q^d$) between committed values.
+The construction has two ingredients: 
+\begin{enumerate}
+    \item a commitment scheme with an efficient opening proof;
+    \item linearizing the quadratic constraint using masked openings.
+\end{enumerate}
+
+From now on, we work over the ring $\mathcal{R}_q = \mathbb{Z}_q[T]/(T^d+1)$ from \Cref{section:structured-lattices}, where $d$ is a power of two; bold lowercase letters such as $\mathbf{r}$ denote vectors over $\mathcal{R}_q$, and sans-serif letters such as $\mathsf{T}$ denote commitments.
+
+\subsubsection{The BDLOP Commitment Scheme}
+
+The Ajtai commitment from \Cref{section:sis} requires the \emph{message} to be short, since binding reduces to SIS (\Cref{exercise:ajtai-collision}).
+This is inconvenient here: we want to commit to arbitrary elements of $\mathcal{R}_q$, for example to elements of $\mathbb{Z}_q$ packed into a polynomial.
+The BDLOP commitment scheme~\cite{SCN:BDLOP18} removes this restriction by requiring only the \emph{randomness} to be short.
+
+\begin{definition}[BDLOP Commitment]\label{def:bdlop}
+    Define the \textbf{BDLOP commitment scheme} over the message space $\mathcal{R}_q^n$ as follows:
+    \begin{itemize}
+        \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: sample a matrix $\mathbf{B}_0 \leftarrowS \mathcal{R}_q^{\mu \times (\lambda+\mu+n)}$ and vectors $\mathbf{b}_1, \dots, \mathbf{b}_n \leftarrowS \mathcal{R}_q^{\lambda+\mu+n}$; output $\mathsf{pp} \gets (\mathbf{B}_0, \mathbf{b}_1, \dots, \mathbf{b}_n)$.
+        \item $\mathsf{Com}(\mathsf{pp}, \mathbf{m} \in \mathcal{R}_q^n) \to (\mathsf{T}, \mathbf{r})$: given a short distribution $\chi$, choose a short random vector $\mathbf{r} \leftarrowS \chi^{\lambda+\mu+n}$ and compute
+        \begin{equation*}
+            \mathbf{t}_0 \gets \mathbf{B}_0\mathbf{r}, \quad t_i \gets \langle \mathbf{b}_i, \mathbf{r} \rangle + m_i \; \text{for each} \; i \in [n].
+        \end{equation*}
+        Let $\mathsf{T} \gets (\mathbf{t}_0, t_1, \dots, t_n)$ and output $(\mathsf{T}, \mathbf{r})$.
+    \end{itemize}
+    Here, $\mu$ and $\lambda$ are the ranks of the underlying MSIS and MLWE instances, respectively.
+\end{definition}
+
+\paragraph{Some properties} The two parts (namely, computing $\mathbf{t}_0$ and then $t_i$'s for $i>0$) of the commitment play different roles.
+The \emph{binding part} $\mathbf{t}_0 = \mathbf{B}_0\mathbf{r}$ is an Ajtai-style commitment to the randomness: two different short openings $\mathbf{r} \neq \mathbf{r}'$ of $\mathbf{t}_0$ give the short solution $\mathbf{r}-\mathbf{r}'$ to MSIS for $\mathbf{B}_0$.
+Once $\mathbf{r}$ is fixed, the \emph{message part} $t_i = \langle \mathbf{b}_i, \mathbf{r} \rangle + m_i$ determines $m_i$ uniquely. 
+This essentially proves the \emph{binding property} of a BDLOP commitment scheme.
+
+\emph{Hiding} follows from MLWE: the vector $(\mathbf{B}_0\mathbf{r}, \langle \mathbf{b}_1,\mathbf{r}\rangle, \dots, \langle \mathbf{b}_n,\mathbf{r}\rangle)$ is indistinguishable from uniform, so it acts like a one-time pad on $\mathbf{m}$.
+Notice that each additional message costs just one additional element $t_i \in \mathcal{R}_q$, and that the scheme is additively homomorphic: for public $\alpha_1, \alpha_2 \in \mathcal{R}_q$, the value $\alpha_1 t_1 + \alpha_2 t_2$ is a commitment to $\alpha_1 m_1 + \alpha_2 m_2$ with the vector $\alpha_1\mathbf{b}_1 + \alpha_2\mathbf{b}_2$.
+
+\subsubsection{The Opening Proof}
+
+To prove knowledge of an opening of $\mathsf{T}$, it suffices to prove knowledge of a short $\mathbf{r}$ with $\mathbf{B}_0\mathbf{r} = \mathbf{t}_0$, and this is exactly the Lyubashevsky protocol over $\mathcal{R}_q$ with a single secret vector (which we have just considered in \Cref{section:lyubashevsky}!)
+The challenges now come from a set $\mathcal{C} \subseteq \mathcal{R}_q$ of polynomials with small coefficients (for example, with coefficients in $\{-1,0,1\}$), and the rejection sampling is performed on the offset $c\mathbf{r}$.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.46\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathsf{pp}, \mathbbm{x}=(\mathsf{T}), \mathbbm{w}=(\mathbf{m}, \mathbf{r}))$:}
+            \begin{algoen}
+                \item $\mathbf{y} \leftarrowS \dgaussian_{\sigma}^{(\lambda+\mu+n)d}$;
+                \item \keyword{send} $\mathbf{w} \gets \mathbf{B}_0\mathbf{y}$;
+                \item \keyword{receive} $c$;
+                \item $\mathbf{z} \gets \mathbf{y} + c\mathbf{r}$;
+                \item \keyword{if} $\mathsf{Rej}(\mathbf{z}, c\mathbf{r}, \sigma) = 0$: 
+                \item \hspace{5px} \keyword{abort};
+                \item \keyword{send} $\mathbf{z}$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.5\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathsf{pp}, \mathbbm{x}=(\mathsf{T})) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $\mathbf{w}$;
+                \item \keyword{send} $c \leftarrowS \mathcal{C}$;
+                \item \keyword{receive} $\mathbf{z}$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq 2\sigma\sqrt{(\lambda+\mu+n)d}$;
+                \item \keyword{return} $\llbracket \mathbf{B}_0\mathbf{z} = \mathbf{w} + c\mathbf{t}_0 \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Opening proof for the BDLOP commitment. Here, $\dgaussian_{\sigma}^{(\lambda+\mu+n)d}$ denotes the discrete Gaussian over the coefficient vectors of $\mathcal{R}^{\lambda+\mu+n}$.}
+    \label{fig:bdlop-opening}
+\end{algoproto}
+
+\paragraph{Notes on security} As in \Cref{remark:relaxed-extraction}, two accepting transcripts $(\mathbf{w}, c, \mathbf{z})$ and $(\mathbf{w}, c', \mathbf{z}')$ give $\mathbf{B}_0\bar{\mathbf{z}} = \bar{c}\mathbf{t}_0$ for $\bar{\mathbf{z}} := \mathbf{z}-\mathbf{z}'$ and $\bar{c} := c-c'$.
+If $\bar{c}$ is invertible in $\mathcal{R}_q$, the extractor can define the randomness $\mathbf{r}^{\ast} := \bar{c}^{-1}\bar{\mathbf{z}}$ and the messages $m_i^{\ast} := t_i - \langle \mathbf{b}_i, \mathbf{r}^{\ast} \rangle$.
+The vector $\mathbf{r}^{\ast}$ is not necessarily short, since the inverse of a short polynomial is typically long (see Exercise below), but $\bar{c}\mathbf{r}^{\ast} = \bar{\mathbf{z}}$ is short, and one can show that this \emph{relaxed opening} is still binding under MSIS.
+
+\begin{exercise}
+    Let $f := 1-T$ be a short element in $\mathcal{R}_q$ (note that $\|f\|_{\infty}=1$). 
+    Compute $\|f^{-1}\|_{\infty}$.
+    Deduce that the inverse of a short element may be large.
+
+    \commentgray{Answer: $\|f^{-1}\|_{\infty} = \frac{1}{2}(q-1) \approx \frac{1}{2}q$.}
+\end{exercise}
+
+ALS20 make one more crucial observation, which is the key to the product proof.
+Once the prover has sent $\mathbf{w}$, it is committed not only to $\mathbf{r}^{\ast}$ but also to the mask $\mathbf{y}^{\ast} := \mathbf{z} - c\mathbf{r}^{\ast}$: unless the prover can solve MSIS, every accepting response to every challenge has the form $\mathbf{z} = \mathbf{y}^{\ast} + c\mathbf{r}^{\ast}$ with the \emph{same} $\mathbf{y}^{\ast}$.
+Consequently, the verifier can compute from public data the values
+\begin{equation*}
+    f_i := \langle \mathbf{b}_i, \mathbf{z} \rangle - ct_i = a_i - cm_i, \quad \text{where} \; a_i := \langle \mathbf{b}_i, \mathbf{y} \rangle.
+\end{equation*}
+
+\begin{exercise}
+    Verify that indeed $\langle \mathbf{b}_i, \mathbf{z} \rangle - ct_i = \langle \mathbf{b}_i, \mathbf{y} \rangle - cm_i$ for every $i \in [n]$.
+\end{exercise}
+
+Each $f_i$ is a \emph{masked opening} of the message $m_i$: an affine function of the challenge $c$ whose leading coefficient is the message itself, masked by the value $a_i$ that the prover fixed before seeing $c$.
+
+\begin{remark}
+    In previous product proofs, the prover had to commit to separate masks $a_i$ and send the masked openings together with a proof of their well-formedness; here they come for free.
+\end{remark}
+
+\subsubsection{The Product Proof}
+
+Suppose that the prover has committed to $m_1, m_2, m_3 \in \mathcal{R}_q$ and wants to prove that $m_1m_2 = m_3$ (we will explain later why operating over $\mathcal{R}_q$ is indeed fruitful).
+The idea is to combine the masked openings into an expression in which the relation appears as a coefficient of a polynomial in $c$:
+\begin{align*}
+    f_1f_2 + c f_3 
+    &= (a_1 - cm_1)(a_2 - cm_2) + c(a_3 - cm_3) \\
+    &= \textcolor{oc-orange-8}{(m_1m_2 - m_3)}c^2 + \textcolor{oc-indigo-8}{(a_3 - a_1m_2 - a_2m_1)}c + a_1a_2.
+\end{align*}
+If the relation holds, the quadratic coefficient vanishes and the expression is \emph{linear} in $c$.
+The remaining task is to let the verifier check linearity without learning anything about the messages, and ALS20 do this with a single \emph{garbage commitment}.
+Before seeing $c$, the prover additionally commits to the linear coefficient $g := \textcolor{oc-indigo-8}{a_3 - a_1m_2 - a_2m_1}$ as a fourth message, $t_4 := \langle \mathbf{b}_4, \mathbf{r} \rangle + g$, and sends $v := a_1a_2 + a_4$ where $a_4 := \langle \mathbf{b}_4, \mathbf{y} \rangle$.
+The masked opening of the garbage term is $f_4 = a_4 - cg$, so
+\begin{equation*}
+    f_1f_2 + cf_3 + f_4 = \textcolor{oc-orange-8}{(m_1m_2 - m_3)}c^2 + a_1a_2 + a_4 = \textcolor{oc-orange-8}{(m_1m_2 - m_3)}c^2 + v.
+\end{equation*}
+Hence, the verifier accepts if and only if $f_1f_2 + cf_3 + f_4 = v$.
+The complete protocol is specified in \Cref{fig:als20-product}; the public parameters contain $\mathbf{b}_1, \dots, \mathbf{b}_4$, so that the prover can append the garbage commitment $t_4$ to $\mathsf{T} = (\mathbf{t}_0, t_1, t_2, t_3)$ under the same randomness $\mathbf{r}$.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.52\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathsf{pp}, \mathbbm{x} = (\mathsf{T}), \mathbbm{w} = (m_1, m_2, m_3, \mathbf{r}))$:}
+            \begin{algoen}
+                \item $\mathbf{y} \leftarrowS \dgaussian_{\sigma}^{(\lambda+\mu+4)d}$;
+                \item $a_i \gets \langle \mathbf{b}_i, \mathbf{y} \rangle$ for $i=0,\dots,3$;
+                \item \commentgray{compute a garbage term}
+                \\ $t_4 \gets \langle \mathbf{b}_4, \mathbf{r} \rangle + a_3 - a_1m_2 - a_2m_1$;
+                \item $\mathbf{w} \gets \mathbf{B}_0\mathbf{y}$ and $v \gets a_1a_2 + a_4$;
+                \item \keyword{send} $(t_4, \mathbf{w}, v)$;
+                \item \keyword{receive} $c$;
+                \item $\mathbf{z} \gets \mathbf{y} + c\mathbf{r}$;
+                \item \keyword{if} $\mathsf{Rej}(\mathbf{z}, c\mathbf{r}, \sigma) = 0$: 
+                \item \hspace{5px} \keyword{abort};
+                \item \keyword{send} $\mathbf{z}$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.44\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathsf{pp}, \mathbbm{x}=(\mathsf{T})) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $(t_4, \mathbf{w}, v)$;
+                \item \keyword{send} $c \leftarrowS \mathcal{C}$;
+                \item \keyword{receive} $\mathbf{z}$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \beta$;
+                \item \keyword{assert} $\mathbf{B}_0\mathbf{z} = \mathbf{w} + c\mathbf{t}_0$;
+                \item $f_i \gets \langle \mathbf{b}_i, \mathbf{z} \rangle - ct_i$ for each $i$;
+                \item \keyword{return} $\llbracket f_1f_2 + cf_3 + f_4 = v \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{The ALS20 product proof~\cite{C:AttLyuSei20} for $m_1m_2 = m_3$ over $\mathcal{R}_q$, in its simplest form. Compared to the opening proof in \Cref{fig:bdlop-opening}, the prover sends one additional commitment $t_4$ and one additional element $v \in \mathcal{R}_q$.}
+    \label{fig:als20-product}
+\end{algoproto}
+
+\iffalse
+\textbf{Soundness (sketch).}
+By the discussion above, the extractor obtains messages $m_1^{\ast}, \dots, m_4^{\ast}$ and a mask $\mathbf{y}^{\ast}$, all fixed before the challenge, such that every accepting transcript satisfies
+\begin{equation*}
+    (m_1^{\ast}m_2^{\ast} - m_3^{\ast})c^2 + e_1c + e_0 = 0
+\end{equation*}
+for some $e_1, e_0 \in \mathcal{R}_q$ that do not depend on $c$.
+If the prover answers three challenges $c^{(0)}, c^{(1)}, c^{(2)}$ whose pairwise differences are invertible, then the Vandermonde system formed by these three equations has only the zero solution, and in particular $m_1^{\ast}m_2^{\ast} = m_3^{\ast}$.
+This is the ring analogue of the fact that a non-zero quadratic polynomial over a field has at most two roots.
+\fi
+
+\begin{exercise}\label{exercise:idempotent-proof}
+    Suppose that the prover wants to prove that a single committed $m \in \mathcal{R}_q$ satisfies $m^2 = m$.
+    Try to simplify the protocol in \Cref{fig:als20-product} for this case: which commitments and which garbage term are needed, and what does the verifier check?
+\end{exercise}
+
+\subsubsection{Packing $\mathbb{Z}_q$ Values into NTT Slots}
+
+So far, the protocol proves products of \emph{polynomials}, while applications need products of \emph{numbers} in $\mathbb{Z}_q$.
+The ``bridge'' is the number-theoretic transform (NTT).
+If $q \equiv 1 \pmod{2d}$, then $T^d+1$ splits into distinct linear factors modulo $q$,
+\begin{equation*}
+    T^d + 1 = \prod_{j=1}^{d}(T - \zeta_j) \pmod q,
+\end{equation*}
+where $\zeta_1, \dots, \zeta_d \in \mathbb{Z}_q$ are the primitive $2d$-th roots of unity (recall from Exercise~6 in \Cref{section:lattices-exercises} that $T$ itself has order exactly $2d$ in $\mathcal{R}$; you may also recall some specifics of NTT computation from \Cref{section:ntt}, although here we state a more algebraic result).
+By the Chinese remainder theorem, the map
+\begin{equation*}
+    \mathsf{NTT}: \mathcal{R}_q \to \mathbb{Z}_q^d, \quad m \mapsto \bigl(m(\zeta_1), \dots, m(\zeta_d)\bigr)
+\end{equation*}
+is a ring isomorphism, where $\mathbb{Z}_q^d$ is equipped with coordinate-wise addition and Hadamard product.
+Each coordinate is an evaluation map $m \mapsto m(\zeta_j)$, which is a ring homomorphism precisely because $\zeta_j$ is a root of $T^d+1$ (this is Exercise~11 in \Cref{section:lattices-exercises} for $d = 2$ and $q = 17$).
+We call the coordinates of $\mathsf{NTT}(m)$ the \textbf{NTT slots} of $m$, and we write $\mathsf{NTT}^{-1}$ for the inverse map.
+In particular, $\mathsf{NTT}(m_1m_2) = \mathsf{NTT}(m_1) \odot \mathsf{NTT}(m_2)$, where $\odot$ is the Hadamard product; see \Cref{fig:ntt-packing}.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        slot/.style={draw=oc-gray-7, thick, fill=white, minimum width=0.95cm, minimum height=0.6cm, font=\small},
+        poly/.style={draw=oc-indigo-7, thick, rounded corners, fill=oc-indigo-1, minimum height=0.7cm, inner sep=5pt},
+    ]
+        %\draw[oc-gray-2, very thin, step=0.5] (-1.5,-3.75) grid (8,0.5);
+        \node[poly] (m1) at (0,0) {$m_1 \in \mathcal{R}_q$};
+        \node[poly] (m2) at (0,-1.6) {$m_2 \in \mathcal{R}_q$};
+        \node[poly] (m3) at (0,-3.2) {$m_1m_2 \in \mathcal{R}_q$};
+        \foreach \i/\lab in {1/a_1, 2/a_2, 3/\cdots, 4/a_d} {
+            \node[slot] (a\i) at (3.2+1.05*\i, 0) {$\lab$};
+        }
+        \foreach \i/\lab in {1/b_1, 2/b_2, 3/\cdots, 4/b_d} {
+            \node[slot] (b\i) at (3.2+1.05*\i, -1.6) {$\lab$};
+        }
+        \foreach \i/\lab in {1/a_1b_1, 2/a_2b_2, 3/\cdots, 4/a_db_d} {
+            \node[slot, draw=oc-orange-8, fill=oc-orange-1] (c\i) at (3.2+1.05*\i, -3.2) {$\lab$};
+        }
+        \draw[stealth-stealth, very thick, oc-gray-7] (m1) -- node[above, font=\footnotesize, fill=white, inner sep=1pt] {$\mathsf{NTT}$} (a1);
+        \draw[stealth-stealth, very thick, oc-gray-7] (m2) -- node[above, font=\footnotesize, fill=white, inner sep=1pt] {$\mathsf{NTT}$} (b1);
+        \draw[stealth-stealth, very thick, oc-gray-7] (m3) -- node[above, font=\footnotesize, fill=white, inner sep=1pt] {$\mathsf{NTT}$} (c1);
+        \node[font=\footnotesize, oc-gray-7, fill=white, inner sep=1pt] at (5.8,-0.8) {$\odot$ (slot-wise)};
+        \node[font=\footnotesize, oc-gray-7, fill=white, inner sep=1pt] at (5.8,-2.4) {$=$};
+    \end{tikzpicture}
+    \caption{Packing $d$ values of $\mathbb{Z}_q$ into one polynomial. A single product in $\mathcal{R}_q$ performs $d$ independent products in $\mathbb{Z}_q$, one in each NTT slot.}
+    \label{fig:ntt-packing}
+\end{figure}
+
+Therefore, to prove $d$ multiplicative relations $a_jb_j = c_j$ over $\mathbb{Z}_q$ at once, the prover commits to $m_1 := \mathsf{NTT}^{-1}(\mathbf{a})$, $m_2 := \mathsf{NTT}^{-1}(\mathbf{b})$, and $m_3 := \mathsf{NTT}^{-1}(\mathbf{c})$ and runs the product proof for $m_1m_2 = m_3$.
+
+\begin{example}\label{example:ntt-packing}
+    Suppose the prover wants to prove that the amount $x \in \mathbb{Z}$ lies in range from $0$ to $2^d-1$.
+    Then, he can proceed as follows:
+    \begin{algoen}
+        \item Find bit-decomposition of $x$: say, $x = \sum_{i \in [d]}x_i2^i$;
+        \item Form a bit-vector $\mathbf{x} = (x_0,\dots,x_{d-1})$;
+        \item Compute $f := \mathsf{NTT}^{-1}(\mathbf{x})$;\commentgray{This is essentially just an interpolation: finding a polynomial $f \in \mathbb{Z}_q[T]$ such that $f(\zeta_i)=x_i$ for each $i \in [d]$.}
+        \item Use ALS20 protocol (\Cref{fig:als20-product}) to show that $f^2=f$.
+    \end{algoen}
+\end{example}
+
+\begin{exercise}
+    Let $d = 4$ and $q = 17$, so that $T^4+1 = \prod_{i=0}^{3}(T - \zeta^{2i+1})$ for $\zeta = 2$, and the slots are $(\zeta, \zeta^3, \zeta^5, \zeta^7) = (2, 8, 15, 9)$.
+    The prover wants to show that $x = 10$ lies in the range from $0$ to $2^4$.
+    \begin{algoen}
+        \item Verify that $\mathsf{NTT}(9 + 2T^2) = (0, 1, 0, 1)$, so that $f := 9 + 2T^2$ encodes the bits of $x = 0 \cdot 1 + 1 \cdot 2 + 0 \cdot 4 + 1 \cdot 8$.
+        \item Verify directly that $f^2 = f$ in $\mathcal{R}_{17}$.
+        \item Which amount is encoded by $1 - f$?
+    \end{algoen}
+
+    \commentgray{Answer: $f^2 = 81 + 36T^2 + 4T^4 = 77 + 36T^2 = 9 + 2T^2$; $1 - f = 9 + 15T^2$ encodes the complementary bits $(1,0,1,0)$, i.e.\ $x = 5$.}
+\end{exercise}
+
+\subsubsection{Soundness in Fully Splitting Rings*}
+
+The soundness argument above requires that the differences of challenges are invertible.
+In a fully splitting ring, however, an element $\bar{c}$ is invertible if and only if \emph{all} of its NTT slots $\bar{c}(\zeta_j)$ are non-zero.
+For a random short challenge, each slot $c(\zeta_j)$ is close to uniform over $\mathbb{Z}_q$, so a cheating prover can guess the value of a single slot of the challenge with probability about $1/q$.
+In this case, the prover can cheat in the corresponding NTT slot: for example, it can commit to a value that is not a bit in one slot and still pass the product proof.
+For $q \approx 2^{32}$, the soundness error $1/q$ is far from negligible.
+
+Repeating the protocol $k$ times reduces the soundness error to $q^{-k}$, but it multiplies the number of masks and garbage terms.
+ALS20 amplify soundness much more cheaply by using the automorphisms of $\mathcal{R}_q$.
+Recall that for every odd $i$ the map $\varphi_i: T \mapsto T^i$ is an automorphism of $\mathcal{R}_q$, and it permutes the NTT slots.
+Instead of $k$ independent challenges, the prover runs $k$ opening proofs in parallel with the challenges $c, \varphi(c), \dots, \varphi^{k-1}(c)$ for a single $c$ and a suitable automorphism $\varphi$ of order $k$.
+Since $\varphi^i$ moves the slot that the prover guessed to a different slot, a single guess no longer suffices to cheat in all $k$ repetitions.
+Moreover, the $k$ product relations are combined with random coefficients $\alpha_i \in \mathcal{R}_q$ into a single equation, so that only \emph{one} garbage commitment is needed.
+The resulting soundness error is roughly $(3/q)^k$; see~\cite[Section 5]{C:AttLyuSei20} for more details.
+
+\subsection{Proving Linear and Quadratic Relations over $\mathbb{Z}_q$}\label{section:lnp22}
+
+The ALS20 product proof is efficient, but it has three limitations that become visible in larger applications.
+\begin{enumerate}
+    \item[\textit{(i)}] Every committed message costs one element of $\mathcal{R}_q$ in the BDLOP commitment. Committing to a long witness, for example a vector with $2048$ ternary coefficients, is therefore expensive.
+    \item[\textit{(ii)}] Packing values into NTT slots requires a fully splitting ring, which in turn requires the automorphism trick to amplify soundness.
+    \item[\textit{(iii)}] Many natural statements are not products at all. For example, lattice-based primitives typically need to prove knowledge of $\mathbf{s}$ with $\mathbf{A}\mathbf{s} = \mathbf{t}$ and $\|\mathbf{s}\|_2 \leq \beta$, \emph{exactly}, rather than the relaxed statement of \Cref{remark:relaxed-extraction}.
+\end{enumerate}
+Lyubashevsky, Nguyen, and Plan\c{c}on~\cite{C:LyuNguPla22} (LNP22) address all three.
+Their framework proves arbitrary linear and quadratic relations over $\mathbb{Z}_q$ among committed values, including exact norm bounds, and it rests on four ideas that we present in turn: a combined commitment scheme, an encoding of $\mathbb{Z}_q$-relations into \emph{constant coefficients}, a quadratic proof in the style of ALS20, and an approximate range proof that lifts relations from $\mathbb{Z}_q$ to $\mathbb{Z}$.
+
+\subsubsection{The ABDLOP Commitment Scheme}
+
+Notice that Ajtai and BDLOP commitments make opposite trade-offs.
+The Ajtai commitment supports arbitrarily long messages at no extra cost, but only short ones: the message dimension does not enter the commitment size, and MSIS hardness is essentially independent of the number of columns.
+The BDLOP commitment supports messages with arbitrary coefficients, but each of them costs one element of $\mathcal{R}_q$.
+The ABDLOP commitment scheme of~\cite{C:LyuNguPla22} merges the two constructions under a single randomness $\boldsymbol{\rho}$.
+Short messages go into the Ajtai part, where their dimension does not affect the commitment size, and messages with unrestricted coefficients go into the BDLOP part.
+
+\begin{definition}[ABDLOP Commitment]\label{def:abdlop}
+    Define the \textbf{ABDLOP commitment scheme} over the message space $S_{\alpha}^m \times \mathcal{R}_q^n$ (short messages are denoted by $\mathbf{x}$ and long ones by $\mathbf{m}$) as follows:
+    \begin{itemize}
+        \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: sample $\mathbf{A} \leftarrowS \mathcal{R}_q^{\kappa \times m}$, $\mathbf{A}_{\rho} \leftarrowS \mathcal{R}_q^{\kappa \times r}$, and $\mathbf{B} \leftarrowS \mathcal{R}_q^{n \times r}$; output $\mathsf{pp} \gets (\mathbf{A}, \mathbf{A}_{\rho}, \mathbf{B})$.
+        \item $\mathsf{Com}(\mathsf{pp}, \mathbf{x}, \mathbf{m}) \to (\mathsf{T}, \boldsymbol{\rho})$: choose a short random vector $\boldsymbol{\rho} \leftarrowS \chi^r$ and compute
+        \begin{equation*}
+            \mathbf{t}_A \gets \mathbf{A}\mathbf{x} + \mathbf{A}_{\rho}\boldsymbol{\rho}, \quad \mathbf{t}_B \gets \mathbf{B}\boldsymbol{\rho} + \mathbf{m}.
+        \end{equation*}
+        Let $\mathsf{T} \gets (\mathbf{t}_A, \mathbf{t}_B)$ and output $(\mathsf{T}, \boldsymbol{\rho})$.
+    \end{itemize}
+\end{definition}
+
+\paragraph{Some properties} The proofs of binding and hiding are similar to those of Ajtai and BDLOP commitments; we recommend the reader doing it nonetheless.
+
+The main advantage of ABDLOP over BDLOP is the cost of committing to $\mathbf{x}$.
+In BDLOP, the top part $\mathbf{t}_0 = \mathbf{B}_0\boldsymbol{\rho}$ carries no message and only binds the randomness.
+ABDLOP reuses these $\kappa$ ring elements to also commit to $\mathbf{x}$, so the commitment size does not depend on the length $m$ of $\mathbf{x}$ at all, while each element of $\mathbf{m}$ costs one ring element of $\mathbf{t}_B$.
+Hence, one puts the (long) short witness into $\mathbf{x}$ and only a few auxiliary values into $\mathbf{m}$.
+One can also append new elements to the BDLOP part later by publishing extra rows: for a fresh public matrix $\mathbf{B}_g$, the value $\mathbf{t}_g := \mathbf{B}_g\boldsymbol{\rho} + \mathbf{g}$ commits to additional messages $\mathbf{g}$ under the same randomness, which is what the protocols below do with their auxiliary terms.
+
+\paragraph{Opening proof with linear constraints}
+Given an ABDLOP commitment $\mathsf{T} = (\mathbf{t}_A, \mathbf{t}_B)$, we first want to prove knowledge of the opening together with public $\mathcal{R}_q$-linear relations on the committed messages.
+Naturally, $N$ \emph{linear relations} over witness $(\mathbf{x},\mathbf{m})$ can be expressed as
+\begin{equation*}
+    \mathbf{L}\mathbf{x} + \mathbf{R}\mathbf{m} = \mathbf{s}
+\end{equation*}
+for some fixed matrices $\mathbf{L} \in \mathcal{R}_q^{N \times m}$, $\mathbf{R} \in \mathcal{R}_q^{N \times n}$, and vector $\mathbf{s} \in \mathcal{R}_q^{N}$.
+The proof is again the Lyubashevsky protocol, now with two secret vectors $\mathbf{x}$ and $\boldsymbol{\rho}$.
+As in ALS20, the verifier can compute a masked opening of $\mathbf{m}$ from public data: $c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho} = c\mathbf{m} - \mathbf{B}\mathbf{y}_{\rho}$.
+This allows the prover to add the linear relations at no extra cost: it sends $\mathbf{v} := \mathbf{L}\mathbf{y} - \mathbf{R}\mathbf{B}\mathbf{y}_{\rho}$, and the verifier checks the last equation in \Cref{fig:lnp22-linear}.
+
+\begin{algoproto}[H]
+    \footnotesize
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.49\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathsf{pp}, \mathbbm{x} = \mathsf{T}, \mathbbm{w}=(\mathbf{x}, \mathbf{m}, \boldsymbol{\rho}))$:}
+            \begin{algoen}
+                \item $\mathbf{y} \leftarrowS \dgaussian_{\sigma}^{md}$, $\mathbf{y}_{\rho} \leftarrowS \dgaussian_{\sigma_{\rho}}^{rd}$;
+                \item \commentgray{commitment mask} \\ $\mathbf{w} \gets \mathbf{A}\mathbf{y} + \mathbf{A}_{\rho}\mathbf{y}_{\rho}$;
+                \item \commentgray{linear-system mask} \\ $\mathbf{v} \gets \mathbf{L}\mathbf{y} - \mathbf{R}\mathbf{B}\mathbf{y}_{\rho}$;
+                \item \keyword{send} $(\mathbf{w}, \mathbf{v})$;
+                \item \keyword{receive} $c$;
+                \item $\mathbf{z} \gets c\mathbf{x} + \mathbf{y}$ and $\mathbf{z}_{\rho} \gets c\boldsymbol{\rho} + \mathbf{y}_{\rho}$;
+                \item \keyword{if} $\mathsf{Rej}((\mathbf{z},\mathbf{z}_{\rho}), (c\mathbf{x},c\boldsymbol{\rho}), (\sigma,\sigma_{\rho})) = 0$: 
+                \item \hspace{5px} \keyword{abort};
+                \item \keyword{send} $(\mathbf{z}, \mathbf{z}_{\rho})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.5\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathsf{pp}, \mathbbm{x}=(\mathsf{T}, \mathbf{L}, \mathbf{R}, \mathbf{s})) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $(\mathbf{w}, \mathbf{v})$;
+                \item \keyword{send} $c \leftarrowS \mathcal{C}$;
+                \item \keyword{receive} $(\mathbf{z}, \mathbf{z}_{\rho})$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \sigma\sqrt{2md}$;
+                \item \keyword{assert} $\|\mathbf{z}_{\rho}\|_2 \leq \sigma_{\rho}\sqrt{2rd}$;
+                \item \keyword{assert} $\mathbf{A}\mathbf{z} + \mathbf{A}_{\rho}\mathbf{z}_{\rho} - c\mathbf{t}_A = \mathbf{w}$;
+                \item \keyword{return} $\llbracket \mathbf{L}\mathbf{z} + \mathbf{R}(c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho}) - c\mathbf{s} = \mathbf{v} \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Opening proof for the ABDLOP commitment $\mathsf{T}$ together with $N$ public $\mathcal{R}_q$-linear relations $\mathbf{L}\mathbf{x} + \mathbf{R}\mathbf{m} = \mathbf{s}$ (following \cite[Fig.~4]{C:LyuNguPla22}).}
+    \label{fig:lnp22-linear}
+\end{algoproto}
+
+\begin{exercise}
+    Check that the last verification equation in \Cref{fig:lnp22-linear} holds for an honest prover.
+    \textit{Hint:} first show that $c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho} = c\mathbf{m} - \mathbf{B}\mathbf{y}_{\rho}$.
+\end{exercise}
+
+In practice, the prover sends only a hash of $(\mathbf{w}, \mathbf{v})$, and the verifier recomputes both values from the verification equations and compares the hashes.
+Hence, the proof size does not depend on the number $N$ of linear relations.
+
+LNP22 also avoids the invertibility problem of ALS20 by choosing a different ring and challenge set.
+The modulus is chosen so that $q \equiv 5 \pmod 8$, in which case $T^d+1$ splits into only \emph{two} irreducible factors modulo $q$.
+The challenges are short polynomials that are fixed by the automorphism $T \mapsto T^{-1}$, for reasons that will become clear shortly.
+For this ring, every non-zero element fixed by $T \mapsto T^{-1}$ is invertible, so the difference of any two distinct challenges is invertible, and no soundness amplification is needed.
+
+\subsubsection{From $\mathcal{R}_q$ to $\mathbb{Z}_q$: Constant Coefficients}
+
+Instead of packing values of $\mathbb{Z}_q$ into NTT slots, LNP22 pack them into the \emph{coefficients} of polynomials and use the following observation.
+For $f \in \mathcal{R}_q$, write $f^{\ast} := f(T^{-1})$ for its \textbf{conjugate}, which is the image of $f$ under the \emph{conjugation automorphism} $T \mapsto T^{-1}$, and $\mathsf{ct}(f) := f_0$ for its \textbf{constant coefficient}.
+Recall from Exercise~6 in \Cref{section:lattices-exercises} that $T$ is invertible with $T^{-1} = -T^{d-1}$, so $f^{\ast}$ is again an element of $\mathcal{R}_q$.
+For vectors in $\mathcal{R}_q^n$, the conjugate is applied component-wise.
+
+\begin{lemma}\label{lemma:constant-coefficient}
+    The following two facts are true:
+    \begin{enumerate}
+        \item[\textit{(i)}] let $f := \sum_{i<d} f_iT^i$ and $g := \sum_{i<d} g_iT^i$; then $\mathsf{ct}(f^{\ast}g) = \sum_{i<d} f_ig_i$;
+        \item[\textit{(ii)}] let $\mathbf{f} = (f_1,\dots,f_n)$ and $\mathbf{g} = (g_1,\dots,g_n)$ be vectors in $\mathcal{R}_q^n$ with $f_i = \sum_{j<d} f_{i,j}T^j$ and $g_i = \sum_{j<d} g_{i,j}T^j$; then $\mathsf{ct}(\mathbf{f}^{\ast\top}\mathbf{g}) = \sum_{i,j} f_{i,j}g_{i,j}$.
+    \end{enumerate}
+\end{lemma}
+
+\begin{proof}
+    We have $f^{\ast}g = \sum_{i,j} f_ig_jT^{j-i}$.
+    For $0 \leq i,j < d$, the monomial $T^{j-i}$ equals $\pm T^{k}$ for some $k>0$ unless $i = j$, so only the terms with $i = j$ contribute to the constant coefficient.
+    The second fact follows by summing the first over all components.
+\end{proof}
+
+The special case $f = g$ is exactly Exercise~10 in \Cref{section:lattices-exercises}: the constant coefficient of $f^{\ast}f$ is $\|f\|_2^2$.
+The lemma turns every $\mathbb{Z}_q$-linear or $\mathbb{Z}_q$-quadratic relation among the coefficients of committed polynomials into the statement that one constant coefficient of an $\mathcal{R}_q$-expression vanishes.
+Let us consider the following examples.
+\begin{example}\label{ex:linear-ct-constraints}
+    Here is a couple of examples how we can encode statements over $\mathbb{Z}_q^d$ using just a couple of polynomials in $\mathcal{R}_q$:
+    \begin{enumerate}
+        \item Suppose we want to show that $\sum_{i \in [d]}a_ix_i = b$ for some fixed constants $a_0,\dots,a_{d-1},b \in \mathbb{Z}_q$ and witness $x_0,\dots,x_{d-1} \in \mathbb{Z}_q$.
+        To convert this check over cyclotomic ring $\mathcal{R}_q$, one introduces two polynomials: $a := \sum_{i \in [d]}a_iT^i$, $x := \sum_{i \in [d]} x_iT^i$, and requires $\mathsf{ct}(a^*x-b) = 0$.
+        \item Suppose that for the given witness $x_0,\dots,x_{d-1} \in \mathbb{Z}_q$ we want to verify that $x_i=0$ for all $i>\nu$. 
+        One again lets $x := \sum_{i \in [d]}x_iT^i$ and enforces multiple constraints $\mathsf{ct}((T^i)^*x)=0$ for all $i>\nu$.
+    \end{enumerate}
+\end{example}
+
+In both cases, the statement has the same shape.
+There are public $\mathcal{R}_q$-affine functions $F_1, \dots, F_M$ of the committed messages, and we need to show that
+\begin{equation*}
+    \mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) = 0 \quad \text{for all} \; j \in [M],
+\end{equation*}
+where $F_j(\mathbf{x}, \mathbf{m}) = a^{\ast}x - b$ in the first example and $F_j(\mathbf{x}, \mathbf{m}) = (T^{\nu+j})^{\ast}x$ in the second.
+Quadratic relations lead to the same shape with quadratic $F_j$, which we treat in the next subsection.
+
+\paragraph{Proving a constant coefficient}
+Unfortunately, we cannot directly employ \Cref{fig:lnp22-linear} to prove linear statements obtained from \Cref{lemma:constant-coefficient} (for instance those specified in \Cref{ex:linear-ct-constraints}).
+Indeed, this algorithm can only prove that the linear relation between $\mathbf{x}$ and $\mathbf{m}$ vanishes, but it states nothing about coefficients separately.
+So our goal is to be able to prove a set of $M$ statements $\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) = 0$ where $F_j$'s are $\mathcal{R}_q$-linear (affine) functions. 
+
+Consider first a single function $F$.
+If the prover simply revealed the polynomial $F(\mathbf{x}, \mathbf{m})$, the verifier could check its constant coefficient, but the remaining $d-1$ coefficients would leak information about the witness.
+The idea of LNP22 is to hide these coefficients with a \textbf{mask}: a committed polynomial $g$ whose constant coefficient is zero and whose other coefficients are uniformly random.
+The prover then reveals $h := g + F(\mathbf{x}, \mathbf{m})$ and proves with \Cref{fig:lnp22-linear} that $h$ is computed correctly, which is now an ordinary linear relation among the committed $\mathbf{x}$, $\mathbf{m}$, $g$ with a public right-hand side $h$.
+Since $\mathsf{ct}(h) = \mathsf{ct}(F(\mathbf{x}, \mathbf{m}))$, the verifier learns exactly whether the constant coefficient vanishes, and nothing else.
+
+Now suppose we have multiple statements. Applying this to each $F_j$ separately would cost $M$ masks, and hence $M$ extra commitment slots.
+Instead, the prover commits to only $k \ll M$ masks $g_1, \dots, g_k$. After that, the verifier sends random $\gamma_{i,j} \leftarrowS \mathbb{Z}_q$, and the prover combines all functions into $k$ random linear combinations:
+\begin{equation*}
+    h_i := g_i + \sum_{j \in [M]} \gamma_{i,j}F_j(\mathbf{x}, \mathbf{m}), \quad i \in [k].
+\end{equation*}
+The verifier checks that $\mathsf{ct}(h_i) = 0$ for all $i \in [k]$, and the prover shows with \Cref{fig:lnp22-linear} that each $h_i$ is computed correctly, as before.
+
+Why does it work though? Suppose $\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m})) \neq 0$ for some $j$. Then $\mathsf{ct}(h_i) = \sum_j \gamma_{i,j}\,\mathsf{ct}(F_j(\mathbf{x}, \mathbf{m}))$ is uniformly random over the choice of $\gamma_{i,\cdot}$, since $g_i$ was committed before the challenges, so it vanishes with probability $1/q$.
+Hence, $k$ independent combinations give soundness error $q^{-k}$.
+The protocol is specified in \Cref{fig:lnp22-ct}.
+
+\begin{algoproto}[H]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.52\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{P}(\mathsf{pp}, \mathbbm{x}=\mathsf{T}, \mathbbm{w}=(\mathbf{x}, \mathbf{m}, \boldsymbol{\rho}))$:}
+            \begin{algoen}
+                \item $g_1, \dots, g_k \leftarrowS \{f \in \mathcal{R}_q: \mathsf{ct}(f) = 0\}$;
+                \item \keyword{send} $\mathbf{t}_g \gets \mathbf{B}_g\boldsymbol{\rho} + \mathbf{g}$; \commentgray{commitment}
+                \item \keyword{receive} $\{\gamma_{i,j}\}_{i \in [k], j \in [M]}$;
+                \item $h_i \gets g_i + \sum_{j} \gamma_{i,j}F_j(\mathbf{x}, \mathbf{m})$ for $i \in [k]$;
+                \item \keyword{send} $\mathbf{h} = (h_1, \dots, h_k)$;
+                \item run $\mathcal{P}$ of \Cref{fig:lnp22-linear} on $(\mathbf{t}_A, \mathbf{t}_B, \mathbf{t}_g)$ over $g_i + \sum_j \gamma_{i,j}F_j(\mathbf{x}, \mathbf{m}) = h_i$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.44\linewidth}
+            \colorbox{oc-blue-1}{$\mathcal{V}(\mathsf{pp}, \mathbbm{x}=(\mathsf{T}, \{F_j\}_{j \in [M]}))$:}
+            \begin{algoen}
+                \item \keyword{receive} $\mathbf{t}_g$;
+                \item \keyword{for} $(i,j) \in [k] \times [M]$:
+                \item \hspace{5px}\keyword{send} $\gamma_{i,j} \leftarrowS \mathbb{Z}_q$;
+                \item \keyword{receive} $\mathbf{h}$;
+                \item \keyword{assert} $\mathsf{ct}(h_i) = 0$ for all $i \in [k]$;
+                \item \keyword{return} the output of $\mathcal{V}$ of \Cref{fig:lnp22-linear} for the same relations.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Proof that the linear functions $F_1, \dots, F_M$ of the committed messages have zero constant coefficients~\cite[Fig.~5]{C:LyuNguPla22}. Here, $\mathbf{B}_g \leftarrowS \mathcal{R}_q^{k \times r}$ is an additional public matrix that appends $k$ slots to the BDLOP part of the commitment.}
+    \label{fig:lnp22-ct}
+\end{algoproto}
+
+\subsubsection{Quadratic Relations}
+
+It remains to prove \emph{quadratic} relations since for now we only considered linear relations.
+These relations involve both the committed messages and their conjugates (thus enabling using the powerful results of \Cref{lemma:constant-coefficient}), so we collect them into the so-called \emph{extended witness}
+\begin{equation*}
+    \mathbf{x}_{\varphi} := \varphi(\mathbf{x}, \mathbf{m}) := (\mathbf{x}, \mathbf{x}^{\ast}, \mathbf{m}, \mathbf{m}^{\ast}).
+\end{equation*}
+Recall that an arbitrary quadratic function of $\mathbf{x}_{\varphi}$ can be expressed as follows: $f(\mathbf{x}_{\varphi}) = \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{x}_{\varphi} \rangle + p_0$; our goal is to prove that $f(\mathbf{x}_{\varphi}) = 0$.
+
+The approach is the one of ALS20: build a masked opening of $\mathbf{x}_{\varphi}$ that is affine in $c$, evaluate $f$ on it, and cancel the linear term with a garbage commitment along the way.
+From the opening proof, the verifier knows the masked openings $\mathbf{z} = c\mathbf{x} + \mathbf{y}$ and that $c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho} = c\mathbf{m} - \mathbf{B}\mathbf{y}_{\rho}$.
+Taking conjugates gives
+\begin{equation*}
+    \mathbf{z}^{\ast} = c^{\ast}\mathbf{x}^{\ast} + \mathbf{y}^{\ast},
+\end{equation*}
+which is a masked opening of $\mathbf{x}^{\ast}$ with the \emph{same} challenge only if $c^{\ast} = c$.
+This is why LNP22 restrict the challenges to polynomials fixed by conjugation.
+With such challenges, the verifier can compute
+\begin{equation*}
+    \mathbf{z}_{\varphi} := \varphi\bigl(\mathbf{z}, c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho}\bigr) = c\mathbf{x}_{\varphi} + \mathbf{y}_{\varphi} \; \text{where} \; \mathbf{y}_{\varphi} := \varphi(\mathbf{y}, -\mathbf{B}\mathbf{y}_{\rho}).
+\end{equation*}
+Substituting $\mathbf{z}_{\varphi} = c\mathbf{x}_{\varphi} + \mathbf{y}_{\varphi}$ into the quadratic function gives
+\begin{equation*}
+    \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 = \textcolor{oc-orange-8}{f(\mathbf{x}_{\varphi})}c^2 + \textcolor{oc-teal-8}{a_1}c + a_0
+\end{equation*}
+where
+\begin{equation*}
+    \begin{aligned}
+        a_1 &:= \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi} + \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{y}_{\varphi} \rangle, \\
+        a_0 &:= \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi}.
+    \end{aligned}
+\end{equation*}
+As in ALS20, the prover commits to the linear coefficient in the BDLOP part, $t := \langle \mathbf{b}, \boldsymbol{\rho} \rangle + \textcolor{oc-teal-8}{a_1}$ for a public $\mathbf{b} \leftarrowS \mathcal{R}_q^r$, and masks the constant term as $v := \langle \mathbf{b}, \mathbf{y}_{\rho} \rangle + a_0$.
+The verifier computes the masked opening $ct - \langle \mathbf{b}, \mathbf{z}_{\rho} \rangle = ca_1 - \langle \mathbf{b}, \mathbf{y}_{\rho} \rangle$ of the garbage term and checks that
+\begin{equation*}
+    \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 - \bigl(ct - \langle \mathbf{b}, \mathbf{z}_{\rho} \rangle\bigr) = v,
+\end{equation*}
+which holds exactly when the quadratic coefficient $\textcolor{oc-orange-8}{f(\mathbf{x}_{\varphi})}$ vanishes.
+The protocol is specified in \Cref{fig:lnp22-quadratic}.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.5\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Prove}(\mathsf{pp}, \mathsf{T}, \mathbf{x}, \mathbf{m}, \boldsymbol{\rho})$:}
+            \begin{algoen}
+                \item $\mathbf{y} \leftarrowS \dgaussian_{\sigma}^{md}$, $\mathbf{y}_{\rho} \leftarrowS \dgaussian_{\sigma_{\rho}}^{rd}$;
+                \item $\mathbf{w} \gets \mathbf{A}\mathbf{y} + \mathbf{A}_{\rho}\mathbf{y}_{\rho}$;
+                \item $\mathbf{x}_{\varphi} \gets \varphi(\mathbf{x}, \mathbf{m})$, $\mathbf{y}_{\varphi} \gets \varphi(\mathbf{y}, -\mathbf{B}\mathbf{y}_{\rho})$;
+                \item $a_1 \gets \mathbf{x}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi} + \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{x}_{\varphi} + \langle \mathbf{p}, \mathbf{y}_{\varphi} \rangle$;
+                \item $a_0 \gets \mathbf{y}_{\varphi}^{\top}\mathbf{Q}\mathbf{y}_{\varphi}$;
+                \item \commentgray{garbage commitment} \\ $t \gets \langle \mathbf{b}, \boldsymbol{\rho} \rangle + a_1$;
+                \item $v \gets \langle \mathbf{b}, \mathbf{y}_{\rho} \rangle + a_0$;
+                \item \keyword{send} $(\mathbf{w}, t, v)$;
+                \item \keyword{receive} $c$;
+                \item $\mathbf{z} \gets c\mathbf{x} + \mathbf{y}$, $\mathbf{z}_{\rho} \gets c\boldsymbol{\rho} + \mathbf{y}_{\rho}$;
+                \item \keyword{if} $\mathsf{Rej}((\mathbf{z},\mathbf{z}_{\rho}), (c\mathbf{x},c\boldsymbol{\rho}), (\sigma,\sigma_{\rho})) = 0$: 
+                \item \hspace{5px} \keyword{abort};
+                \item \keyword{send} $(\mathbf{z}, \mathbf{z}_{\rho})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.47\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Verify}(\mathsf{pp}, \mathsf{T}, \mathbf{Q}, \mathbf{p}, p_0) \to \{0,1\}$:}
+            \begin{algoen}
+                \item \keyword{receive} $(\mathbf{w}, t, v)$;
+                \item \keyword{send} $c \leftarrowS \mathcal{C}$; \commentgray{$c^{\ast} = c$}
+                \item \keyword{receive} $(\mathbf{z}, \mathbf{z}_{\rho})$;
+                \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \sigma\sqrt{2md}$;
+                \item \keyword{assert} $\|\mathbf{z}_{\rho}\|_2 \leq \sigma_{\rho}\sqrt{2rd}$;
+                \item \keyword{assert} $\mathbf{A}\mathbf{z} + \mathbf{A}_{\rho}\mathbf{z}_{\rho} - c\mathbf{t}_A = \mathbf{w}$;
+                \item $\mathbf{z}_{\varphi} \gets \varphi(\mathbf{z}, c\mathbf{t}_B - \mathbf{B}\mathbf{z}_{\rho})$;
+                \item \keyword{return} $\llbracket \mathbf{z}_{\varphi}^{\top}\mathbf{Q}\mathbf{z}_{\varphi} + c\langle \mathbf{p}, \mathbf{z}_{\varphi} \rangle + c^2p_0 - (ct - \langle \mathbf{b}, \mathbf{z}_{\rho} \rangle) = v \rrbracket$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Proof of a quadratic relation $f(\mathbf{x}_{\varphi}) = 0$ over $\mathcal{R}_q$ for the extended witness $\mathbf{x}_{\varphi} = (\mathbf{x}, \mathbf{x}^{\ast}, \mathbf{m}, \mathbf{m}^{\ast})$~\cite[Fig.~6]{C:LyuNguPla22}. 
+    Note that $\mathcal{C} \subseteq \{c \in \mathcal{R}_q: c^{\ast}=c\}$.}
+    \label{fig:lnp22-quadratic}
+\end{algoproto}
+
+Many quadratic relations $f_1, \dots, f_N$ are proven at once by letting the verifier send random $\mu_1, \dots, \mu_N \in \mathcal{R}_q$ and proving the single relation $\sum_j \mu_jf_j = 0$ with \Cref{fig:lnp22-quadratic}.
+Constant-coefficient statements about quadratic functions are handled exactly as in \Cref{fig:lnp22-ct}: the relation $h_i = g_i + \sum_j \gamma_{i,j}F_j$ is now quadratic, and it is simply added to the batch.
+As a result, the cost of the whole proof is essentially that of \Cref{fig:lnp22-quadratic}, independently of the number of relations.
+
+\subsubsection{Lifting from $\mathbb{Z}_q$ to $\mathbb{Z}$: Approximate Range Proofs}
+
+All the proofs above certify relations modulo $q$, while norm and range statements are about integers.
+To see why this matters, suppose we want to prove that some integer $u$ lies in range $[0,2^{\tau})$.
+Here is how we may do it: let the binary decomposition be $u = \sum_{i<\tau} u_i2^i$; we encode this binary decomposition into the \emph{bit polynomial} $u(T) := \sum_{i<\tau} u_iT^i$. 
+Introduce the following helper (publicly computable) gadget polynomials:
+\begin{equation*}
+    \mathsf{g}_1 := \sum_{i<\tau} T^i, \qquad \mathsf{g}_2 := \sum_{i<\tau} 2^iT^i.
+\end{equation*}
+For a polynomial $u$ with integer coefficients $u_0, \dots, u_{d-1}$, \Cref{lemma:constant-coefficient} gives
+\begin{equation*}
+    \mathsf{ct}\bigl(u^{\ast}(u - \mathsf{g}_1)\bigr) = \sum_{i < \tau} u_i(u_i - 1) + \sum_{i \geq \tau} u_i^2, \; \mathsf{ct}(\mathsf{g}_2^{\ast}u) = \sum_{i<\tau} 2^iu_i = u(2).
+\end{equation*}
+
+Notice that the second statement is nothing but an original integer $u$ computed from the corresponding bit polynomial.
+For the first sum, over $\mathbb{Z}$, every term is non-negative, so it vanishes if and only if $u_i \in \{0,1\}$ for $i < \tau$ and $u_i = 0$ for $i \geq \tau$, \textit{i.e.}, if and only if $u$ is a bit polynomial.
+So a single constant coefficient certifies \emph{both} binarity and vanishing above $\tau$, and the range $u(2) \in [0, 2^{\tau})$ is a consequence of binarity.
+
+Over $\mathbb{Z}_q$, however, the first sum may be a non-zero multiple of $q$, for example when $u$ has large coefficients.
+The relation holds over $\mathbb{Z}$ as soon as we additionally know that $\|\mathbf{u}\|_2$ is small enough for the sum to stay below $q$.
+
+LNP22 obtain such a bound with an \emph{approximate range proof} based on random projections.
+Further let $\mathcal{B}$ denote the distribution on $\{0, \pm 1\}$ with $\Pr[0] = 1/2$ and $\Pr[\pm 1] = 1/4$.
+
+\begin{lemma}[{\cite[Lemma 2.9]{C:LyuNguPla22}}]\label{lemma:jl-projection}
+    Fix $m$ and $B \leq q/41m$.
+    Let $\mathbf{x} \in \mathbb{Z}_q^m$ with $\|\mathbf{x}\|_2 \geq B$, and let $\mathbf{y} \in \mathbb{Z}_q^{256}$ be \emph{arbitrary}.
+    Then, for $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times m}$, one has $\|\mathbf{R}\mathbf{x} + \mathbf{y} \bmod q\|_2 < \frac{1}{2}B\sqrt{26}$ with probability less than $2^{-128}$.
+\end{lemma}
+
+The mask $\mathbf{y}$ is quantified over without any norm restriction, and this is what makes the lemma usable.
+The prover commits to a Gaussian mask $\mathbf{y}_B \leftarrowS \dgaussian_{\sigma_B}^{256}$ in the BDLOP part, receives $\mathbf{R} \leftarrowS \mathcal{B}^{256 \times md}$ from the verifier, and responds with $\mathbf{z}_B := \mathbf{R}\mathbf{x} + \mathbf{y}_B$, where rejection sampling removes the dependence on $\mathbf{x}$.
+It then proves, with $256$ constant-coefficient statements, that $\mathbf{z}_B$ was computed correctly, and the verifier checks that $\|\mathbf{z}_B\|_2$ is small.
+By \Cref{lemma:jl-projection}, a prover who reveals a masked $\mathbf{R}\mathbf{x}$ of small norm cannot have a long $\mathbf{x}$, whatever mask it used.
+The proof is only approximate (the certified bound is a constant factor larger than the true norm), but this suffices to rule out wraparound modulo $q$, and it costs only $256$ integers and one rejection step.
+
+\end{document}

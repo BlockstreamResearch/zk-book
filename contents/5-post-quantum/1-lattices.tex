@@ -2,6 +2,973 @@
 
 \begin{document}
 
-\subsection{Basic definitions}
+\subsection{Unstructured Lattices}\label{subsection:lattices}
+
+We begin our discussion by defining a lattice, its key properties, and assumptions on which lattice-based cryptography relies.
+We assume familiarity with standard linear algebra described in \Cref{section:linear-algebra}.
+
+Without further ado, here is the definition of a lattice.
+
+\begin{definition}\label{def:lattice}
+    Let $r \leq d$ and let $\mathbf{B} \in \mathbb{R}^{d \times r}$ be some matrix with linearly independent columns $\mathbf{b}_1,\dots,\mathbf{b}_r \in \mathbb{R}^d$.
+    We call a \textbf{lattice} an additive group 
+    \begin{equation*}
+        \mathcal{L}(\mathbf{B}) := \left\{\mathbf{B}\cdot\mathbf{z}: \mathbf{z} \in \mathbb{Z}^r\right\} = \left\{\sum_{i \in [r]}z_i\mathbf{b}_i: z_1,\dots,z_r \in \mathbb{Z}\right\}.    
+    \end{equation*}
+    We say that the \textbf{rank} of this lattice is $r$.
+\end{definition}
+
+Instead of writing $\mathcal{L}(\mathbf{B})$ every time, we will commonly denote lattices by $\Lambda$.
+
+Here is how can geometrically interpret the above definition: if vector space $\mathbb{R}^d$ is typically thought as a set of all $\mathbb{R}$-linear combinations\footnote{We use notation $S+S':=\{s+s': s \in S, s' \in S'\}$ and for $a \in S$, set $aS := \{as: s \in S\}$.} $\sum_{i \in [d]}\mathbf{e}_i\mathbb{R}$ over some basis $\{\mathbf{e}_i\}_{i \in [d]}$, the lattice $\Lambda$ can be thought as all $\mathbb{Z}$-linear combinations $\sum_{i \in [r]}\mathbf{b}_i\mathbb{Z}$ over real basis $\{\mathbf{b}_i\}_{i \in [r]} \subseteq \mathbb{R}^d$.
+See \Cref{fig:lattice} for illustration.
+
+\begin{figure}[ht]
+  \centering
+  \begin{tikzpicture}
+    \coordinate (Origin)   at (0,0);
+    \coordinate (XAxisMin) at (-2,0);
+    \coordinate (XAxisMax) at (5,0);
+    \coordinate (YAxisMin) at (0,-2);
+    \coordinate (YAxisMax) at (0,5);
+    \draw [ultra thick, gray,-stealth] (XAxisMin) -- (XAxisMax);
+    \draw [ultra thick, gray,-stealth] (YAxisMin) -- (YAxisMax);
+
+    \clip (-2,-2) rectangle (5cm,5cm); 
+    \pgftransformcm{1}{0.6}{0.7}{1}{\pgfpoint{0cm}{0cm}}
+
+    \coordinate (Bone) at (0,2);
+    \coordinate (Btwo) at (2,-2);
+    \draw[style=help lines, dashed, ultra thick, black!20] (-14,-14) grid[step=2cm] (14,14);
+
+    \foreach \x in {-7,-6,...,7}{
+      \foreach \y in {-7,-6,...,7}{
+        \node[draw,circle,inner sep=2pt,fill] at (2*\x,2*\y) {};
+      }
+    }
+
+    \draw [ultra thick,-latex,blue!70!black] (Origin)
+        -- (Bone) node [right] {$\mathbf{b}_1$};
+    \draw [ultra thick,-latex,blue!70!black] (Origin)
+        -- (Btwo) node [below right] {$\mathbf{b}_2$};
+    \filldraw[fill=red!70!purple, dashed, very thick, fill opacity=0.3, draw=black] 
+        (Origin) -- (Bone) -- ($(Bone) + (Bone) - (Btwo)$) -- ($(Bone)-(Btwo)$) -- cycle;
+  
+    %\draw [ultra thick,-latex,red!70!purple] (Origin)
+    %    -- ($0+1*(Bone)-3*(Btwo)$) node [above left] {$\mathbf{b}_1-3\mathbf{b}_2$};
+    \draw [ultra thick,-latex,red!70!purple] (Origin)
+        -- ($(Bone)-(Btwo)$) node [above left] {$\mathbf{b}_1-\mathbf{b}_2$};
+    \filldraw[fill=blue!70!black, dashed, very thick, fill opacity=0.3, draw=black] 
+    (Origin) -- (Bone) -- ($(Bone)+(Btwo)$) -- (Btwo) -- cycle;
+    \node at ($0.5*(Bone)+0.5*(Btwo)$) {\footnotesize$\mathcal{P}(\textcolor{blue!70!black}{\mathbf{B}})$};
+    \node at ($0.5*(Bone) + 0.5*($(Bone)-(Btwo)$)$) {\footnotesize$\;\mathcal{P}(\textcolor{red!70!purple}{\mathbf{B}'})$};
+  \end{tikzpicture}
+  \caption{Lattice $\Lambda=\mathcal{L}(\textcolor{blue!70!black}{\mathbf{B}})$ of rank
+  $2$ with basis $\textcolor{blue!70!black}{\mathbf{B}} =
+  \{\textcolor{blue!70!black}{\mathbf{b}_1},\textcolor{blue!70!black}{\mathbf{b}_2}\}$.
+  $\textcolor{blue!70!black}{\mathbf{B}}$ is an example of a ``good'' basis where basis
+  vectors are almost orthogonal. The basis $\textcolor{red!70!purple}{\mathbf{B}'} =
+  \{\textcolor{blue!70!black}{\mathbf{b}_1},\textcolor{red!70!purple}{\mathbf{b}_1-\mathbf{b}_2}\}$
+  of the same lattice $\Lambda=\mathcal{L}(\textcolor{red!70!purple}{\mathbf{B}'})$ is ``worse'' (the vectors seem more parallel and
+  fundamental domain $\mathcal{P}(\textcolor{red!70!purple}{\mathbf{B}'})$ is skewed).}
+  \label{fig:lattice}
+\end{figure}
+
+\begin{remark}\label{remark:lattice-in-integers}
+Note that the basis of lattice $\Lambda$ is not required to lie in $\mathbb{Z}^d$, compared to coefficients of the linear combination.
+However, in practice they usually do: note that we still can represent basis in memory only in the rational form (that is, $\mathbf{b}_i \in \mathbb{Q}^d$).
+With the proper rescaling, representation in $\mathbb{Z}^d$ would suffice.
+\end{remark}
+
+\begin{remark}
+    Further, we consider \textit{full-rank} lattices only: \textit{i.e.}, for $\Lambda \subseteq \mathbb{R}^d$, its rank is $d$. 
+    Indeed, if the rank of the lattice is $r<d$, we can always consider the lattice as a subset of $\mathbb{R}^r$.
+\end{remark}
+
+\subsubsection*{Motivation}
+
+The definition above seems not overly complicated and consequently one might wonder what makes lattices useful.
+We note that long before cryptographers noticed that lattices are a source of a large number of computationally hard problems, lattices had been first proven to be useful in Mathematics, where they have been used going back to at least to the 18th century. 
+In fact, lattices naturally arised in many areas such as number theory or sphere packings (with both being one way or another relevant to lattice and code-based cryptography).
+One of the reasons why lattice is a common object to encounter in mathematics is the following lemma.
+
+\begin{lemma}
+    Any \emph{discrete} additive subgroup of $\mathbb{R}^d$ is a lattice.
+\end{lemma}
+
+The above definition should be clear for the reader except for a term \emph{discrete}.
+The set $X \subseteq \mathbb{R}^d$ is called \emph{discrete} if $\delta := \inf_{u \neq v}\|u-v\| > 0$ for $u,v \in X$: in other words, distance between any two points is bounded below by a positive constant $\delta \in \mathbb{R}_{>0}$.
+
+So the lemma states that whenever we have a discrete set $X \subseteq \mathbb{R}^d$ (where every point is isolated) and we have an additive group structure, we can find a basis $\mathbf{b}_1,\dots,\mathbf{b}_d$ such that every element of $X$ can be described as a $\mathbb{Z}$-linear combination of this basis.
+This fact is not very hard to prove yet is not immediately obvious from the definitions.
+
+Needless to say, such constructions are frequent in Mathematics. Here is one non-obvious example.
+
+\begin{proposition}
+    Let $\mathbb{G}$ be a group generated by $g_1,\dots,g_d \in \mathbb{G}$.
+    Define the map $\phi: \mathbb{Z}^d \to \mathbb{G}$ as $(z_1,\dots,z_d) \mapsto z_1g_1 + \dots + z_dg_d$.
+    The kernel of this map (that is, all $(z_1,\dots,z_d) \in \mathbb{Z}^d$ such that $\phi(z_1,\dots,z_d) = 0$) is a lattice.
+\end{proposition}
+
+\begin{exercise}
+    Verify this proposition.
+\end{exercise}
+
+As a consequence of observation above, one can prove many algebra theorems (such as \emph{fundamental theorem of finitely generated additive groups}) using theory of lattices.
+Specifics are well beyond the scope of this section.
+We note that in our further cryptographic applications we will operate primarily over lattices with explicitly generated basis (\Cref{def:lattice}).
+
+\subsubsection{Fundamental Measures}
+
+In this section, we introduce some fundamental characteristics of lattices that will be used throughout the book.
+
+A basis $\mathbf{B}$ of $\Lambda := \mathcal{L}(\mathbf{B})$ is associated with the \textbf{fundamental
+domain}\footnote{Sometimes, the interval $[-1/2, 1/2)$ is used
+instead of $[0,1)$ to center $\mathcal{P}(\mathbf{B})$ with respect to the origin: in such
+case, such set is called a \textit{centered parallelepiped} of $\mathbf{B}$ and we will denote it by $\mathcal{P}_{1/2}(\mathbf{B})$.}:
+\begin{equation*}
+    \mathcal{P}(\mathbf{B}) \triangleq \left\{ \sum_{i \in [d]} \theta_i\mathbf{b}_i: \theta_i \in [0,1) \right\}.
+\end{equation*}
+
+What is special about this parallelepiped is that it represents all elements in the quotient group $\mathbb{R}^d/\Lambda$: any element $\mathbf{x} \in \mathbb{R}^d$ can be uniquely written as $\mathbf{x} = \mathbf{v} + \mathbf{p}$ where $\mathbf{v} \in \Lambda$ and $\mathbf{p} \in \mathcal{P}(\mathbf{B})$.
+Moreover, the shape of $\mathcal{P}(\mathbf{B})$ determines the ``quality'' of the basis $\mathbf{B}$:
+if $\mathbf{B}$ consists of long, nearly-parallel vectors, the corresponding centered parallelepiped
+$\mathcal{P}_{1/2}(\mathbf{B})$ is skewed and has points far from the origin, and $\mathbf{B}$ is typically
+considered ``bad,'' as some computational problems become much harder to solve.
+In turn, a basis $\mathbf{B}'$ whose centered parallelepiped $\mathcal{P}_{1/2}(\mathbf{B}')$ is non-skewed
+and stays close to the origin is considered ``good,'' as $\{\mathbf{b}_i'\}_{i \in [d]}$ much more
+closely resembles an orthogonal basis than $\mathbf{B}$ does (and of course, the orthogonal basis is in
+a sense ``perfect,'' because it is very ``nice'' to work with).
+Again, see \Cref{fig:lattice} for illustration.
+
+Another natural quantity to consider is the volume of such parallelepiped, called \textit{covolume}.
+
+\begin{definition}[Covolume]
+    The \textbf{covolume} $\mathsf{Vol}(\Lambda)$ of lattice $\Lambda$ is defined as\footnote{Since $\mathbb{R}^d/\Lambda$ is a smooth manifold, we use $\mathsf{Vol}(\cdot)$ above to denote the natural Lebesgue measure.}:
+    \begin{equation*}
+        \mathsf{Vol}(\Lambda) \triangleq \mathsf{Vol}(\mathbb{R}^d/\Lambda) = \sqrt{\det \mathbf{B}^{\top}\mathbf{B}}.
+    \end{equation*}
+\end{definition}
+
+Note that the definition of $\mathcal{P}(\mathbf{B})$ depends on the choice of $\mathbf{B}$ since the basis of $\Lambda$ is generally not unique.
+Thus, it might seem that covolume should also depend on the choice of $\mathbf{B}$.
+However, one can show the following.
+
+\begin{proposition}
+    The \textbf{covolume} $\mathsf{Vol}(\Lambda)$ is an invariant of $\Lambda$:
+    that is, it does not depend on the choice of $\mathbf{B}$.
+\end{proposition}
+
+Indeed, if $\mathbf{B}_0$ and $\mathbf{B}_1$ are both bases of $\Lambda$, then $\mathbf{B}_1=\mathbf{B}_0\mathbf{U}$ for some unimodular matrix $\mathbf{U} \in \text{GL}_d(\mathbb{Z})$.
+In such case one easily observes that $\det \mathbf{B}^{\top}_i\mathbf{B}_i$ is the same for $i \in \{0,1\}$.
+
+Turns out that one of the hardest computational problems is computing the shortest vectors of $\Lambda$.
+However, we need some preliminary work to formalize this statement.
+Denote $B_{\rho}(\mathbf{x}_0) := \{\mathbf{x} \in \mathbb{R}^d: \|\mathbf{x}-\mathbf{x}_0\|<\rho\}$ --- an open ball in $\mathbb{R}^d$ of radius $\rho$ centered at $\mathbf{x}_0$.
+We omit specifying $\mathbf{x}_0$ when it is the origin $\mathbf{0}$.
+
+\begin{definition}[Successive minima]
+    The \textbf{$i^{\text{th}}$ minimum $\lambda_i(\Lambda)$} is the radius 
+    of the smallest sphere centered at the origin containing $i$ linearly 
+    independent lattice vectors:
+    \begin{equation*}
+        \lambda_i(\Lambda) \triangleq \inf \{\rho \in \mathbb{R}_{\geq 0}: \dim(\text{span}(\Lambda \cap B_{\rho})) \geq i\}.
+    \end{equation*}
+\end{definition}
+
+In particular, $\lambda_1(\Lambda) = \min_{\mathbf{x} \neq \mathbf{y} \in \Lambda}\|\mathbf{x}-\mathbf{y}\| = \min_{\mathbf{x} \in \Lambda\setminus\{\mathbf{0}\}}\|\mathbf{x}\|$ is called the \textit{first minimum}, while the vector of length $\lambda_1(\Lambda)$ is the shortest vector.
+The natural question to ask though is whether it exists at all: after all, in $\mathbb{R}^d$, for instance, it is clearly undefined.
+We give an affirmative answer by means of the following proposition.
+
+\begin{proposition}\label{prop:lattice-minima-existence}
+    Let $\Lambda \subseteq \mathbb{R}^d$ be a full-rank lattice with successive minima $\lambda_1, \dots, \lambda_d$.
+    Then, the following two facts are true:
+    \begin{enumerate}
+        \item $\lambda_d \geq \ldots \geq \lambda_1 > 0$;
+        \item there exists a set of linearly independent vectors $\mathbf{v}_1, \dots, \mathbf{v}_d \in \Lambda$ such that
+        $\|\mathbf{v}_i\| = \lambda_i$ for all $i \in [d]$.
+    \end{enumerate}
+    
+\end{proposition}
+
+\begin{proof}
+    See \cite[Theorem 1.2]{MicGol02}. 
+\end{proof}
+
+Note that \Cref{prop:lattice-minima-existence} provides a more general result than what we need. 
+Specifically, it implies the shortest vector $\mathbf{v}_1$ of $\Lambda$ exists and has a positive length $\lambda_1(\Lambda)$.
+
+\subsubsection{Lattice Computational Problems}\label{section:lattice-problems}
+
+In this section, we define some problems that are currently believed to be unsolvable in polynomial time (under reasonable choice of parameters). 
+
+\paragraph{Shortest Vector Problem (SVP)}
+As previously announced, we start with the \textit{shortest vector problem} (SVP), which requires finding the vector of length $\lambda_1(\Lambda)$.
+\begin{definition}[Lattice Generation Algorithm]
+    A \textbf{lattice generation algorithm} $\mathsf{LGen}(1^{n})$ is a probabilistic polynomial time (PPT) algorithm that takes the security parameter $1^{n}$ and outputs the lattice basis\footnote{As previously noted in Remark~\ref{remark:lattice-in-integers}, we might assume that $\mathbf{B}$ is given in the integer representation.} $\mathbf{B} \in \mathbb{Z}^{n \times n}$ where $\Lambda=\mathcal{L}(\mathbf{B})$ is of rank $n$.
+\end{definition}
+
+\begin{definition}[Shortest Vector Problem]\label{def:svp}
+    For a given adversary $\A$ and lattice generation algorithm $\mathsf{LGen}(1^{n})$, define $\underline{\GAME\,\mathsf{SVP}}^{\A}_{\mathsf{LGen}}$ as follows:
+    \begin{algoen}
+        \item Sample the lattice basis $\mathbf{B} \gets \mathsf{LGen}(1^{n})$ and send to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathbb{Z}^{n} \setminus \{\mathbf{0}\}$ based on $\mathbf{B} \in \mathbb{Z}^{n \times n}$;
+        \item \textbf{return} 1 iff $\|\mathbf{B}\mathbf{x}\|=\lambda_1(\Lambda)$.
+    \end{algoen}
+    We define the $\mathcal{A}$'s \textbf{advantage in solving the shortest
+    vector problem} as:
+    \begin{equation*}
+        \Adv^{\mathsf{SVP}}_{\A,\mathsf{LGen}}(n) := \Pr\left[\underline{\GAME\,\mathsf{SVP}}^{\A}_{\mathsf{LGen}}(n) = 1\right]
+    \end{equation*} 
+\end{definition}
+
+\begin{definition}[SVP Assumption]
+    We say that \textbf{Shortest Vector Problem (SVP) assumption} holds if for 
+    any PPT adversary $\mathcal{A}$,
+    \begin{equation*}
+        \Adv^{\mathsf{SVP}}_{\A,\mathsf{LGen}}(n) = \negl(n).
+    \end{equation*}
+\end{definition}
+
+\paragraph{Approximate Shortest Vector Problem ($\text{SVP}_{\gamma}$)}
+
+Turns out that the setting of \Cref{def:svp} is too strict: finding the shortest non-zero vector in lattice $\Lambda$ is too hard.
+Moreover, one expects that building cryptographic protocols solely on this assumption would be very hard.
+So instead, we will require not finding the shortest vector, but ``short-enough'', where the natural measure of ``short'' is ``the small multiple of $\lambda_1(\Lambda)$''.
+
+\begin{definition}[Approximate Shortest Vector Problem]\label{def:appr-svp}
+    For a given adversary $\A$ and lattice generation algorithm $\mathsf{LGen}(1^{n})$, define $\underline{\GAME\,\mathsf{SVP}}^{\A}_{\textcolor{red!70!purple}{\gamma},\mathsf{LGen}}$ as follows:
+    \begin{algoen}
+        \item Sample the lattice basis $\mathbf{B} \gets \mathsf{LGen}(1^{n})$ and send to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathbb{Z}^{n} \setminus \{\mathbf{0}\}$ based on $(\mathbf{B},\textcolor{red!70!purple}{\gamma})$;
+        \item \textbf{return} 1 iff $\|\mathbf{B}\mathbf{x}\| \leq \textcolor{red!70!purple}{\gamma}\lambda_1(\Lambda)$.
+    \end{algoen}
+    We define the $\mathcal{A}$'s \textbf{advantage in solving the approximate
+    shortest vector problem} as:
+    \begin{equation*}
+        \Adv^{\mathsf{SVP}_{\textcolor{red!70!purple}{\gamma}}}_{\A,\mathsf{LGen}}(n) := \Pr\left[\underline{\GAME\,\mathsf{SVP}}^{\A}_{\textcolor{red!70!purple}{\gamma},\mathsf{LGen}}(n) = 1\right]
+    \end{equation*} 
+\end{definition}
+
+
+\begin{definition}[Approximate SVP Assumption]\label{def:approximate-svp-assumption}
+    We say that \textbf{Approximate Shortest Vector Problem (SVP) assumption}
+    with given $\gamma$ holds if for any PPT adversary $\mathcal{A}$,
+    \begin{equation*}
+        \Adv^{\mathsf{SVP}_{\gamma}}_{\A,\mathsf{LGen}}(n) = \negl(n).
+    \end{equation*}
+\end{definition}
+
+Typically, $\gamma$ is analyzed as a function of the rank of the lattice $n$.
+According to \cite[Section 2.2.5]{KoenWessel25}, for example, vectors of length below $\gamma\lambda_1(\Lambda)$ for $\gamma = \sqrt{n}$ are considered ``very short'' while $\gamma = \mathsf{poly}(n)$ is the most interesting case.
+As one expects, the Approximate SVP assumption does not hold for $\gamma=2^{n}$ by means of Lenstra-Lenstra-Lovasz (LLL) algorithm~\cite{LenLenLov82} (even more specifically, LLL solves $\mathsf{SVP}_{\gamma}$ for $\gamma > 2^{(n\log\log n)/\log n}$).
+
+Additionally, one commonly introduces \textbf{(approximate) shortest independent vectors problem ($\text{SIVP}_{\gamma}$)} with almost identical formulation to \Cref{def:appr-svp}, but instead one must find $n$ linearly independent vectors of lattice $\Lambda$ of length at most $\gamma\lambda_{n}(\Lambda)$.
+Its hardness is similar to that of $\mathsf{SVP}_{\gamma}$: for instance, algorithm solving $\mathsf{SVP}_{\gamma}$ automatically solves $\text{SIVP}_{\gamma\sqrt{n}}$.
+
+\paragraph{Approximate Closest Vector Problem ($\text{CVP}_{\gamma}$)}\label{section:approximate-cvp}
+A somewhat similar problem to SVP is, given some target vector $\mathbf{t} \in \mathbb{Z}^{n}$, find the closest vector to $\mathbf{t}$ on the lattice.
+This problem also turns out to be computationally hard.
+Similarly to SVP, the raw CVP problem is too strict, so we give formal definition for approximate CVP straight away.
+
+\begin{definition}[Approximate Closest Vector Problem]\label{def:cvp}
+    For a given adversary $\A$ and lattice generation algorithm $\mathsf{LGen}(1^{n})$, define $\underline{\GAME\,\mathsf{CVP}}^{\A}_{\gamma,\mathsf{LGen}}$ as follows:
+    \begin{algoen}
+        \item Sample the lattice basis $\mathbf{B} \gets \mathsf{LGen}(1^{n})$;
+        \item Sample target vector $\mathbf{t} \leftarrowS \mathbb{Z}^{n}$ and send $(\mathbf{B},\mathbf{t})$ to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathbb{Z}^{n}$ based on $(\mathbf{B},\mathbf{t},\gamma)$;
+        \item \textbf{return} $1$ iff $\|\mathbf{B}\mathbf{x}-\mathbf{t}\| \leq \gamma\|\mathbf{B}\mathbf{y}-\mathbf{t}\|$ for all $\mathbf{y} \neq \mathbf{x}$ and $0$ otherwise.
+    \end{algoen}
+    We define the $\mathcal{A}$'s \textbf{advantage in solving the approximate closest
+    vector problem} as:
+    \begin{equation*}
+        \Adv^{\text{CVP}_{\gamma}}_{\A,\mathsf{LGen}}(n) := \Pr\left[\underline{\GAME\,\mathsf{CVP}}^{\A}_{\gamma,\mathsf{LGen}}(n) = 1\right]
+    \end{equation*} 
+\end{definition}
+
+Similarly to~\Cref{def:approximate-svp-assumption}, we say that approximate CVP assumption with the approximate factor $\gamma$ holds if $\Adv^{\text{CVP}_{\gamma}}_{\A,\mathsf{LGen}}(n)=\negl(n)$ for all PPT adversaries $\A$.
+
+\paragraph{Bounded Distance Decoding Problem ($\text{BDD}_{\gamma}$)}\label{section:bdd}
+
+Sometimes it is more convenient to use even a looser notion than $\text{CVP}_{\gamma}$.
+Specifically, we now allow the target vector $\mathbf{t}$ to be ``close enough'' to the given lattice $\Lambda$.
+Formally, we formulate this problem below (and mark changes in \textcolor{blue!70!purple}{blue}).
+
+\begin{definition}[Bounded Distance Decoding
+    ($\text{BDD}_{\gamma}$)]\label{def:bdd} For a given adversary $\A$
+    and lattice generation algorithm $\mathsf{LGen}(1^{n})$, define
+    $\underline{\GAME\,\mathsf{BDD}}^{\A}_{\gamma,\mathsf{LGen}}$
+    as follows:
+    \begin{algoen}
+        \item Sample the lattice basis $\mathbf{B} \gets \mathsf{LGen}(1^{n})$;
+        \item Sample target vector $\mathbf{t} \leftarrowS \mathbb{Z}^{n}$
+        \textcolor{blue!70!purple}{with $\mathsf{dist}(\mathbf{t}, \Lambda) <
+        \lambda_1(\Lambda)/2\gamma$} and send $(\mathbf{B},\mathbf{t})$ to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathbb{Z}^{n}$ based on
+        $(\mathbf{B},\mathbf{t},\gamma)$;
+        \item \textbf{return} $1$ iff \textcolor{blue!70!purple}{$\mathbf{x} \in
+        \Lambda$ \textbf{and}
+        $\|\mathbf{x}-\mathbf{t}\|<\lambda_1(\Lambda)/2\gamma$}, and $0$
+        otherwise.
+    \end{algoen}
+    We define the $\A$'s \textbf{advantage in solving the bounded
+    distance decoding problem} as:
+    \begin{equation*}
+        \Adv^{\text{BDD}_{\gamma}}_{\A,\mathsf{LGen}}(n) := \Pr\left[\underline{\GAME\,\mathsf{BDD}}^{\A}_{\gamma,\mathsf{LGen}}(n) = 1\right].
+    \end{equation*} 
+
+    We say that $\text{BDD}_{\gamma}$ holds if
+    $\Adv^{\text{BDD}_{\gamma}}_{\A,\mathsf{LGen}}(n) = \negl(n)$ for all PPT $\A$.
+\end{definition}
+
+\paragraph{Decisional Shortest Vector Problem ($\mathsf{GapSVP}_{\gamma}$)}\label{section:gap-cvp}
+
+Finally, since we have a \textit{search} version of $\mathsf{SVP}_{\gamma}$, it is reasonable to ask for the \textit{decisional} version of the same problem.
+Moreover, turns out that the most current protocols are based on the decisional version of $\mathsf{SVP}_{\gamma}$ (called $\mathsf{GapSVP}_{\gamma}$) rather than on the search one.
+
+\begin{definition}[Decisional Shortest Vector Problem
+    ($\mathsf{GapSVP}_{\gamma}$)]\label{def:gap-cvp} For a given adversary
+    $\A$ and lattice generation algorithm $\mathsf{LGen}(1^{n})$,
+    define
+    $\underline{\GAME\,\mathsf{GapSVP}}^{\A}_{\gamma,\mathsf{LGen}}$
+    as follows:
+    \begin{algoen}
+        \item Sample a random bit $b \leftarrowS \{0,1\}$;
+        \item If $b=0$, sample $\Lambda$ such that $\lambda_1(\Lambda) \leq 1$,
+        otherwise such that $\lambda_1(\Lambda) > \gamma$;
+        \item $\A$ outputs some $\widehat{b}$ based on
+        $(\Lambda,\gamma)$;
+        \item \textbf{return} 1 iff $b=\widehat{b}$.
+    \end{algoen}
+    We define the $\A$'s \textbf{advantage in solving the decisional
+    shortest vector problem} as:
+    \begin{equation*}
+        \Adv^{\mathsf{GapSVP}_{\gamma}}_{\A,\mathsf{LGen}}(n) := \left|\Pr\left[\underline{\GAME\,\mathsf{GapSVP}}^{\A}_{\gamma,\mathsf{LGen}}(n) = 1\right] - \frac{1}{2}\right|
+    \end{equation*} 
+    We say that $\mathsf{GapSVP}_{\gamma}$ holds if
+    $\Adv^{\mathsf{GapSVP}_{\gamma}}_{\A,\mathsf{LGen}}(n)=\negl(n)$
+    for all PPT $\A$.
+\end{definition}
+
+\begin{remark}
+    A core characteristic of these lattice problems is their presumed resistance not only against classical adversaries but quantum as well. 
+    Specifically, currently one of the best attacks against $\mathsf{SVP}_{\gamma}$ is given by BDGL sieve algorithms, requiring time $2^{0.292n+\overline{o}(n)}$ for classical computers and $2^{0.257n+\overline{o}(n)}$ for quantum adversaries (with the lower bound of $2^{0.2075n+\overline{o}(n)}$).
+    For more comprehensive review, see \cite{KoenWessel25}.
+    That said, taking $n \gtrapprox 1024$ typically suffices to ensure $\geq 128$ bits of security.
+\end{remark}
+
+\subsection{Short Integer Solution (SIS)}\label{section:sis}
+
+The first problem that serves as a foundation of many subsequent protocols (such as collision-resistant hash functions, commitments, and digital signatures) is the \textit{short integer solution} (SIS) problem.
+Informally, the SIS problem, as the name suggests, asks for a \emph{short} non-zero solution $\mathbf{x} \in \mathbb{Z}^m$ to the homogeneous linear equation $\mathbf{A}\mathbf{x} = \mathbf{0}$ over $\mathbb{Z}_q$, where $\mathbf{A} \in \mathbb{Z}_q^{n \times m}$ is a random matrix.
+At first glance, this problem has nothing to do with the lattices from \Cref{section:lattice-problems}; we establish the connection later in this section.
+ 
+Without any additional constraints, the equation is easy to solve. Indeed, for instance $\mathbf{x} = (q,0,\dots,0)$ is a trivial non-zero solution. By using Gaussian elimination, one may additionally find many ``less trivially looking'' ones.
+That said, we additionally require $\|\mathbf{x}\|_{\infty} \leq \beta$ for some fixed bound $\beta \ll q$, and this requirement is what makes the problem hard.
+
+\paragraph{Notation}
+Throughout the rest of this section, $q$ is an (odd) modulus and we represent every $x \in \mathbb{Z}_q$ by its \emph{centered} representative in the range from $-q/2$ to $q/2$.
+Consequently, $\|x\|_{\infty}$ for $x \in \mathbb{Z}_q$ denotes the absolute value of this representative (for example, $\|q-1\|_{\infty} = 1$), and naturally let $\|\mathbf{x}\|_{\infty} := \max_i \|x_i\|_{\infty}$ and $\|\mathbf{x}\|_2 := \sqrt{\sum_{i \in [m]} \|x_i\|_{\infty}^2}$ for $\mathbf{x} \in \mathbb{Z}_q^m$.
+We call the elements of
+\begin{equation*}
+    S_{\eta} := \{x \in \mathbb{Z}_q: \|x\|_{\infty} \leq \eta\}
+\end{equation*}
+\emph{short}, and we implicitly assume $\eta \ll q$ (think of $\eta \leq 4$ and $q \approx 2^{23}$).
+
+We denote the SIS problem with parameters $(n,m,q,\beta)$ by $\mathsf{SIS}_{n,m,q,\beta}$ and give its formal definition below.
+
+\begin{definition}[SIS Assumption]\label{def:sis}
+    For a given adversary $\A$ and parameters $(n,m,q,\beta)$, define $\underline{\GAME\,\mathsf{SIS}}^{\A}_{n,m,q,\beta}$ as follows:
+    \begin{algoen}
+        \item Sample a matrix $\mathbf{A} \leftarrowS \mathbb{Z}_q^{n \times m}$ and send it to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathbb{Z}^m$;
+        \item \textbf{return} $1$ iff $\mathbf{x} \neq \mathbf{0}$, $\mathbf{A}\mathbf{x} = \mathbf{0} \pmod{q}$, and $\|\mathbf{x}\|_{\infty} \leq \beta$.
+    \end{algoen}
+    We define the $\A$'s \textbf{advantage in solving the SIS problem} as
+    \begin{equation*}
+        \Adv^{\mathsf{SIS}}_{\A}(n) := \Pr\left[\underline{\GAME\,\mathsf{SIS}}^{\A}_{n,m,q,\beta}(n) = 1\right].
+    \end{equation*}
+    We say that the \textbf{$\mathsf{SIS}_{n,m,q,\beta}$ assumption} holds if $\Adv^{\mathsf{SIS}}_{\A}(n) = \negl(n)$ for any PPT adversary $\A$.
+\end{definition}
+
+\begin{remark}
+    Some works measure shortness in the $\ell^2$ norm instead of the $\ell^{\infty}$ norm.
+    Since $\|\mathbf{x}\|_{\infty} \leq \|\mathbf{x}\|_2 \leq \sqrt{m}\|\mathbf{x}\|_{\infty}$, the two variants differ only by a factor of at most $\sqrt{m}$ in the bound $\beta$.
+\end{remark}
+
+\paragraph{Choosing parameters}
+The parameters $(n,m,q,\beta)$ are not independent, and the following observations explain which choices make sense~\cite{EPRINT:Peikert15}:
+\begin{enumerate}
+    \item[\textit{(i)}] For $\beta \geq q$ the problem is obviously trivial: for example, $(q,0,\dots,0)$ is a valid non-zero solution.
+    \item[\textit{(ii)}] Increasing $m$ can only make SIS easier: a solution $\mathbf{x}$ for $\mathbf{A}$ extends to the solution $(\mathbf{x},\mathbf{0})$ for $[\mathbf{A}\,\|\,\mathbf{A}']$ with the same norm.
+    Similarly, increasing $n$ (the number of equations) can only make SIS harder.
+    \item[\textit{(iii)}] A short solution exists as soon as $(\beta+1)^m > q^n$.
+    Indeed, the map $\mathbf{x} \mapsto \mathbf{A}\mathbf{x}$ sends $(\beta+1)^m$ vectors $\mathbf{x} \in \{0,\dots,\beta\}^m$ into a set of size $q^n$, so by the pigeonhole principle two distinct vectors $\mathbf{x} \neq \mathbf{x}'$ collide.
+    Their difference $\mathbf{x}-\mathbf{x}'$ is a non-zero solution with $\|\mathbf{x}-\mathbf{x}'\|_{\infty} \leq \beta$.
+    Typically, one therefore takes $m > n\log q/\log(\beta+1)$, which is much larger than $n$.
+\end{enumerate}
+
+\paragraph{SIS as a lattice problem}
+To see why SIS is a lattice problem, associate with $\mathbf{A} \in \mathbb{Z}_q^{n \times m}$ the set of all integer solutions:
+\begin{equation*}
+    \Lambda^{\perp}_q(\mathbf{A}) := \{\mathbf{x} \in \mathbb{Z}^m: \mathbf{A}\mathbf{x} = \mathbf{0} \pmod{q}\}.
+\end{equation*}
+This set is closed under addition and discrete, so it is a lattice.
+Moreover, $q\mathbb{Z}^m \subseteq \Lambda^{\perp}_q(\mathbf{A}) \subseteq \mathbb{Z}^m$, so $\Lambda^{\perp}_q(\mathbf{A})$ has full rank $m$; lattices ``sandwiched'' between $q\mathbb{Z}^m$ and $\mathbb{Z}^m$ are called \textbf{$q$-ary lattices}.
+One can also show that $\mathsf{Vol}(\Lambda^{\perp}_q(\mathbf{A})) = q^n$ whenever the rows of $\mathbf{A}$ are linearly independent over $\mathbb{Z}_q$ (which happens with overwhelming probability for random $\mathbf{A}$).
+
+A solution to SIS is by definition a short non-zero vector of $\Lambda^{\perp}_q(\mathbf{A})$.
+Therefore, SIS is exactly the approximate shortest vector problem (\Cref{def:appr-svp}) on the $q$-ary lattice $\Lambda^{\perp}_q(\mathbf{A})$. 
+With a bit of additional care, one can show that the approximation factor of the corresponding SVP is roughly $\beta/\lambda_1(\Lambda^{\perp}_q(\mathbf{A}))$.
+
+In other words, if we knew how to solve approximate SVP on the lattice $\Lambda^{\perp}_q(\mathbf{A})$, we would be able to break the SIS assumption: SIS is no harder than $\mathsf{SVP}_{\gamma}$ on this particular lattice.
+This observation is useful for attacks, but it does not tell us that SIS is hard.
+For security we need a reduction in the opposite direction, and, remarkably, it exists: as first shown by Ajtai, solving this \emph{average-case} problem is at least as hard as solving certain lattice problems in the \emph{worst case}.
+We state the modern version of this result informally.
+
+\begin{theorem}[Informal, see {\cite[Section 4.1]{EPRINT:Peikert15}}]\label{thm:sis-worst-case}
+    For $m = \mathsf{poly}(n)$, any $\beta > 0$, and any sufficiently large $q \geq \beta \cdot \mathsf{poly}(n)$, solving $\mathsf{SIS}_{n,m,q,\beta}$ with non-negligible probability is at least as hard as solving $\mathsf{GapSVP}_{\gamma}$ and $\mathsf{SIVP}_{\gamma}$ on \emph{arbitrary} $n$-dimensional lattices for some $\gamma = \beta \cdot \mathsf{poly}(n)$.
+\end{theorem}
+
+In other words, breaking a random SIS instance breaks \emph{every} lattice of dimension $n$, so the protocol designer does not need to worry about sampling ``weak'' instances.
+
+\paragraph{Application: hash functions and commitments}
+The most direct application of SIS is a collision-resistant hash function.
+For a random key $\mathbf{A} \leftarrowS \mathbb{Z}_q^{n \times m}$ with $2^m > q^n$, define
+\begin{equation*}
+    \mathsf{H}_{\mathbf{A}}: \{0,1\}^m \to \mathbb{Z}_q^n, \quad \mathbf{x} \mapsto \mathbf{A}\mathbf{x}.
+\end{equation*}
+The condition $2^m > q^n$ makes $\mathsf{H}_{\mathbf{A}}$ compressing: it maps $m$ bits into $n\log q < m$ bits.
+As observed earlier, this also ensures that the equation $\mathbf{Ax}=0$ has at least one short solution, which will be important for proving the following proposition.
+
+\begin{proposition}
+    If $\mathsf{SIS}_{n,m,q,1}$ holds, then $\mathsf{H}_{\mathbf{A}}$ is collision-resistant.
+\end{proposition}
+
+\begin{proof}
+    Suppose an adversary finds $\mathbf{x} \neq \mathbf{x}' \in \{0,1\}^m$ with $\mathbf{A}\mathbf{x} = \mathbf{A}\mathbf{x}'$.
+    Then $\mathbf{A}(\mathbf{x}-\mathbf{x}') = \mathbf{0}$, the vector $\mathbf{x}-\mathbf{x}'$ is non-zero, and each of its coordinates lies in $S_1$.
+    Hence, $\mathbf{x}-\mathbf{x}'$ is a solution to $\mathsf{SIS}_{n,m,q,1}$ for the challenge matrix $\mathbf{A}$.
+\end{proof}
+
+Notice that, contrary to SHA-256, the function $\mathsf{H}_{\mathbf{A}}$ is linear: $\mathsf{H}_{\mathbf{A}}(\mathbf{x}) + \mathsf{H}_{\mathbf{A}}(\mathbf{x}') = \mathsf{H}_{\mathbf{A}}(\mathbf{x}+\mathbf{x}')$.
+This is exactly the property that made the Pedersen commitment useful, and it gives the lattice analogue of Pedersen commitments, commonly called the \textbf{Ajtai commitment}.
+We define it as follows.
+
+\begin{definition}[Ajtai Commitment]
+    Define the \textbf{Ajtai commitment scheme} $\Pi_{\text{Ajtai}}$ over a message space $S_{\delta}^n$ and randomness space $S_{\eta}^m$ as follows:
+    \begin{itemize}
+        \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$: generate two matrices $\mathbf{A} \leftarrowS \mathbb{Z}_q^{\kappa \times n}$ and $\mathbf{B} \leftarrowS \mathbb{Z}_q^{\kappa \times m}$.
+        \item $\mathsf{Com}(\mathbf{x} \in S_{\delta}^n; \mathbf{r} \in S_{\eta}^m) \to (\mathbf{c} \in \mathbb{Z}_q^{\kappa})$: to generate a commitment to a short message $\mathbf{x} \in S_{\delta}^n$, the prover selects a blinding factor $\mathbf{r} \leftarrowS S_{\delta}^m$ and outputs $\mathbf{c} \gets \mathbf{Ax} + \mathbf{Br}$.
+    \end{itemize}
+\end{definition}
+
+Binding follows from SIS exactly as in the proof above: two openings $(\mathbf{x},\mathbf{r}) \neq (\mathbf{x}',\mathbf{r}')$ give the short solution $(\mathbf{x}-\mathbf{x}',\mathbf{r}-\mathbf{r}')$.
+
+\begin{exercise}\label{exercise:ajtai-collision}
+    Which SIS instance does this collision solve?
+    Specify the matrix and the parameters $(n', m', q', \beta')$ of $\mathsf{SIS}_{n',m',q',\beta'}$ (\Cref{def:sis}).
+
+    \commentgray{Answer: $\mathsf{SIS}_{\kappa,n+m,q,2\max\{\delta,\eta\}}$.}
+\end{exercise}
+
+Unfortunately, the hiding property cannot be shown using SIS (namely, we will require the LWE assumption which will be introduced in the next section).
+The commitment is additively homomorphic, but only as long as the committed values stay short: adding many commitments increases the norm of the underlying message, and binding is guaranteed only up to the bound $\beta$.
+Keeping track of such norm growth is the recurring theme of all lattice-based protocols.
+
+\begin{exercise}
+    Let $\mathbf{x}_1,\dots,\mathbf{x}_N \in S_1^n$ be committed with Ajtai commitments $\mathbf{c}_1,\dots,\mathbf{c}_N$.
+    What SIS bound $\beta$ is needed so that $\mathbf{c}_1+\dots+\mathbf{c}_N$ is still a binding commitment to $\mathbf{x}_1+\dots+\mathbf{x}_N$? Assume $\eta \geq 1$.
+    
+    \commentgray{Answer: $\beta=2N\eta$.}
+\end{exercise}
+
+\paragraph{Inhomogeneous SIS (ISIS)}
+Public-key primitives need a one-way function that maps a short secret to a public value.
+The natural candidate is $\mathbf{s} \mapsto \mathbf{A}\mathbf{s}$ for short $\mathbf{s}$, and inverting it is the \textbf{inhomogeneous SIS} problem: given $\mathbf{A} \leftarrowS \mathbb{Z}_q^{n \times m}$ and $\mathbf{t} \in \mathbb{Z}_q^n$, find $\mathbf{x}$ with $\|\mathbf{x}\|_{\infty} \leq \beta$ and $\mathbf{A}\mathbf{x} = \mathbf{t}$.
+ISIS is as hard as SIS up to small changes in parameters~\cite{STOC:GenPeiVai08}: intuitively, $\mathbf{t} = \mathbf{A}\mathbf{s}$ for a short random $\mathbf{s}$ is close to uniform when $m$ is large, and a solver that finds a \emph{different} short preimage $\mathbf{x} \neq \mathbf{s}$ yields the SIS solution $\mathbf{x}-\mathbf{s}$.
+We will use this one-way function for the Lyubashevsky signature in \Cref{section:lyubashevsky}.
+
+\subsection{Learning With Errors (LWE)}\label{section:lwe}
+
+SIS is well suited for hash functions and commitments, but it is less convenient for encryption: we need a public key that looks random, yet hides a secret that allows decryption.
+The \textit{learning with errors} (LWE) problem, introduced by Regev, provides exactly this.
+
+\paragraph{Motivation}
+Fix a secret $\mathbf{s} \in \mathbb{Z}_q^n$.
+Publishing random linear equations $b_i = \langle \mathbf{a}_i, \mathbf{s} \rangle$ for $\mathbf{a}_i \leftarrowS \mathbb{Z}_q^n$ is useless: after collecting $n$ equations, Gaussian elimination recovers $\mathbf{s}$ in $O(n^3)$ time.
+To resolve this issue, LWE perturbs each equation by a small error $e_i$:
+\begin{equation*}
+    b_i = \langle \mathbf{a}_i, \mathbf{s} \rangle + e_i, \quad e_i \leftarrowS \chi,
+\end{equation*}
+where $\chi$ is an \emph{error distribution} over short elements of $\mathbb{Z}_q$ (for now, think of the uniform distribution over $S_{\eta}$ for $\eta \leq 4$).
+Stacking $m$ such equations yields a matrix $\mathbf{A} \in \mathbb{Z}_q^{m \times n}$ and a vector $\mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e}$.
+For such a construction, the Gaussian elimination no longer works and no algorithms are known to solve this equation with respect to $\mathbf{s}$.
+Let us now formalize what we have so far.
+
+\begin{definition}[LWE Instance]
+    For parameters $(n,m,q,\chi)$ and a secret $\mathbf{s} \in \mathbb{Z}_q^n$, the \textbf{LWE instance generation algorithm} $\mathsf{LWEGen}_{n,m,q,\chi}(\mathbf{s})$ samples $\mathbf{A} \leftarrowS \mathbb{Z}_q^{m \times n}$ and $\mathbf{e} \leftarrowS \chi^m$, and outputs $(\mathbf{A}, \mathbf{b} := \mathbf{A}\mathbf{s}+\mathbf{e})$.
+\end{definition}
+
+Similarly to Diffie-Hellman assumptions, the LWE problem has two variants: the search version asks to find $\mathbf{s}$, while the decisional version asks to distinguish an LWE instance from a uniformly random pair.
+We formalize this below.
+
+\begin{definition}[Search-LWE Assumption]\label{def:slwe}
+    For a given adversary $\A$ and parameters $(n,m,q,\chi)$, define $\underline{\GAME\,\mathsf{SLWE}}^{\A}_{n,m,q,\chi}$ as follows:
+    \begin{algoen}
+        \item Sample the secret $\mathbf{s} \leftarrowS \mathbb{Z}_q^n$ and $(\mathbf{A},\mathbf{b}) \gets \mathsf{LWEGen}_{n,m,q,\chi}(\mathbf{s})$;
+        \item $\A$ outputs some $\widehat{\mathbf{s}}$ based on $(\mathbf{A},\mathbf{b})$;
+        \item \textbf{return} $1$ iff $\widehat{\mathbf{s}} = \mathbf{s}$.
+    \end{algoen}
+    We say that the \textbf{Search-LWE assumption} holds if for any PPT $\A$
+    \begin{equation*}
+        \Adv^{\mathsf{SLWE}}_{\A}(n) := \Pr[\underline{\GAME\,\mathsf{SLWE}}^{\A}_{n,m,q,\chi} = 1] = \negl(n).
+    \end{equation*}
+\end{definition}
+
+\begin{definition}[Decisional-LWE Assumption]\label{def:dlwe}
+    For a given adversary $\A$ and parameters $(n,m,q,\chi)$, define $\underline{\GAME\,\mathsf{DLWE}}^{\A}_{n,m,q,\chi}$ as follows:
+    \begin{algoen}
+        \item Sample a random bit $b \leftarrowS \{0,1\}$;
+        \item If $b=0$, sample $\mathbf{s} \leftarrowS \mathbb{Z}_q^n$ and $(\mathbf{A},\mathbf{u}) \gets \mathsf{LWEGen}_{n,m,q,\chi}(\mathbf{s})$; otherwise, sample $(\mathbf{A},\mathbf{u}) \leftarrowS \mathbb{Z}_q^{m \times n} \times \mathbb{Z}_q^m$;
+        \item $\A$ outputs some $\widehat{b}$ based on $(\mathbf{A},\mathbf{u})$;
+        \item \textbf{return} $1$ iff $\widehat{b} = b$.
+    \end{algoen}
+    We say that the \textbf{Decisional-LWE assumption} holds if for any PPT $\A$
+    \begin{equation*}
+        \Adv^{\mathsf{DLWE}}_{\A}(n) := \left|\Pr\left[\underline{\GAME\,\mathsf{DLWE}}^{\A}_{n,m,q,\chi}(n) = 1\right] - \frac{1}{2}\right| = \negl(n).
+    \end{equation*}
+\end{definition}
+
+Clearly, if one can find $\mathbf{s}$, one can distinguish (compute $\mathbf{b}-\mathbf{A}\mathbf{s}$ and check whether it is short).
+Regev showed that the converse also holds for $q = \mathsf{poly}(n)$, so the two assumptions are equivalent.
+The idea is to recover $\mathbf{s}$ one coordinate at a time.
+To test whether a guess $g \in \mathbb{Z}_q$ equals $s_1$, sample $\boldsymbol{\Delta} \leftarrowS \mathbb{Z}_q^m$, add it to the first column of $\mathbf{A}$, and add $g\boldsymbol{\Delta}$ to $\mathbf{b}$.
+If $g = s_1$, the modified pair is again an LWE instance with the same secret; otherwise, $\mathbf{b}$ receives the extra term $(g-s_1)\boldsymbol{\Delta}$, which is uniform and makes the pair uniform.
+The distinguisher tells the two cases apart, and trying all $q$ guesses for each of the $n$ coordinates takes $qn$ calls.
+
+\begin{exercise}
+    Check that the modified pair in the argument above is uniformly distributed when $g \neq s_1$ and $q$ is prime.
+\end{exercise}
+
+\paragraph{Short secrets}
+Most practical schemes sample the secret from the error distribution, $\mathbf{s} \leftarrowS \chi^n$, instead of uniformly over $\mathbb{Z}_q^n$.
+This variant is called \emph{short-secret LWE}.
+Although it drastically reduces the number of possible secrets, it does not reduce security: short-secret LWE with $m$ samples is at least as hard as standard LWE with $m+n$ samples.
+In the rest of the book we use short secrets implicitly.
+
+\paragraph{LWE as a lattice problem}
+Similarly to SIS, the matrix $\mathbf{A} \in \mathbb{Z}_q^{m \times n}$ defines the $q$-ary lattice
+\begin{equation*}
+    \Lambda_q(\mathbf{A}) := \{\mathbf{y} \in \mathbb{Z}^m: \mathbf{y} = \mathbf{A}\mathbf{x} \pmod{q} \; \text{for some} \; \mathbf{x} \in \mathbb{Z}^n\} = \mathbf{A}\mathbb{Z}^n + q\mathbb{Z}^m.
+\end{equation*}
+The vector $\mathbf{b} = \mathbf{A}\mathbf{s}+\mathbf{e}$ does not lie on $\Lambda_q(\mathbf{A})$, but it is very close to the lattice point $\mathbf{A}\mathbf{s} \bmod q$: the distance is at most $\|\mathbf{e}\|_2 \leq \sqrt{m}\eta$.
+Therefore, Search-LWE is an instance of the bounded distance decoding problem (\Cref{def:bdd}): an algorithm solving BDD on $\Lambda_q(\mathbf{A})$ recovers the lattice point $\mathbf{A}\mathbf{s}$, and hence $\mathbf{s}$.
+In the other direction, LWE also enjoys a worst-case hardness guarantee, although through a \emph{quantum} reduction.
+
+\begin{theorem}\label{thm:lwe-worst-case}
+    For $m = \mathsf{poly}(n)$, a modulus $q \leq 2^{\mathsf{poly}(n)}$, and a (discrete) Gaussian error distribution\footnote{We have not yet defined discrete Gaussian distributions, so think of them as a particularly useful type of short distributions.} $\chi$ of width $\alpha q \geq 2\sqrt{n}$ for $\alpha \in (0,1)$, solving $\mathsf{DLWE}_{n,m,q,\chi}$ is at least as hard as \emph{quantumly} solving $\mathsf{GapSVP}_{\gamma}$ and $\mathsf{SIVP}_{\gamma}$ on arbitrary $n$-dimensional lattices for some $\gamma = \widetilde{O}(n/\alpha)$.
+\end{theorem}
+
+\paragraph{Application: public-key encryption}
+The decisional form of LWE makes encryption almost immediate.
+The public key is an LWE instance $(\mathbf{A},\mathbf{b} = \mathbf{A}\mathbf{s}+\mathbf{e})$, which by DLWE looks uniformly random.
+To encrypt a bit $\mu$, the sender takes a random subset-sum of the rows of $(\mathbf{A},\mathbf{b})$ and adds $\mu \cdot \lceil q/2 \rfloor$ to the last coordinate.
+The owner of $\mathbf{s}$ cancels the $\mathbf{A}$-part, leaving the message plus a small error.
+
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.3\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda}) \to (\mathsf{pk}, \mathsf{sk})$:}
+            \begin{algoen}
+                \item $\mathbf{A} \leftarrowS \mathbb{Z}_q^{m \times n}$;
+                \item $\mathbf{s} \leftarrowS \mathbb{Z}_q^n$, $\mathbf{e} \leftarrowS \chi^m$;
+                \item $\mathbf{b} \gets \mathbf{A}\mathbf{s} + \mathbf{e}$;
+                \item $\mathsf{pk} \gets (\mathbf{A},\mathbf{b})$;
+                \item $\mathsf{sk} \gets \mathbf{s}$;
+                \item \textbf{return} $(\mathsf{pk}, \mathsf{sk})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.32\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Enc}(\mathsf{pk}, \mu \in \{0,1\}) \to c$:}
+            \begin{algoen}
+                \item $\mathbf{x} \leftarrowS \{0,1\}^m$;
+                \item $\widetilde{\mathbf{a}} \gets \mathbf{A}^{\top}\mathbf{x}$;
+                \item $\widetilde{b} \gets \langle \mathbf{b}, \mathbf{x} \rangle + \mu\lceil q/2 \rfloor$;
+                \item \textbf{return} $c=(\widetilde{\mathbf{a}}, \widetilde{b})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.35\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Dec}(\mathsf{sk}, c) \to \mu$:}
+            \begin{algoen}
+                \item Parse $(\widetilde{\mathbf{a}}, \widetilde{b}) \gets c$;
+                \item $\delta \gets \widetilde{b} - \langle \mathbf{s}, \widetilde{\mathbf{a}} \rangle$;
+                \item \textbf{return} $1$ iff $\|\delta\|_{\infty} \geq q/4$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Key generation, encryption, and decryption in Regev's scheme $\Pi_{\mathsf{PKE}}^{\text{LWE}}$ (with $m \geq (n+1)\log q$).}
+    \label{fig:lwe-pke}
+\end{algoproto}
+
+\textbf{Correctness.} Expanding $\delta$ gives
+\begin{equation*}
+    \delta = \mathbf{x}^{\top}(\mathbf{A}\mathbf{s}+\mathbf{e}) + \mu\lceil q/2 \rfloor - \mathbf{s}^{\top}\mathbf{A}^{\top}\mathbf{x} = \textcolor{oc-teal-9}{\langle \mathbf{e},\mathbf{x} \rangle} + \mu\lceil q/2 \rfloor.
+\end{equation*}
+Since $\mathbf{x}$ is binary, the error term \textcolor{oc-teal-9}{$\langle \mathbf{e},\mathbf{x} \rangle$} is a sum of at most $m$ values from $S_{\eta}$, so $\|\langle \mathbf{e},\mathbf{x} \rangle\|_{\infty} \leq m\eta$.
+If $m\eta < q/4$, then $\delta$ is close to $0$ for $\mu = 0$ and close to $q/2$ for $\mu = 1$, and decryption is always correct.
+
+\textbf{Security.} The scheme is IND-CPA secure under DLWE, and the argument has two steps.
+First, by DLWE we may replace $\mathbf{b}$ with a uniformly random vector without the adversary noticing.
+Second, once $(\mathbf{A},\mathbf{b})$ is uniform, the leftover hash lemma (this is where $m \geq (n+1)\log q$ is used) implies that $(\mathbf{A}^{\top}\mathbf{x}, \langle \mathbf{b},\mathbf{x} \rangle)$ is statistically close to uniform, so the ciphertext carries no information about $\mu$.
+
+\begin{remark}\label{remark:lwe-inefficiency}
+    Notice how inefficient this scheme is: the public key takes $m(n+1)\log q$ bits, and each \emph{bit} of the message costs a ciphertext of $(n+1)\log q$ bits.
+    For $n = 512$ and $q \approx 2^{12}$ this is already about $6000$ bits of ciphertext per bit of plaintext.
+    Fixing this inefficiency is the main motivation for the structured lattices of the next section.
+\end{remark}
+
+\subsection{Structured Lattices*}\label{section:structured-lattices}
+
+The unstructured SIS and LWE problems have a single practical drawback: size.
+The matrix $\mathbf{A}$ consists of $nm$ elements of $\mathbb{Z}_q$, which is hundreds of kilobytes for secure parameters, and every multiplication by $\mathbf{A}$ costs $O(nm)$ operations.
+Sampling $\mathbf{A}$ from a public seed\footnote{Since $\mathbf{A}$ is uniformly random, all parties can expand it from a short seed with an extendable-output function such as SHAKE. Every practical scheme does this, so the size of $\mathbf{A}$ itself rarely matters.} removes the storage cost of $\mathbf{A}$, but the other components (such as $\mathbf{b}$ in LWE, or the ciphertexts in \Cref{remark:lwe-inefficiency}) remain large, and so does the computation.
+
+All modern lattice-based schemes (including the NIST standards ML-KEM and ML-DSA) solve this problem by replacing the ring $\mathbb{Z}_q$ with a polynomial ring $\mathcal{R}_q$.
+A single element of $\mathcal{R}_q$ is described by $n$ numbers, yet multiplication by it acts as an $n \times n$ matrix.
+In this section, we define this ring, explain why it is chosen the way it is, and restate SIS and LWE over it.
+
+\subsubsection{Cyclotomic Rings}\label{subsec:cyclotomic-rings}
+
+Fix $n$ to be a power of two and define the rings
+\begin{equation*}
+    \mathcal{R} := \mathbb{Z}[T]/(T^n+1), \quad \mathcal{R}_q := \mathbb{Z}_q[T]/(T^n+1).
+\end{equation*}
+Elements of $\mathcal{R}_q$ are polynomials $f = f_0 + f_1T + \dots + f_{n-1}T^{n-1}$ with coefficients in $\mathbb{Z}_q$.
+We add them coefficient-wise, and we multiply them as usual polynomials followed by the reduction $T^n = -1$.
+The polynomial $T^n+1$ is the $2n$-th \emph{cyclotomic} polynomial, which is why $\mathcal{R}$ is called a \textbf{cyclotomic ring}.
+
+\paragraph{Multiplication as a matrix}
+The \emph{coefficient embedding} identifies $f \in \mathcal{R}$ with its coefficient vector $\mathsf{vec}(f) := (f_0,\dots,f_{n-1})^{\top} \in \mathbb{Z}^n$.
+Multiplication by a fixed $a \in \mathcal{R}$ is a linear map on coefficient vectors, so it corresponds to some matrix $\mathsf{rot}(a) \in \mathbb{Z}^{n \times n}$ with
+\begin{equation*}
+    \mathsf{vec}(a \cdot f) = \mathsf{rot}(a) \cdot \mathsf{vec}(f) \quad \text{for all} \; f \in \mathcal{R}.
+\end{equation*}
+The $j$-th column of $\mathsf{rot}(a)$ is $\mathsf{vec}(T^j a)$, and multiplying by $T$ shifts the coefficients up by one position while the top coefficient wraps around with a minus sign (since $T^n = -1$).
+Hence, $\mathsf{rot}(a)$ is the \emph{anti-circulant} matrix
+\begin{equation*}
+    \mathsf{rot}(a) = \begin{bmatrix}
+        a_0 & -a_{n-1} & \dots & -a_1 \\
+        a_1 & a_0 & \dots & -a_2 \\
+        \vdots & \vdots & \ddots & \vdots \\
+        a_{n-1} & a_{n-2} & \dots & a_0
+    \end{bmatrix}.
+\end{equation*}
+
+\begin{exercise}
+    For $n=2$, compute $(1+2T)(3-T)$ in $\mathbb{Z}[T]/(T^2+1)$ and check that the result equals $\mathsf{rot}(1+2T)\cdot(3,-1)^{\top}$.
+\end{exercise}
+
+Therefore, a single ring element describes a structured $n \times n$ matrix, and a matrix over $\mathcal{R}_q$ of size $k \times \ell$ describes a structured matrix over $\mathbb{Z}_q$ of size $kn \times \ell n$ built from blocks $\mathsf{rot}(a_{ij})$.
+This is the source of all efficiency gains: storing the structured matrix takes $k\ell n$ instead of $k\ell n^2$ elements of $\mathbb{Z}_q$.
+
+\subsubsection{Ideal and Module Lattices*}
+
+\begin{remark}
+    The material presented below is fairly complicated. 
+    The key idea of employing structured lattices is the following: instead of using vectors from $\mathbb{Z}_q^n$, we use polynomials from the $2n$-th cyclotomic ring $\mathcal{R}_q$.
+    The section below explains why such a substitution makes sense.
+\end{remark}
+
+Let us see where lattices arise when considering $\mathcal{R}$.
+Recall that an \emph{ideal} $\mathcal{I} \subseteq \mathcal{R}$ is an additive subgroup closed under multiplication by elements of $\mathcal{R}$; the simplest example is the principal ideal $(g) := \{gf: f \in \mathcal{R}\}$.
+The image $\mathsf{vec}(\mathcal{I}) \subseteq \mathbb{Z}^n$ of an ideal is a lattice, called an \textbf{ideal lattice}.
+For a principal ideal, $\mathsf{vec}((g)) = \mathcal{L}(\mathsf{rot}(g))$, so the $n$ coefficients of $g$ describe the entire basis.
+
+\begin{example}
+    Let $\mathcal{R} = \mathbb{Z}[T]/(T^2+1)$ and $\mathcal{I} = (1+T)$.
+    Every element of $\mathcal{I}$ has the form $(1+T)(\alpha+\beta T) = (\alpha-\beta) + (\alpha+\beta)T$, so
+    \begin{equation*}
+        \mathsf{vec}(\mathcal{I}) = \mathcal{L}\left(\begin{bmatrix} 1 & -1 \\ 1 & 1 \end{bmatrix}\right).
+    \end{equation*}
+\end{example}
+
+Ideal lattices are closed under the rotation $\mathsf{vec}(f) \mapsto \mathsf{vec}(Tf)$, and this extra symmetry is both their strength and their weakness.
+For the approximation factors used in cryptography, the best known algorithms for SVP on ideal lattices still take time $2^{\Omega(n)}$, even on quantum computers.
+However, the structure does make some problems easier: for instance, $\mathsf{GapSVP}_{\gamma}$ is easy on ideal lattices for small polynomial factors, and quantum algorithms find mildly short vectors (with $\gamma = 2^{\widetilde{O}(\sqrt{n})}$) in polynomial time~\cite{JACM:CraLeoWes21}.
+None of these attacks affects practical schemes, but they motivate a more conservative choice.
+
+\paragraph{Module lattices}
+A \emph{module} over $\mathcal{R}$ is the analogue of a vector space in which the scalars come from the ring $\mathcal{R}$ instead of a field.
+All we need are submodules of $\mathcal{R}^d$ generated by $d$ vectors, and their images under the coefficient embedding applied component-wise,
+\begin{equation*}
+    \mathsf{vec}(f_1,\dots,f_d) := (\mathsf{vec}(f_1),\dots,\mathsf{vec}(f_d)) \in \mathbb{Z}^{nd},
+\end{equation*}
+which are called \textbf{module lattices} of rank $d$.
+For a matrix $\mathbf{A} \in \mathcal{R}^{k \times \ell}$ we similarly define $\mathsf{rot}(\mathbf{A}) \in \mathbb{Z}^{kn \times \ell n}$ as the block matrix with blocks $\mathsf{rot}(A_{ij})$, which preserves the key property $\mathsf{vec}(\mathbf{A}\mathbf{f}) = \mathsf{rot}(\mathbf{A})\mathsf{vec}(\mathbf{f})$.
+Norms extend in the natural way: $\|\mathbf{f}\|_{\infty} := \max_i \|f_i\|_{\infty}$ and $\|\mathbf{f}\|_2 := \|\mathsf{vec}(\mathbf{f})\|_2$.
+
+Module lattices interpolate between the two previous worlds:
+\begin{itemize}
+    \item for $n = 1$, we have $\mathcal{R} = \mathbb{Z}$, and module lattices are ordinary unstructured lattices in $\mathbb{R}^d$;
+    \item for $d = 1$, module lattices are ideal lattices in $\mathbb{R}^n$;
+    \item for $n > 1$ and $d > 1$, we get lattices of dimension $nd$ that are structured only in $n \times n$ blocks.
+\end{itemize}
+No known attack exploits the module structure for rank $d \geq 2$ better than generic lattice algorithms, and the quantum attacks on ideal lattices do not extend to higher ranks.
+
+\subsubsection{Module-SIS and Module-LWE}
+
+We now restate SIS and LWE over $\mathcal{R}_q$.
+It is convenient to state the module versions directly, since the ring versions are special cases.
+The short distribution $\chi$ now samples each coefficient of an element of $\mathcal{R}_q$ independently from a short distribution over $\mathbb{Z}_q$; 
+we abuse notation to denote $S_{\eta} := \{f \in \mathcal{R}_q: \|f\|_{\infty} \leq \eta\}$.
+
+\begin{definition}[Module-SIS Assumption]\label{def:msis}
+    For a given adversary $\A$ and parameters $(\mathcal{R},q,k,\ell,\beta)$, define $\underline{\GAME\,\mathsf{MSIS}}^{\A}_{q,k,\ell,\beta}$ as follows:
+    \begin{algoen}
+        \item Sample a matrix $\mathbf{A} \leftarrowS \mathcal{R}_q^{k \times \ell}$ and send it to $\A$;
+        \item $\A$ outputs some $\mathbf{x} \in \mathcal{R}^{\ell}$;
+        \item \textbf{return} $1$ iff $\mathbf{x} \neq \mathbf{0}$, $\mathbf{A}\mathbf{x} = \mathbf{0}$ over $\mathcal{R}_q$, and $\|\mathbf{x}\|_{\infty} \leq \beta$.
+    \end{algoen}
+    We say that the \textbf{$\mathsf{MSIS}_{q,k,\ell,\beta}$ assumption} holds if the probability that this game outputs $1$ is negligible for any PPT adversary $\A$.
+\end{definition}
+
+\begin{definition}[Module-LWE Assumption]\label{def:mlwe}
+    For parameters $(\mathcal{R},q,k,\ell,\chi)$, a \textbf{Module-LWE instance} is a pair $(\mathbf{A}, \mathbf{b} := \mathbf{A}\mathbf{s}+\mathbf{e})$ for $\mathbf{A} \leftarrowS \mathcal{R}_q^{k \times \ell}$, $\mathbf{s} \leftarrowS \chi^{\ell}$, and $\mathbf{e} \leftarrowS \chi^{k}$.
+    Then,
+    \begin{enumerate}
+        \item The \textbf{Search Module-LWE assumption} ($\mathsf{SMLWE}_{q,k,\ell,\chi}$) states that no PPT adversary recovers $\mathbf{s}$ from $(\mathbf{A},\mathbf{b})$ with non-negligible probability.
+        \item The \textbf{Decisional Module-LWE assumption} ($\mathsf{DMLWE}_{q,k,\ell,\chi}$) states that no PPT adversary distinguishes $(\mathbf{A},\mathbf{b})$ from a uniform pair in $\mathcal{R}_q^{k \times \ell} \times \mathcal{R}_q^{k}$ with non-negligible advantage, exactly as in \Cref{def:dlwe}.
+    \end{enumerate}
+\end{definition}
+
+The \textbf{Ring-SIS} and \textbf{Ring-LWE} problems are the special cases with $k = 1$ (a single equation $\langle \mathbf{a},\mathbf{x} \rangle = 0$ in $\mathcal{R}_q$) and $k = \ell = 1$ (a single sample $b = as+e$), respectively.
+Via the map $\mathsf{rot}$, a Module-SIS instance is simply an ordinary SIS instance $\mathsf{rot}(\mathbf{A}) \in \mathbb{Z}_q^{kn \times \ell n}$ with a structured matrix, and similarly for Module-LWE.
+Both problems enjoy worst-case to average-case reductions from hard problems on module lattices~\cite{EPRINT:LyuPeiReg12, DCC:AdeDam15}, analogous to \Cref{thm:sis-worst-case} and \Cref{thm:lwe-worst-case}.
+
+\paragraph{Ring-LWE-based Encryption}
+Ring-LWE resolves the inefficiency from \Cref{remark:lwe-inefficiency}.
+The idea is to encode $n$ message bits $\mu_0,\dots,\mu_{n-1}$ as the coefficients of $\mu := \sum_i \mu_iT^i \in \mathcal{R}_q$ and encrypt all of them at once.
+\begin{algoproto}[ht]
+    \small
+    \centering
+    \begin{mdframed}[linecolor=black, linewidth=1pt,
+                     skipabove=10pt, skipbelow=10pt,
+                     innerleftmargin=5pt, innerrightmargin=5pt]
+        \begin{minipage}[t]{0.25\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{KeyGen}(1^{\lambda})$:}
+            \begin{algoen}
+                \item $a \leftarrowS \mathcal{R}_q$;
+                \item $s, e \leftarrowS \chi$;
+                \item $b \gets as + e$;
+                \item $\mathsf{pk} \gets (a, b)$;
+                \item $\mathsf{sk} \gets s$;
+                \item \textbf{return} $(\mathsf{pk}, \mathsf{sk})$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.35\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Enc}(\mathsf{pk}, \boldsymbol{\mu} \in \{0,1\}^n) \to c$:}
+            \begin{algoen}
+                \item $\mu \gets \sum_{i \in (n)} \mu_i T^i$;
+                \item $r, e_1, e_2 \leftarrowS \chi$;
+                \item $u \gets ar + e_1$;
+                \item $v \gets br + e_2 + \lceil q/2 \rfloor \mu$;
+                \item \textbf{return} $c = (u, v)$.
+            \end{algoen}
+        \end{minipage}
+        \hfill
+        \begin{minipage}[t]{0.35\linewidth}
+            \colorbox{oc-blue-1}{$\mathsf{Dec}(\mathsf{sk}, c) \to \boldsymbol{\mu}$:}
+            \begin{algoen}
+                \item Parse $(u, v) \gets c$;
+                \item $\delta \gets v - su$;
+                \item $\mu_i \gets 1$ iff $\|\delta_i\|_{\infty} \geq q/4$ for each $i \in (n)$;
+                \item \textbf{return} $(\mu_0,\dots,\mu_{n-1})$.
+            \end{algoen}
+        \end{minipage}
+    \end{mdframed}
+    \caption{Key generation, encryption, and decryption in the Ring-LWE-based scheme $\Pi_{\mathsf{PKE}}^{\text{RLWE}}$ over $\mathcal{R}_q = \mathbb{Z}_q[T]/(T^n+1)$, where $\chi$ is a short distribution over $S_{\eta} \subseteq \mathcal{R}_q$ and $\delta_i$ denotes the $i$-th coefficient of $\delta$.}
+    \label{fig:rlwe-pke}
+\end{algoproto}
+
+\textbf{Correctness.} Recall that $b = as + e$.
+Since $\mathcal{R}_q$ is commutative, the terms $asr$ and $sar$ coincide, and we get
+\begin{align*}
+    \delta &= v - su \\
+    &= (as + e)r + e_2 + \lceil q/2 \rfloor \mu - s(ar + e_1) \\
+    &= \textcolor{oc-teal-9}{er + e_2 - se_1} + \lceil q/2 \rfloor \mu.
+\end{align*}
+By the bound $\|fg\|_{\infty} \leq n\|f\|_{\infty}\|g\|_{\infty}$, every coefficient of the error \textcolor{oc-teal-9}{$er + e_2 - se_1$} has absolute value at most $2n\eta^2 + \eta$.
+Hence, decryption recovers every bit $\mu_i$ whenever $2n\eta^2 + \eta < q/4$.
+
+\textbf{Security.} Security follows from Decisional Ring-LWE, applied twice: once to replace $b$ with a uniform element, and once to replace $(u,v)$, which is itself a pair of Ring-LWE samples with secret $r$.
+
+The ciphertext now consists of two ring elements, \textit{i.e.}, $2n\log q$ bits for $n$ message bits, instead of $n(n+1)\log q$ bits in Regev's scheme.
+Encryption costs a few multiplications in $\mathcal{R}_q$, each taking $O(n\log n)$ time with the NTT.
+
+\subsection{Exercises}\label{section:lattices-exercises}
+
+\begin{xexercise}
+    {Exercise 1.}
+    {Which of the following matrices (with basis vectors written as columns) is a basis of the lattice $\mathbb{Z}^2$?}
+    {3}
+    {
+        \item $\begin{bmatrix} 2 & 0 \\ 0 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 1 & 1 \\ 1 & -1 \end{bmatrix}$
+        \item $\begin{bmatrix} 2 & 1 \\ 1 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 3 & 1 \\ 1 & 1 \end{bmatrix}$
+        \item $\begin{bmatrix} 1 & 1 \\ 0 & 2 \end{bmatrix}$
+    }
+\end{xexercise}
+ 
+\begin{exbox}{Exercises 2--3. A Toy SIS Lattice.}
+    Consider the SIS instance with $n=1$, $m=2$, $q=5$ and the row-matrix $\mathbf{A} = \begin{bmatrix} 1 & 2 \end{bmatrix} \in \mathbb{Z}_5^{1 \times 2}$.
+    The corresponding $q$-ary lattice is
+    \begin{equation*}
+        \Lambda^{\perp}_5(\mathbf{A}) = \{(x,y) \in \mathbb{Z}^2: x + 2y \equiv 0 \pmod 5\}.
+    \end{equation*}
+\end{exbox}
+ 
+\begin{xexercise}
+    {Exercise 2.}
+    {What is the first minimum $\lambda_1(\Lambda^{\perp}_5(\mathbf{A}))$ in the $\ell^2$ norm?}
+    {4}
+    {
+        \item $1$
+        \item $\sqrt{2}$
+        \item $\sqrt{5}$
+        \item $5$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 3.}
+    {What is the smallest bound $\beta$ for which $\mathsf{SIS}_{1,2,5,\beta}$ with the matrix $\mathbf{A}$ above has a solution (in the $\ell^{\infty}$ norm)?}
+    {4}
+    {
+        \item $1$
+        \item $2$
+        \item $3$
+        \item $5$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 4.}
+    {Let $(\mathbf{A},\mathbf{b} = \mathbf{A}\mathbf{s}+\mathbf{e})$ be an LWE instance with an error distribution $\chi$. Which of the following statements is \textbf{false}?}
+    {1}
+    {
+        \item An algorithm solving Search-LWE can be used to solve Decisional-LWE.
+        \item If $\chi$ always outputs $0$ and $\mathbf{A}$ has full column rank, then $\mathbf{s}$ can be recovered by Gaussian elimination.
+        \item In short-secret LWE, the secret $\mathbf{s}$ is sampled from $\chi^n$.
+        \item The vector $\mathbf{b}$ lies on the lattice $\Lambda_q(\mathbf{A})$.
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 5.}
+    {Compute $(1 + T^3) \cdot T^2$ in the ring $\mathbb{Z}[T]/(T^4+1)$.}
+    {3}
+    {
+        \item $T^2 + T$
+        \item $T^2 - T$
+        \item $1 + T^2$
+        \item $T^2 - 1$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 6.}
+    {What is the smallest positive integer $k$ such that $T^k = 1$ in the ring $\mathbb{Z}[T]/(T^8+1)$?}
+    {3}
+    {
+        \item $8$
+        \item $9$
+        \item $16$
+        \item $256$
+        \item No such $k$ exists.
+    }
+\end{xexercise}
+ 
+\begin{exbox}{Exercises 7--8. Gaussian Integers as an Ideal Lattice.}
+    Let $n = 2$, so that $\mathcal{R} = \mathbb{Z}[T]/(T^2+1)$.
+    Since $T^2 = -1$, the ring $\mathcal{R}$ is exactly the ring of Gaussian integers $\mathbb{Z}[i]$, with $T$ playing the role of $i$.
+    Consider the element $g := 3+4T$ and the principal ideal $(g) = \{gf: f \in \mathcal{R}\}$.
+\end{exbox}
+ 
+\begin{xexercise}
+    {Exercise 7.}
+    {What is the covolume of the ideal lattice $\mathsf{vec}((g)) \subseteq \mathbb{Z}^2$?}
+    {4}
+    {
+        \item $5$
+        \item $7$
+        \item $12$
+        \item $25$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 8*.}
+    {What are the successive minima $(\lambda_1, \lambda_2)$ of the ideal lattice $\mathsf{vec}((g))$ with respect to the $\ell^2$ norm?}
+    {4}
+    {
+        \item $(1, 5)$
+        \item $(5, 5)$
+        \item $(5, 5\sqrt{2})$
+        \item $(5, 25)$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 9.}
+    {Consider the lattice $D_3 := \{\mathbf{x} \in \mathbb{Z}^3: x_1 + x_2 + x_3 \equiv 0 \pmod 2\}$. How many vectors of length $\lambda_1(D_3)$ does it contain?}
+    {5}
+    {
+        \item $3$
+        \item $6$
+        \item $8$
+        \item $12$
+        \item $24$
+    }
+\end{xexercise}
+ 
+\begin{xexercise}
+    {Exercise 10.}
+    {In $\mathcal{R} = \mathbb{Z}[T]/(T^4+1)$, the element $T$ is invertible, so for $f \in \mathcal{R}$ we can define the \emph{adjoint map} $f^{\ast}(T) := f(T^{-1})$. What is the constant coefficient of $f \cdot f^{\ast}$ for $f = 1 + 2T + 3T^2$?}
+    {5}
+    {
+        \item $0$
+        \item $6$
+        \item $14$
+        \item $36$
+        \item $-14$
+    }
+\end{xexercise}
+
+\begin{remark}
+    The adjoint operator defined above is a crucial part of the further considered proving system~\cite{C:LyuNguPla22} (see \Cref{section:lnp22}).
+    Moreover, it is used extensively in the Falcon signature scheme~\cite{falcon-spec} and many other lattice protocols.
+\end{remark}
+ 
+\begin{xexercise}
+    {Exercise 11*.}
+    {Consider the ring $\mathbb{Z}_{17}[T]/(T^2+1)$. For which $\alpha \in \mathbb{Z}_{17}$ is the evaluation map $f \mapsto f(\alpha)$ a ring homomorphism $\mathbb{Z}_{17}[T]/(T^2+1) \to \mathbb{Z}_{17}$?}
+    {5}
+    {
+        \item $1$
+        \item $2$
+        \item $4$
+        \item $8$
+        \item $16$
+    }
+\end{xexercise}
 
 \end{document}
