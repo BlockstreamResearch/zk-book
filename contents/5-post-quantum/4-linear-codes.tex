@@ -1,5 +1,7 @@
 \documentclass[../../book]{subfiles}
 
+\usetikzlibrary{decorations.pathmorphing, decorations.pathreplacing}
+
 \begin{document}
 Error-correcting codes date back to 1948, when Shannon showed that information can be transmitted reliably over noisy channels, provided that redundancy is added~\cite{shannon1948}. A few years later, Hamming showed that one can build codes that not only detect possible errors but also correct them~\cite{hamming1950}.
 
@@ -11,97 +13,315 @@ In proof systems, codes play a different role. The simplest commitment that reli
 
 In this section, we introduce linear codes and Reed-Solomon codes~\cite{guruswami23}, together with the notion of proximity to a code, which is the central tool behind STARKs (\Cref{section:stark}).
 
-%This is precisely why we need to reformulate the problem: if we extend a polynomial over a domain much larger than its degree, any function that is not a valid polynomial will end up being 'far away' from actual polynomials. To leverage this property and solve our problem, we will turn to coding theory~\cite{guruswami23}.
-%--------------------------------
-\subsection{Linear Codes}
-%--------------------------------
-Let us first explain the basic idea of error-correcting codes.
-\begin{intuition}
-   Fix an alphabet $\Sigma$. Our goal is to send an encoded message $m \in \mathcal{A}^k$ over a noisy channel, which may corrupt some of the symbols. First, we use an encoder (encoding function) $\mathcal{E}$ to map $k$ digits to the $n$ encoded symbols, called a \emph{codeword}. In this way, we add $n-k$ redundant symbols to the message. Then, we transmitted the codeword over the noisy channel. The receiver gets a \emph{received word} of $n$ symbols, which may differ from the original codeword in some positions. The receiver then uses a decoder $\mathcal{D}$ to recover the original message $m$ from the received word. 
-\end{intuition}
+\subsection{Error-Correcting Codes}
 
+\subsubsection{Motivation}
+
+Let us first explain the basic idea of error-correcting codes.
+First, we fix an alphabet $\Sigma$ which lists a set of letters our message will consist of (say, if our messages are binary strings, then $\Sigma = \{0,1\}$).
+Consider the following problem:
+\begin{quote}
+    \underline{Problem.} Alice wants to send Bob a message $m \in \Sigma^k$. 
+    However, there is a problem: Alice sits in Germany, while Bob is on the Moon.
+    Assume that it so happens that no matter what message Alice picks, two random letters of $m$ get corrupted.
+    How can Alice transmit an exact message $m$ to Bob?
+\end{quote}
+
+The idea how to resolve this issue is as follows: we construct an encoder that maps $k$ digits to the $n>k$ encoded symbols, called a \emph{codeword}. 
+This way we add $n-k$ redundant symbols to the message. 
+Then, we transmit the codeword over the noisy channel.
+The receiver gets a \emph{received word} of $n$ symbols, which may differ from the original codeword in some positions (in our example above, the new codeword has two positions corrupted). 
+The receiver then uses a decoder to recover the original message $m$ from the received word based on the redundant information that $n-k$ additional slots introduced.
+The process is illustrated in \Cref{fig:ecc-channel}.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        cell/.style={draw=oc-gray-7, thick, minimum size=0.5cm, inner sep=0pt, font=\small\ttfamily},
+        msg/.style={cell, fill=oc-blue-1},
+        red/.style={cell, fill=oc-teal-1},
+        err/.style={cell, fill=oc-red-2, draw=oc-red-8, very thick},
+        proc/.style={draw=oc-gray-7, thick, rounded corners, fill=oc-gray-1, minimum height=0.8cm, minimum width=1.7cm, font=\small},
+        arr/.style={-stealth, very thick, oc-gray-7},
+        lab/.style={font=\footnotesize},
+        brace/.style={decorate, decoration={brace, amplitude=4pt, mirror}, thick, oc-gray-7},
+    ]
+        % ---------- top row: message -> encoder -> codeword ----------
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (m\i) at (0.5*\i, 0) {\b};
+        }
+        \node[lab, above=2pt] at (0.75, 0.25) {message $m \in \Sigma^k$};
+ 
+        \node[proc] (enc) at (3.9, 0) {Encoder};
+ 
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (c\i) at (6.4+0.5*\i, 0) {\b};
+        }
+        \foreach \b [count=\i from 4] in {0,1,0} {
+            \node[red] (c\i) at (6.4+0.5*\i, 0) {\b};
+        }
+        \node[lab, above=2pt] at (7.9, 0.25) {codeword $c \in \Sigma^n$};
+        \draw[brace] (8.15, -0.32) -- node[lab, below=4pt] {$n-k$ redundant symbols} (9.65, -0.32);
+ 
+        \draw[arr] (m3.east) -- (enc.west);
+        \draw[arr] (enc.east) -- (c0.west);
+ 
+        % ---------- noisy channel ----------
+        \draw[-stealth, very thick, oc-red-7, decorate, decoration={snake, amplitude=1.5pt, segment length=7pt, post length=4pt}]
+            (7.4, -1.05) -- node[right=4pt, lab, text=oc-red-8] {noisy channel} (7.4, -2.05);
+ 
+        % ---------- bottom row: received word -> decoder -> message ----------
+        \foreach \b [count=\i from 0] in {1,0,0,1} {
+            \ifnum\i=2
+                \node[err] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+            \else
+                \node[msg] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+            \fi
+        }
+        \foreach \b [count=\i from 4] in {0,1,0} {
+            \node[red] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+        }
+        \node[lab, below=2pt] at (7.9, -2.85) {received word $y \in \Sigma^n$};
+        \draw[-stealth, thick, oc-red-8] (6.45, -1.75) node[above, lab, text=oc-red-8, inner sep=1pt] {error} -- (y2.north west);
+ 
+        \node[proc] (dec) at (3.9, -2.6) {Decoder};
+ 
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (r\i) at (0.5*\i, -2.6) {\b};
+        }
+        \node[lab, below=2pt] at (0.75, -2.85) {recovered message $m$};
+ 
+        \draw[arr] (y0.west) -- (dec.east);
+        \draw[arr] (dec.west) -- (r3.east);
+ 
+        % the message is the same on both sides
+        \draw[densely dashed, thick, oc-blue-7] (0.75, -0.3) -- node[right, lab, text=oc-blue-8] {same} (0.75, -2.3);
+    \end{tikzpicture}
+    \caption{Transmission over a noisy channel with an error-correcting code. The encoder expands the message of $k = 4$ symbols into a codeword of $n = 7$ symbols by adding $n - k = 3$ redundant symbols. The channel corrupts one symbol of the codeword, and the decoder still recovers the original message from the received word.}
+    \label{fig:ecc-channel}
+\end{figure}
+ 
 Now we can formalize the notion of a code and its encoding function.
 \begin{definition}[Code]\label{def:code}
-  A \emph{code} of block length $n$ over an alphabet $\Sigma$ is a subset $C \subseteq \Sigma^n$, whose elements are called \emph{codewords}. We write $M := |C|$ for the number of codewords and $k := \log_{|\Sigma|} M$ for the number of message symbols. An \emph{encoding} for $C$ is an injective map $E : \Sigma^k \to \Sigma^n$ whose image is $C$.
+  A \emph{code} of block length $n$ over an alphabet $\Sigma$ is a subset $\code \subseteq \Sigma^n$, whose elements are called \emph{codewords}. 
+  We write $\#\code$ for the number of codewords and $k := \log_{\#\Sigma} \#\code$ for the number of message symbols. 
+  An \emph{encoding} for $\code$ is an injective map $\Sigma^k \to \Sigma^n$ whose image is $\code$.
 \end{definition}
 
-Let us define a notion of distance that captures how close two vectors $\mathbf{u}$ and $\mathbf{v}$ are.
+\subsubsection{Hamming Metric}
+
+Now we need to capture the notion of how much two messages differ.
+We employ the notion of the \emph{Hamming distance}.
+
 \begin{definition}[Hamming distance]\label{def:hamming-distance}
-  Given $\mathbf{u}, \mathbf{v} \in \Sigma^n$, the \emph{Hamming distance} between $\mathbf{u}$ and $\mathbf{v}$, denoted as $\Delta(\mathbf{u}, \mathbf{v})$, is defined to be the number of positions in which they differ.
+  Given $\mathbf{x}, \mathbf{y} \in \Sigma^n$, the \emph{Hamming distance} between $\mathbf{x}$ and $\mathbf{y}$, denoted as $\Delta(\mathbf{x}, \mathbf{y})$, is defined to be the number of positions in which they differ. Formally, $\Delta(\mathbf{x}, \mathbf{y}) := \#\{i \in [n]: x_i \neq y_i\}$.
 \end{definition}
 
-To more clearly understand the Hamming distance, suppose we have two vectors $\mathbf{u}=00000$ and $\mathbf{v}=10100$. Then, the Hamming distance between $\mathbf{u}$ and $\mathbf{v}$ is $\Delta(\mathbf{u}, \mathbf{v})=2$ since they differ in the 1st and 3rd positions.
-
-Hamming distance alone does not give you the full picture. For example, two vectors of length $1000$ that differ in $5$ places are much more similar than two vectors of length $10$ that also differ in $5$ places. Because of this, it is standard practice to normalize the distance by the block length.
-
-\begin{definition}[Relative Hamming distance]\label{def:rel-distance}
-  Let $\mathbf{u}, \mathbf{v} \in \Sigma^n$. The \emph{relative Hamming distance} between $\mathbf{u}$ and $\mathbf{v}$, denoted as $\delta(\mathbf{u}, \mathbf{v})$, is defined to be the Hamming distance between $\mathbf{u}$ and $\mathbf{v}$ divided by $n$:
-  \begin{equation*}
-    \delta(\mathbf{u}, \mathbf{v}) = \frac{1}{n} \Delta(\mathbf{u}, \mathbf{v}) \in [0,1]
-  \end{equation*}
-\end{definition}
-
-While comparing individual vectors is helpful, a code's effectiveness depends on the entire set. Specifically, we care about the distance between codewords, where the worst-case spacing between any two codewords is the defining metric.
-\begin{definition}[Minimum distance]\label{def:min-distance}
-  Let $C\subseteq \Sigma^n$ be a code. The \emph{minimum distance} of $C$, denoted by $d_{\min}(C)$, is defined as 
-  \begin{equation*}
-    d_{\min}(C) = \min_{\mathbf{c}_1\neq \mathbf{c}_2 \in C} \Delta(\mathbf{c}_1, \mathbf{c}_2)
-  \end{equation*}
-    and the \emph{relative minimum distance} of $C$ is $\mu(C) := \frac{1}{n} d_{\min}(C)$.
-\end{definition}
-
-The minimum distance is the foundation of error correction. If $d_{\min}(C) = d$, introducing fewer than $d$ errors will never result in another valid codeword. Furthermore, with fewer than $d/2$ errors, the corrupted string remains strictly closer to the original codeword than to any other. Essentially, a larger minimum distance forces codewords further apart, so the original codeword can be recovered as long as fewer than $d/2$ errors occur.
-
-\begin{example}\label{ex:repetition}
-  The \emph{Repetition code} over $\mathbb{F}_2$ of block length $3$ repeats a single bit three times: $C=\{000, 111\}$. Here $k=1$ and $d_{\min}(C)=3$. If one bit of a codeword is flipped, e.g. $000 \mapsto 100$, the received word is still closer to $000$ than to $111$, so the error can be corrected since $d/2 = 3/2>1$. The opposite: if two bits are flipped, e.g. $000 \mapsto 110$, the received word is closer to $111$, and decoding fails since two errors are not fewer than $d/2$.
+\begin{example}
+    We provide a small example to understand the Hamming distance. Let $\Sigma := \{0,1\}$ be a binary alphabet and assume $\mathbf{x} := 00000$ and $\mathbf{y} := 10100$.
+    Then, $\Delta(\mathbf{x}, \mathbf{y}) = 2$ since $\mathbf{x}$ and $\mathbf{y}$ differ on positions 1 and 3.
 \end{example}
 
-While calculating $d_{\min}(C)$ directly from the definition requires comparing every possible pair, practical codes offer a much faster shortcut. To introduce it, we first need to define the Hamming weight.
+\begin{exercise}
+    Check that Hamming distance is indeed a valid \emph{distance function}, \emph{i.e.}, that $(\Sigma^n,\Delta)$ is a metric space.
+    Recall that it is the case if four conditions are satisfied:
+    \begin{enumerate}
+      \item $\Delta(\mathbf{x},\mathbf{x}) = 0$ for all $\mathbf{x} \in \Sigma^n$;
+      \item $\Delta(\mathbf{x},\mathbf{y}) > 0$ for all $\mathbf{x} \neq \mathbf{y} \in \Sigma^n$ \commentgray{positivity};
+      \item $\Delta(\mathbf{x}, \mathbf{y}) = \Delta(\mathbf{y}, \mathbf{x})$ for all $\mathbf{x},\mathbf{y} \in \Sigma^n$ \commentgray{symmetry};
+      \item $\Delta(\mathbf{x},\mathbf{z}) \leq \Delta(\mathbf{x},\mathbf{y}) + \Delta(\mathbf{y},\mathbf{z})$ for all $\mathbf{x},\mathbf{y},\mathbf{z} \in \Sigma^n$ \commentgray{triangle inequality}.
+    \end{enumerate}
+\end{exercise}
+
+Hamming distance alone does not give you the full picture. For example, two vectors of length $1000$ that differ in $5$ places are much more similar than two vectors of length $10$ that also differ in $5$ places. Because of this, it is a standard practice to normalize the distance by the block length.
+
+\begin{definition}[Relative Hamming distance]\label{def:rel-distance}
+  Let $\mathbf{x}, \mathbf{y} \in \Sigma^n$. The \emph{relative Hamming distance} between $\mathbf{x}$ and $\mathbf{y}$, denoted as $\delta(\mathbf{x}, \mathbf{y})$, is defined to be the Hamming distance between $\mathbf{x}$ and $\mathbf{y}$ divided by $n$:
+  \begin{equation*}
+    \delta(\mathbf{x}, \mathbf{y}) = \frac{1}{n} \Delta(\mathbf{x}, \mathbf{y}).
+  \end{equation*}
+\end{definition}
+
+\subsubsection{Minimum Distance}
+
+While comparing individual vectors is helpful, a code's effectiveness depends on the entire set. Specifically, we care about the distance between codewords, where the worst-case spacing between any two codewords is the key metric.
+\begin{definition}[Minimum distance]\label{def:min-distance}
+  Let $\code\subseteq \Sigma^n$ be a code. The \emph{minimum distance} of $\code$, denoted by $d_{\min}(\code)$, is defined as 
+  \begin{equation*}
+    d_{\min}(\code) = \min_{\mathbf{x}\neq \mathbf{y} \in \code} \Delta(\mathbf{x}, \mathbf{y})
+  \end{equation*}
+    and the \emph{relative minimum distance} of $\code$ is $\mu(\code) := \frac{1}{n} d_{\min}(\code)$.
+\end{definition}
+
+The minimum distance is the foundation of error correction. If $d_{\min}(\code) = d$, introducing fewer than $d$ errors will never result in another valid codeword. Furthermore, with fewer than $d/2$ errors, the corrupted string remains strictly closer to the original codeword than to any other. Essentially, a larger minimum distance forces codewords further apart, so the original codeword can be recovered as long as fewer than $d/2$ errors occur.
+Another way to write this fact is as follows.
+\begin{proposition}
+    Let $\code \subseteq \Sigma^n$ be a code. For every $\mathbf{w} \in \Sigma^n$ there exists at most one codeword $\mathbf{x} \in \code$ such that $\delta(\mathbf{x},\mathbf{w}) < \mu(\code)/2$.
+\end{proposition}
+
+\begin{proof}
+    Recall from the previous Exercise that $\Delta$ (and consequently $\delta$) satisfies the triangle inequality: $\delta(\mathbf{x}, \mathbf{x}') \leq \delta(\mathbf{x}, \mathbf{w}) + \delta(\mathbf{w}, \mathbf{x}')$.
+    Now suppose, for contradiction, that two distinct codewords $\mathbf{x}, \mathbf{x}' \in \code$ satisfy $\delta(\mathbf{x}, \mathbf{w}) < \mu(\code)/2$ and $\delta(\mathbf{x}', \mathbf{w}) < \mu(\code)/2$.
+    Then
+    \begin{equation*}
+        \delta(\mathbf{x}, \mathbf{x}') \leq \delta(\mathbf{x}, \mathbf{w}) + \delta(\mathbf{w}, \mathbf{x}') < \frac{\mu(\code)}{2} + \frac{\mu(\code)}{2} = \mu(\code).
+    \end{equation*}
+    However, $\mathbf{x}$ and $\mathbf{x}'$ are distinct codewords, so $\delta(\mathbf{x}, \mathbf{x}') \geq \mu(\code)$ by \Cref{def:min-distance}, which is a contradiction.
+    \Cref{fig:unique-decoding-proof} illustrates the proof: the sides of the triangle with vertices $\mathbf{x}$, $\mathbf{w}$, $\mathbf{x}'$ cannot both be shorter than $\mu(\code)/2$.
+\end{proof}
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        ball/.style={draw=oc-blue-6, thick, densely dashed, fill=oc-blue-1},
+        cw/.style={circle, fill=oc-blue-8, inner sep=1.6pt},
+        word/.style={circle, fill=oc-red-7, inner sep=1.6pt},
+        lab/.style={font=\footnotesize},
+        tag/.style={lab, fill=white, rounded corners=1pt, inner sep=1.5pt},
+    ]
+        \def\r{2}
+        \coordinate (x) at (0, 0);
+        \coordinate (y) at (4, 0);
+        \coordinate (w) at (0.5, 1.2);
+
+        \draw[ball] (x) circle (\r);
+        \draw[ball] (y) circle (\r);
+
+        % the triangle x, w, x'
+        \draw[very thick, oc-gray-8] (x) -- node[tag, below=3pt] {$\delta(\mathbf{x}, \mathbf{x}') \geq \mu(\code)$} (y);
+        \draw[very thick, oc-teal-7] (x) -- node[tag, left=2pt, text=oc-teal-9, fill=none] {$< \mu(\code)/2$} (w);
+        \draw[very thick, oc-red-7, densely dotted] (w) -- node[tag, above=3pt, sloped, text=oc-red-8, pos=0.74] {$> \mu(\code)/2$} (y);
+
+        % radius of a ball
+        \draw[thick, oc-blue-7, -stealth] (y) -- node[lab, below, sloped, text=oc-blue-8] {$\mu(\code)/2$} ++(-60:\r);
+
+        \node[cw, label={[lab]below left:$\mathbf{x}$}] at (x) {};
+        \node[cw, label={[lab]above right:$\mathbf{x}'$}] at (y) {};
+        \node[word, label={[lab]above:$\mathbf{w}$}] at (w) {};
+    \end{tikzpicture}
+    \caption{The triangle inequality behind the proof. Two distinct codewords $\mathbf{x}, \mathbf{x}' \in \code$ are at relative distance at least $\mu(\code)$. If the word $\mathbf{w}$ is at distance less than $\mu(\code)/2$ from $\mathbf{x}$, then its distance from $\mathbf{x}'$ must exceed $\mu(\code)/2$, since otherwise the two short sides of the triangle would sum to less than the third one.}
+    \label{fig:unique-decoding-proof}
+\end{figure}
+
+Since the minimum distance is a central property of codes, we illustrate its meaning once more. 
+Specifically, consider the \Cref{fig:unique-decoding}.
+Suppose that a codeword $\mathbf{x}$ is corrupted into a word $\mathbf{w}$.
+If fewer than a $\mu(\code)/2$ fraction of the symbols are corrupted, then $\mathbf{w}$ stays inside the ball of $\mathbf{x}$, and $\mathbf{x}$ is the only codeword that close to $\mathbf{w}$.
+If more symbols are corrupted, then $\mathbf{w}$ may land in the ball of another codeword, and the original codeword can no longer be identified.
+For this reason, $\mu(\code)/2$ is called the \emph{unique decoding radius} of $\code$.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        ball/.style={draw=oc-gray-5, thick, densely dashed, fill=oc-gray-1},
+        cw/.style={circle, fill=oc-gray-7, inner sep=1.3pt},
+        src/.style={circle, fill=oc-blue-8, inner sep=1.6pt},
+        word/.style={circle, fill=oc-red-7, inner sep=1.6pt},
+        lab/.style={font=\footnotesize},
+    ]
+        % codewords with their balls of radius mu/2 = 0.6
+        \newcommand{\codewords}{
+            \foreach \name/\px/\py in {n1/1.3/0.35, n2/-0.9/1.5, n3/-1.7/-0.4, n4/0.3/-1.75, n5/1.9/-1.4, n6/1.6/1.75} {
+                \coordinate (\name) at (\px, \py);
+                \draw[ball] (\name) circle (0.6);
+                \node[cw] at (\name) {};
+            }
+            \coordinate (x) at (0,0);
+            \draw[draw=oc-blue-6, thick, densely dashed, fill=oc-blue-1] (x) circle (0.6);
+        }
+
+        % ================= (a) few errors =================
+        \begin{scope}[scale=1.1]
+            \codewords
+            \fill[oc-cyan-2, opacity=0.25] (x) circle (0.5);
+            \draw[oc-cyan-6, thick] (x) circle (0.5);
+            \coordinate (w) at (-0.33, 0.33);
+            \draw[very thick, oc-red-7, -stealth, shorten >=1.5pt] (x) -- (w);
+            \node[src, label={[lab, label distance=-2pt]below right:$\mathbf{x}$}] at (x) {};
+            \node[word, label={[lab, label distance=-2pt]above left:$\mathbf{w}$}] at (w) {};
+            \draw[thick, oc-gray-8, -stealth] (n5) -- ++(0:0.6);
+            \node[lab, below] at (1.9, -2.0) {$\mu(\code)/2$};
+            \node[lab] at (0, -2.95) {(a) fewer than $\mu(\code)/2$ errors};
+        \end{scope}
+
+        % ================= (b) many errors =================
+        \begin{scope}[xshift=5.9cm, scale=1.1]
+            \codewords
+            \foreach \n in {n1, n2, n3, n4} {
+                \draw[draw=oc-red-5, thick, densely dashed, fill=oc-red-1] (\n) circle (0.6);
+                \node[cw] at (\n) {};
+            }
+            \fill[oc-red-4, opacity=0.25] (x) circle (1.25);
+            \draw[oc-red-7, thick] (x) circle (1.25);
+            \coordinate (w) at (0.96, 0.26);
+            \draw[very thick, oc-red-7, -stealth, shorten >=1.5pt] (x) -- (w);
+            \node[src, label={[lab]below left:$\mathbf{x}$}] at (x) {};
+            \node[word, label={[lab, label distance=-2pt]below:$\mathbf{w}$}] at (w) {};
+            \node[lab, right=1pt] at (n1) {$\mathbf{x}'$};
+            \node[lab] at (0, -2.95) {(b) more than $\mu(\code)/2$ errors};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Corrupting a codeword $\mathbf{x}$. Dots are codewords, and the dashed ball around each one has relative radius $\mu(\code)/2$; the balls never overlap (due to the definition of $\mu(\code)$). The solid ball around $\mathbf{x}$ contains all words that the corruption can produce. In (a), fewer than $\mu(\code)/2$ symbols are corrupted, so every such word $\mathbf{w}$ stays inside the ball of $\mathbf{x}$ and decodes to $\mathbf{x}$. In (b), the corruption is larger and reaches into the balls of other codewords: the word $\mathbf{w}$ shown is closer to $\mathbf{x}'$ than to $\mathbf{x}$, so the decoder returns the wrong codeword.}
+    \label{fig:unique-decoding}
+\end{figure}
+
+\begin{example}\label{ex:repetition}
+  The \emph{Repetition code} over $\mathbb{F}_2$ of block length $3$ repeats a single bit three times: $\code=\{000, 111\}$. Here $k=1$ and $d_{\min}(\code)=3$. If one bit of a codeword is flipped, e.g. $000 \mapsto 100$, the received word is still closer to $000$ than to $111$, so the error can be corrected since $d/2 = 3/2>1$. The opposite: if two bits are flipped, e.g. $000 \mapsto 110$, the received word is closer to $111$, and decoding fails since two errors are not fewer than $d/2$.
+\end{example}
+
+\subsubsection{Linear Error-Correcting Codes}
+
+While calculating $d_{\min}(\code)$ directly from the definition requires comparing every possible pair, practical codes offer a much faster shortcut. To introduce it, we first need to notion of the Hamming weight.
 
 \begin{definition}[Hamming weight]\label{def:hamming-weight}
-  The \emph{Hamming weight} of a vector $\mathbf{c} \in \Sigma^n$, denoted by $w(\mathbf{c})$, is defined as the number of non-zero symbols in $\mathbf{c}$.
+  The \emph{Hamming weight} of a vector $\mathbf{x} \in \Sigma^n$, denoted by $\|\mathbf{x}\|_0$, is defined as the number of non-zero symbols in $\mathbf{x}$.
 \end{definition}
 
-When $\Sigma$ is a field, these two concepts are directly linked by the equation $\Delta(\mathbf{u}, \mathbf{v}) = w(\mathbf{u} - \mathbf{v})$, which means that two vectors differ precisely in the coordinates where their difference is non-zero. 
+When $\Sigma$ is a field\footnote{Technically, $\Sigma$ being a group also suffices, but in practice we operate over fields.}, these two concepts are directly linked by the equation $\Delta(\mathbf{u}, \mathbf{v}) = \|\mathbf{u} - \mathbf{v}\|_0$, which means that two vectors differ precisely in the coordinates where their difference is non-zero. 
 
-In practice, cryptographic codes are never just arbitrary subsets of $\Sigma^n$ --- they are built with underlying algebraic structure. Assuming a code is closed under addition and scalar multiplication imposes virtually no practical limitations, yet it provides a twofold advantage.
+In practice, cryptographic codes are never just arbitrary subsets of $\Sigma^n$ --- they are built with underlying algebraic structure. Assuming a code is closed under addition and scalar multiplication imposes virtually no practical limitations, yet provides a lot of nice conveniences.
 
 \begin{definition}[Linear code]\label{def:linear-code}
-  Let $\mathbb{F}_q$ be a finite field. A code $C \subseteq \mathbb{F}_q^n$ is a \emph{linear code} if it is a linear subspace of $\mathbb{F}_q^n$. If $C$ has dimension $k$ and minimum distance $d$, we denote it as an $[n,k,d]_q$ code.
+  Let $\mathbb{F}_q$ be a finite field. A code $\code \subseteq \mathbb{F}_q^n$ is a \emph{linear code} if it is a linear subspace of $\mathbb{F}_q^n$. If $\code$ has dimension $k$ and minimum distance $d$, we denote it as an $[n,k,d]_q$ code.
 \end{definition}
 
-The first payoff is the shortcut promised above. Since the difference of two codewords of a linear code is again a codeword, the minimisation over all pairs collapses into a minimisation over single codewords.
+\begin{exercise}
+  Show that any linear encoding function $\mathbb{F}^k \to \code$ can be represented as a matrix operation $\mathbf{x} \mapsto \mathbf{G}\mathbf{x}$ for some $\mathbf{G} \in \mathbb{F}^{n \times k}$.
+  What is $\text{rank}(\mathbf{G})$?
+\end{exercise}
+
+Now let us revisit some of the older notions and simplify them given that $\code$ is a linear space now. 
+Since the difference of two codewords of a linear code is again a codeword, the minimisation over all pairs collapses into a minimisation over single codewords.
 
 \begin{proposition}\label{prop:dist-eq-weight}
-  Let $C \subseteq \mathbb{F}_q^n$ be an $[n,k,d]_q$ code. Then
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code. Then
   \begin{equation*}
-    d = \min_{\mathbf{0} \neq \mathbf{c} \in C} w(\mathbf{c}).
+    \mu(\code) = \frac{1}{n}\cdot \min_{0 \neq \mathbf{x} \in \code} \|\mathbf{x}\|_0.
   \end{equation*}
 \end{proposition}
 
 \begin{proof}
-  First, we show that $d$ is at most the minimum weight. Let $\mathbf{c}'$ be a non-zero codeword of minimum weight. Since $C$ is a linear subspace, $\mathbf{0} \in C$, and the distance from $\mathbf{c}'$ to $\mathbf{0}$ equals its weight. Hence $d \leq \Delta(\mathbf{0}, \mathbf{c}') = w(\mathbf{c}')$.
+  Since $\mu(\code) = \frac{1}{n} d_{\min}(\code)$, it suffices to show that $d_{\min}(\code)$ equals the minimum weight of a non-zero codeword.
 
-  Next, we show that $d$ is at least the minimum weight. Let $\mathbf{c}_1 \neq \mathbf{c}_2 \in C$ be such that $\Delta(\mathbf{c}_1, \mathbf{c}_2) = d$. By linearity, $\mathbf{c}_1 - \mathbf{c}_2 \in C$, and it is non-zero since $\mathbf{c}_1 \neq \mathbf{c}_2$. The non-zero symbols of $\mathbf{c}_1 - \mathbf{c}_2$ occur exactly in the positions where the two codewords differ, so $w(\mathbf{c}_1 - \mathbf{c}_2) = \Delta(\mathbf{c}_1, \mathbf{c}_2) = d$. Therefore the minimum weight of a non-zero codeword is at most $d$.
+  First, we show that $d_{\min}(\code)$ is at most the minimum weight. Let $\mathbf{c}'$ be a non-zero codeword of minimum weight. Since $\code$ is a linear subspace, $0 \in \code$, and the distance from $\mathbf{c}'$ to $0$ equals its weight. Hence $d_{\min}(\code) \leq \Delta(0, \mathbf{c}') = \|\mathbf{c}'\|_0$.
+
+  Next, we show that $d_{\min}(\code)$ is at least the minimum weight. Let $\mathbf{c}_1 \neq \mathbf{c}_2 \in \code$ be such that $\Delta(\mathbf{c}_1, \mathbf{c}_2) = d_{\min}(\code)$. By linearity, $\mathbf{c}_1 - \mathbf{c}_2 \in \code$, and it is non-zero since $\mathbf{c}_1 \neq \mathbf{c}_2$. The non-zero symbols of $\mathbf{c}_1 - \mathbf{c}_2$ occur exactly in the positions where the two codewords differ, so $\|\mathbf{c}_1 - \mathbf{c}_2\|_0 = \Delta(\mathbf{c}_1, \mathbf{c}_2) = d_{\min}(\code)$. Therefore the minimum weight of a non-zero codeword is at most $d_{\min}(\code)$.
 \end{proof}
 
-The second payoff is that the dimension $k$ of a linear code is exactly the number of field elements each codeword carries, since $|C| = q^k$. This lets us put a price on the redundancy.
+We also define the measure of how the given error-correcting code extends the message space.
 
 \begin{definition}[Rate]\label{def:rate}
-  Let $C\subseteq \Sigma^n$ be a code. The \emph{rate} of $C$ is defined as 
-  \begin{equation*}
-    \rho = \frac{k}{n}\in [0,1]
-  \end{equation*}
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code of dimension $k$. The \emph{rate} of $\code$ is defined as $\rho(\code) := k/n$.
 \end{definition}
 
 A codeword consists of $n$ symbols but carries only $k$ symbols of information; thus $\rho$ is the fraction of each codeword that is actual payload. The rate and the relative minimum distance pull in opposite directions: adding redundancy lowers the rate but makes room for codewords that lie further apart.
 
 \begin{example}[Parity code]\label{ex:parity}
-  The \emph{parity code} $C \subseteq \mathbb{F}_2^n$ consists of all vectors with an even number of ones. It is a linear subspace of dimension $n-1$, since the last bit is determined by the others. Every non-zero codeword has weight at least $2$, and $110\ldots0 \in C$ has weight exactly $2$, so by \Cref{prop:dist-eq-weight} we get $d_{\min}(C) = 2$. Thus $C$ is an $[n, n-1, 2]_2$ code: its rate $\rho = (n-1)/n$ is close to $1$, but it can only \emph{detect} a single error, not correct it.
+  The \emph{parity code} $\code \subseteq \mathbb{F}_2^n$ consists of all vectors with an even number of ones. It is a linear subspace of dimension $n-1$, since the last bit is determined by the others. Every non-zero codeword has weight at least $2$, and $110\ldots0 \in \code$ has weight exactly $2$, so by \Cref{prop:dist-eq-weight} we get $d_{\min}(\code) = 2$. Thus $\code$ is an $[n, n-1, 2]_2$ code: its rate $\rho = 1-1/n$ is close to $1$, but it can only \emph{detect} a single error, not correct it.
 \end{example}
 
 \begin{proposition}[Singleton bound]\label{prop:singleton}
-  Every $[n,k,d]_q$ code satisfies $k \leq n-d+1$, equivalently $|C| \leq q^{n-d+1}$.
+  Every $[n,k,d]_q$ code satisfies $k \leq n-d+1$, equivalently $\#\code \leq q^{n-d+1}$.
 \end{proposition}
 
 Codes attaining this bound are optimal and belong to a special class known as maximum distance separable.

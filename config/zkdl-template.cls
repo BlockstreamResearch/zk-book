@@ -558,3 +558,4 @@
 % --- Nice discrete Gaussian symbol ---
 \RequirePackage{mathrsfs}
 \newcommand{\dgaussian}{\mathscr{D}}
+\newcommand{\code}{\mathscr{C}}
