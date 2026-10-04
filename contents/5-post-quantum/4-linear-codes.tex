@@ -155,7 +155,7 @@ While comparing individual vectors is helpful, a code's effectiveness depends on
 
 The minimum distance is the foundation of error correction. If $d_{\min}(\code) = d$, introducing fewer than $d$ errors will never result in another valid codeword. Furthermore, with fewer than $d/2$ errors, the corrupted string remains strictly closer to the original codeword than to any other. Essentially, a larger minimum distance forces codewords further apart, so the original codeword can be recovered as long as fewer than $d/2$ errors occur.
 Another way to write this fact is as follows.
-\begin{proposition}
+\begin{proposition}\label{prop:unique-decoding-distance}
     Let $\code \subseteq \Sigma^n$ be a code. For every $\mathbf{w} \in \Sigma^n$ there exists at most one codeword $\mathbf{x} \in \code$ such that $\delta(\mathbf{x},\mathbf{w}) < \mu(\code)/2$.
 \end{proposition}
 
@@ -303,9 +303,9 @@ Since the difference of two codewords of a linear code is again a codeword, the 
 \begin{proof}
   Since $\mu(\code) = \frac{1}{n} d_{\min}(\code)$, it suffices to show that $d_{\min}(\code)$ equals the minimum weight of a non-zero codeword.
 
-  First, we show that $d_{\min}(\code)$ is at most the minimum weight. Let $\mathbf{c}'$ be a non-zero codeword of minimum weight. Since $\code$ is a linear subspace, $0 \in \code$, and the distance from $\mathbf{c}'$ to $0$ equals its weight. Hence $d_{\min}(\code) \leq \Delta(0, \mathbf{c}') = \|\mathbf{c}'\|_0$.
+  First, we show that $d_{\min}(\code)$ is at most the minimum weight. Let $\mathbf{x}$ be a non-zero codeword of minimum weight. Since $\code$ is a linear subspace, $0 \in \code$, and the distance from $\mathbf{x}$ to $0$ equals its weight. Hence $d_{\min}(\code) \leq \Delta(0, \mathbf{x}) = \|\mathbf{x}\|_0$.
 
-  Next, we show that $d_{\min}(\code)$ is at least the minimum weight. Let $\mathbf{c}_1 \neq \mathbf{c}_2 \in \code$ be such that $\Delta(\mathbf{c}_1, \mathbf{c}_2) = d_{\min}(\code)$. By linearity, $\mathbf{c}_1 - \mathbf{c}_2 \in \code$, and it is non-zero since $\mathbf{c}_1 \neq \mathbf{c}_2$. The non-zero symbols of $\mathbf{c}_1 - \mathbf{c}_2$ occur exactly in the positions where the two codewords differ, so $\|\mathbf{c}_1 - \mathbf{c}_2\|_0 = \Delta(\mathbf{c}_1, \mathbf{c}_2) = d_{\min}(\code)$. Therefore the minimum weight of a non-zero codeword is at most $d_{\min}(\code)$.
+  Next, we show that $d_{\min}(\code)$ is at least the minimum weight. Let $\mathbf{x} \neq \mathbf{y} \in \code$ be such that $\Delta(\mathbf{x}, \mathbf{y}) = d_{\min}(\code)$. By linearity, $\mathbf{x} - \mathbf{y} \in \code$, and it is non-zero since $\mathbf{x} \neq \mathbf{y}$. The non-zero symbols of $\mathbf{x} - \mathbf{y}$ occur exactly in the positions where the two codewords differ, so $\|\mathbf{x} - \mathbf{y}\|_0 = \Delta(\mathbf{x}, \mathbf{y}) = d_{\min}(\code)$. Therefore the minimum weight of a non-zero codeword is at most $d_{\min}(\code)$.
 \end{proof}
 
 We also define the measure of how the given error-correcting code extends the message space.
@@ -317,14 +317,38 @@ We also define the measure of how the given error-correcting code extends the me
 A codeword consists of $n$ symbols but carries only $k$ symbols of information; thus $\rho$ is the fraction of each codeword that is actual payload. The rate and the relative minimum distance pull in opposite directions: adding redundancy lowers the rate but makes room for codewords that lie further apart.
 
 \begin{example}[Parity code]\label{ex:parity}
-  The \emph{parity code} $\code \subseteq \mathbb{F}_2^n$ consists of all vectors with an even number of ones. It is a linear subspace of dimension $n-1$, since the last bit is determined by the others. Every non-zero codeword has weight at least $2$, and $110\ldots0 \in \code$ has weight exactly $2$, so by \Cref{prop:dist-eq-weight} we get $d_{\min}(\code) = 2$. Thus $\code$ is an $[n, n-1, 2]_2$ code: its rate $\rho = 1-1/n$ is close to $1$, but it can only \emph{detect} a single error, not correct it.
+  The \emph{parity code} $\code \subseteq \mathbb{F}_2^n$ consists of all vectors with an even number of ones:
+  \begin{equation*}
+    \code = \left\{ \mathbf{c} \in \mathbb{F}_2^n : c_1 + c_2 + \dots + c_n = 0 \right\}.
+  \end{equation*}
+  To encode a message $\mathbf{m} \in \mathbb{F}_2^{n-1}$, we append a single \emph{parity bit} equal to the sum of the message bits.
+  For example, for $n = 4$, the message $101$ is encoded as $1010$, and the message $111$ as $1111$.
+
+  The code $\code$ is linear, and its dimension is $n-1$, since the first $n-1$ bits can be chosen freely and determine the last one.
+  A non-zero codeword cannot have weight $1$, and $110\ldots0 \in \code$ has weight exactly $2$, so $d_{\min}(\code) = 2$ by \Cref{prop:dist-eq-weight}.
+  Thus, $\code$ is an $[n, n-1, 2]_2$ code with rate $\rho(\code) = 1 - 1/n$.
+
+  Flipping one bit of a codeword makes the number of ones odd, so a single error is always \emph{detected}.
+  However, it cannot be \emph{corrected}: the received word $1110$ is at distance $1$ from both $1010$ and $1111$, so we cannot tell which codeword was sent.
 \end{example}
+
+Intuitively, rate and distance pull in opposite directions: every symbol of a codeword is spent either on carrying the message or on keeping codewords apart.
+The following bound gives the extent of such a trade-off: to guarantee distance $d$, a code must dedicate at least $d-1$ of its $n$ symbols to redundancy.
 
 \begin{proposition}[Singleton bound]\label{prop:singleton}
   Every $[n,k,d]_q$ code satisfies $k \leq n-d+1$, equivalently $\#\code \leq q^{n-d+1}$.
 \end{proposition}
 
-Codes attaining this bound are optimal and belong to a special class known as maximum distance separable.
+\begin{proof}
+  Delete the first $d-1$ symbols of every codeword.
+  Two distinct codewords differ in at least $d$ positions, so they still differ in at least one of the remaining $n-d+1$ positions.
+  Hence, the shortened codewords are pairwise distinct strings of length $n-d+1$ over an alphabet of size $q$, and there are at most $q^{n-d+1}$ such strings.
+  Therefore, $\#\code \leq q^{n-d+1}$, and since $\#\code = q^k$, we get $k \leq n-d+1$.
+\end{proof}
+
+Codes attaining this bound, that is, codes with $d = n-k+1$, are called \emph{maximum distance separable} (MDS).
+They have the largest distance possible for their rate: no redundant symbol is wasted.
+Equivalently, any $k$ symbols of a codeword of an MDS code already determine the whole codeword, so the message can be recovered even if any $n-k$ symbols are erased.
 
 \begin{definition}[MDS code]\label{def:mds}
   An $[n,k,d]_q$ code is called \textbf{maximum distance separable} (MDS) if $d = n-k+1$, that is, if it attains the Singleton bound.
@@ -333,121 +357,308 @@ Codes attaining this bound are optimal and belong to a special class known as ma
 \begin{example}
   Both codes above are MDS: the repetition code of length $n$ is an $[n,1,n]_2$ code and the parity code is an $[n,n-1,2]_2$ code, and in both cases $d = n-k+1$. On the other hand, a $[7,4,3]_2$ code is not MDS, since $n-k+1 = 4 > 3$.
 \end{example}
-%--------------------------------
+
 \subsection{Reed-Solomon Code}
-%--------------------------------
-We now introduce the primary code that forms the foundation for the rest of this section. Notably, it attains the Singleton bound.
+
+We now introduce the primary code that forms the foundation for the rest of this section.
+Turns out (as with many previously considered zero-knowledge protocols) it is best to first encode data into polynomials and store \emph{their evaluations in the large domain} as a codeword.
+Specifically, given a message $(m_i)_{i \in [k]}$ in $\mathbb{F}^k$ (over some finite field $\mathbb{F}$), we encode this message into the polynomial given by $f = \sum_{i \in [k]}m_iT^i \in \mathbb{F}[T]^{<k}$ (\emph{i.e.}, we put data into coefficients of a polynomial).
+Then, to form the codeword, we fix the \emph{evaluation domain} $\Omega = (\omega_i)_{i \in [n]} \subseteq \mathbb{F}^n$ (for $n>k$) and form the codeword as $(f(\omega_i))_{i \in [n]}$ (\emph{i.e.}, evaluation of a polynomial $f$ at $n$ points of evaluation domain $\Omega$).
+The idea of decoding the codeword closely follows the idea of Shamir secret sharing (previously considered in \Cref{subsec:shamir-secret-sharing}): suppose some number of evaluations gets corrupted.
+Since the polynomial is of degree $k-1$, as long as this number is low, we can still interpolate the polynomial and recover the polynomial $f$.
+The described idea is the \emph{Reed-Solomon Codes}!
+
+Now we formalize this concept using the previously defined machinery.
+First, it is conventional to work with the so-called \emph{restrictions}.
+Given a polynomial $f \in \mathbb{F}[T]^{<k}$, the restriction to the domain $\Omega \subseteq \mathbb{F}$ is $\overline{f}: \Omega \to \mathbb{F}$.
+Simply said, instead of viewing polynomial as a function $\mathbb{F} \to \mathbb{F}$, we inspect only it on inputs from the domain $\Omega$.
+Clearly, this restriction can be treated as simply evaluations over $\Omega$, as was described just above.
+
+\begin{remark}
+  If you feel confused about the notion of restrictions, feel free to treat $\overline{\cdot}$ as the map $\overline{f} = (f(\omega_0),\dots,f(\omega_{n-1}))$ given $\Omega := (\omega_0,\dots,\omega_{n-1})$.
+\end{remark}
+
+Now we give the definition of Reed-Solomon codes.
+
 \begin{definition}[Reed-Solomon Code]\label{def:rs}
-  Let $\mathbb{F}_q$ be a finite field. Let $\bm{\alpha} = (\alpha_0, \alpha_1, \ldots, \alpha_{n-1})$ be a sequence of $n$ distinct elements (also called evaluation points) of $\mathbb{F}_q$ and choose $n$ and $k$ such that $k\leq n \leq q$. \emph{The Reed-Solomon} code is an encoding function $\mathsf{RS}_q[\bm{\alpha},k]: \mathbb{F}_q^k \to \mathbb{F}_q^n$ defined as follows: a message $\mathbf{m} = (m_0, m_1, \ldots, m_{k-1}) \in \mathbb{F}_q^k$ is mapped to a polynomial $\mathbf{m}\rightarrow f_{\mathbf{m}}(T)$, where
-  \begin{equation*}
-    f_{\mathbf{m}}(T) = \sum_{i=0}^{k-1} m_i\cdot T^i
-  \end{equation*}
-  Note that $f_{\mathbf{m}}(T)$ is a polynomial of degree at most $k-1$. The encoding of $\mathbf{m}$ is the evaluation of $f_{\mathbf{m}}(T)$ at all the $\alpha_i$'s:
-\begin{equation*}
-    \mathsf{RS}_q[\bm{\alpha},k](\mathbf{m}) = \big(f_{\mathbf{m}}(\alpha_0), f_{\mathbf{m}}(\alpha_1), \ldots, f_{\mathbf{m}}(\alpha_{n-1})\big).
-\end{equation*}
+    The \textbf{Reed-Solomon code} over the finite field $\mathbb{F}$, evaluation domain $\Omega \subseteq \mathbb{F}$ (with $\#\Omega = n > k$), and degree $k$, is the linear code
+    \begin{equation*}
+        \mathsf{RS}[\mathbb{F},\Omega,k] := \{\overline{f}: \Omega \to \mathbb{F}, \; f \in \mathbb{F}[T]^{<k}\}.
+    \end{equation*}
 \end{definition}
 
-When $\bm{\alpha}$ and $k$ are clear from context, we simply write $\mathsf{RS}$.
+Let us consider some concrete example.
 
-\Cref{tab:rs-example} lists all codewords of the $[3,2,2]_3$ Reed--Solomon code whose evaluation points are $\mathbb{F}_3 = \{0,1,2\}$. The second row shows the polynomial $f_{\mathbf{m}}(T)$ corresponding to each message $\mathbf{m} \in \mathbb{F}_3^2$, and the codewords are ordered by the coefficients of these polynomials.
+\begin{example}\label{ex:rs}
+    Consider the code $\mathsf{RS}[\mathbb{F}_7, \Omega, 3]$ with $\Omega = \mathbb{F}_7 = \{0, 1, \dots, 6\}$, so that $n = 7$ and $k = 3$.
+    The message $(1, 2, 3)$ corresponds to the polynomial $f = 1 + 2T + 3T^2$, and the message $(4, 0, 2)$ to $g = 4 + 2T^2$.
+    Evaluating both polynomials over $\Omega$ gives the codewords
+    \begin{equation*}
+        \overline{f} = (1, 6, 3, 6, 1, 2, 2), \qquad \overline{g} = (4, 6, 5, 1, 1, 5, 6),
+    \end{equation*}
+    shown in \Cref{fig:rs-example}.
+    The two codewords agree only at the points $1$ and $4$.
+    This is not a coincidence: $f - g = (T-1)(T-4)$ is a non-zero polynomial of degree less than $k = 3$, so it has at most $k - 1 = 2$ roots.
+    Hence, $\overline{f}$ and $\overline{g}$ differ in $5$ of the $7$ positions.
+\end{example}
 
-\begin{table}[h!]
-\centering
-\scriptsize
-\begin{tabular}{|l|c|c|c|c|c|c|c|c|c|}
-\hline
-$\mathsf{RS}(\mathbf{m})$ & (0,0,0) & (1,1,1) & (2,2,2) & (0,1,2) & (1,2,0) & (2,0,1) & (0,2,1) & (1,0,2) & (2,1,0) \\ \hline
-$f_{\mathbf{m}}(T)$       & $0$ & $1$ & $2$ & $T$ & $T+1$ & $T+2$ & $2T$ & $2T+1$ & $2T+2$ \\ \hline
-\end{tabular}
-\caption{All codewords of the $[3,2,2]_3$ Reed-Solomon code with evaluation points $\mathbb{F}_3$, together with the corresponding message polynomials.}
-\label{tab:rs-example}
-\end{table}
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        x=0.8cm, y=0.5cm,
+        lab/.style={font=\footnotesize},
+        cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+    ]
+        % ---------- plot over F_7 ----------
+        \foreach \v in {0,...,6} {
+            \draw[oc-gray-3] (\v, 0) -- (\v, 6);
+            \draw[oc-gray-3] (0, \v) -- (6, \v);
+            \node[lab, left=3pt] at (0, \v) {\v};
+        }
+        \node[lab, rotate=90] at (-1, 3) {value in $\mathbb{F}_7$};
+        % agreement columns
+        \foreach \v in {1, 4} {
+            \fill[oc-orange-2, opacity=0.6] (\v-0.5, -0.5) rectangle (\v+0.5, 6.5);
+        }
+        % g: teal squares, f: blue circles
+        \foreach \px/\py in {0/4, 1/6, 2/5, 3/1, 4/1, 5/5, 6/6} {
+            \node[rectangle, fill=oc-teal-6, inner sep=2.6pt] at (\px, \py) {};
+        }
+        \foreach \px/\py in {0/1, 1/6, 2/3, 3/6, 4/1, 5/2, 6/2} {
+            \node[circle, fill=oc-blue-7, inner sep=1.7pt] at (\px, \py) {};
+        }
+
+        % ---------- codewords ----------
+        \foreach \v [count=\i from 0] in {1,6,3,6,1,2,2} {
+            \node[cell, fill=oc-blue-1] at (\i, -1.6) {\v};
+        }
+        \foreach \v [count=\i from 0] in {4,6,5,1,1,5,6} {
+            \node[cell, fill=oc-teal-1] at (\i, -2.6) {\v};
+        }
+        \foreach \v in {1, 4} {
+            \draw[oc-orange-7, very thick] (\v-0.5, -3.1) rectangle (\v+0.5, -1.1);
+        }
+        \node[lab, left=3pt, text=oc-blue-8] at (-0.5, -1.6) {$\overline{f}$};
+        \node[lab, left=3pt, text=oc-teal-8] at (-0.5, -2.6) {$\overline{g}$};
+        \foreach \v in {0,...,6} {
+            \node[lab] at (\v, -3.7) {\v};
+        }
+        \node[lab] at (3, -4.7) {evaluation point $\omega \in \Omega$};
+    \end{tikzpicture}
+    \caption{Two codewords of $\mathsf{RS}[\mathbb{F}_7, \Omega := \mathbb{F}_7, 3]$: the restrictions of $f = 1 + 2T + 3T^2$ (blue circles) and $g = 4 + 2T^2$ (teal squares). The two codewords agree only at the points $1$ and $4$, which are the roots of $f - g$.}
+    \label{fig:rs-example}
+\end{figure}
+
+Now let us verify that Reed-Solomon code is indeed a \emph{linear} code.
+It suffices to check that $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is a linear subspace of $\mathbb{F}^n$ (see \Cref{def:linear-subspace}).
 
 \begin{proposition}\label{prop:rs-linear}
-  The Reed-Solomon code $\mathsf{RS}$ is a linear code.
+    The Reed-Solomon code $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is a linear code of length $n = \#\Omega$ and dimension $k$.
 \end{proposition}
 
 \begin{proof}
-    Let $a \in \mathbb{F}_q$ and $\mathbf{m}_1, \mathbf{m}_2 \in \mathbb{F}_q^k$. The polynomials $f_{\mathbf{m}_1}(T)$ and $f_{\mathbf{m}_2}(T)$ have degree at most $k-1$, and so do $a f_{\mathbf{m}_1}(T)$ and $f_{\mathbf{m}_1}(T) + f_{\mathbf{m}_2}(T)$. Since coefficients are added coordinate-wise:
+    Let $a \in \mathbb{F}$ and $f, g \in \mathbb{F}[T]^{<k}$.
+    The polynomials $f + g$ and $af$ also have degree less than $k$, and restricting to $\Omega$ commutes with both operations:
     \begin{equation*}
-      f_{\mathbf{m}_1}(T) + f_{\mathbf{m}_2}(T) = f_{\mathbf{m}_1+\mathbf{m}_2}(T),
+        \overline{f} + \overline{g} = \overline{f + g}, \qquad a \overline{f} = \overline{af}.
     \end{equation*}
-    and 
-    \begin{equation*}
-      a f_{\mathbf{m}_1}(T) = f_{a\mathbf{m}_1}(T)
-    \end{equation*}
+    Therefore, $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is closed under addition and scalar multiplication, so it is a linear code.
 
-    In other words, the property of linearity holds for Reed-Solomon codes:
-    \begin{gather*}
-      \mathsf{RS}(\mathbf{m}_1) + \mathsf{RS}(\mathbf{m}_2) = \mathsf{RS}(\mathbf{m}_1+\mathbf{m}_2), \\ a \mathsf{RS}(\mathbf{m}_1) = \mathsf{RS}(a\mathbf{m}_1)
-    \end{gather*}
-    Therefore $\mathsf{RS}$ is an $[n,k]_q$ linear code.
+    For the dimension, note that the restriction map $f \mapsto \overline{f}$ is linear and injective: if $\overline{f} = 0$, then $f$ has $n > k - 1$ roots, which for a polynomial of degree less than $k$ is only possible if $f = 0$.
+    Hence, the dimension of the code equals the dimension of $\mathbb{F}[T]^{<k}$, which is $k$.
 \end{proof}
 
 \begin{proposition}\label{prop:rs-distance}
-  The Reed-Solomon code $\mathsf{RS}$ is an $[n,k,n-k+1]_q$ code. That is, it attains the Singleton bound.
+  The Reed-Solomon code $\mathsf{RS}[\mathbb{F}, \Omega, k]$ with $n = \#\Omega$ and $q = \#\mathbb{F}$ is an $[n,k,n-k+1]_q$ code. That is, it attains the Singleton bound.
 \end{proposition}
 \begin{proof}
-  Let us fix arbitrary distinct $\mathbf{m}_1, \mathbf{m}_2\in \mathbb{F}_q^k$. Note that $f_{\mathbf{m}_1}(T), f_{\mathbf{m}_2}(T)\in \mathbb{F}_q[T]$ are distinct polynomials of degree at most $k-1$ since $\mathbf{m}_1\neq \mathbf{m}_2$. Then, the polynomial $f_{\mathbf{m}_1}(T)-f_{\mathbf{m}_2}(T)$ is also a non-zero polynomial of degree at most $k-1$. 
+  Let us fix arbitrary distinct $f, g \in \mathbb{F}[T]^{<k}$. Then, the polynomial $f - g$ is also a non-zero polynomial of degree at most $k-1$.
 
-  Note that $w(\mathsf{RS}(\mathbf{m}_1)-\mathsf{RS}(\mathbf{m}_2))=\Delta(\mathsf{RS}(\mathbf{m}_1), \mathsf{RS}(\mathbf{m}_2))$. The weight of $\mathsf{RS}(\mathbf{m}_1)-\mathsf{RS}(\mathbf{m}_2)$ is $n$ minus the number of zeroes in $\mathsf{RS}(\mathbf{m}_1)-\mathsf{RS}(\mathbf{m}_2)$, which is equal to $n$ minus the number of roots that $f_{\mathbf{m}_1}(T)-f_{\mathbf{m}_2}(T)$ has in $\{\alpha_0, \alpha_1, \ldots, \alpha_{n-1}\}$. That is,
+  Note that $\|\overline{f} - \overline{g}\|_0 = \Delta(\overline{f}, \overline{g})$. The weight of $\overline{f} - \overline{g}$ is $n$ minus the number of zeroes in $\overline{f} - \overline{g}$, which is equal to $n$ minus the number of roots that $f - g$ has in $\Omega$. That is,
   \begin{equation*}
-    \Delta(\mathsf{RS}(\mathbf{m}_1), \mathsf{RS}(\mathbf{m}_2)) = n - \#\{i \in [n] : f_{\mathbf{m}_1}(\alpha_i)=f_{\mathbf{m}_2}(\alpha_i)\}
+    \Delta(\overline{f}, \overline{g}) = n - \#\{\omega \in \Omega : f(\omega) = g(\omega)\}.
   \end{equation*}
-  Since $f_{\mathbf{m}_1}(T)-f_{\mathbf{m}_2}(T)$ is a non-zero polynomial of degree at most $k-1$, by \Cref{cor:root-count} it has at most $k-1$ roots in $\mathbb{F}_q$.
-  Therefore, we have that the weight of $\mathsf{RS}(\mathbf{m}_1)-\mathsf{RS}(\mathbf{m}_2)$ is at least $n-(k-1)=n-k+1$. Therefore $d\geq n-k+1$, and since \Cref{prop:singleton} implies that $d\leq n-k+1$, we have that $d=n-k+1$.
+  Since $f - g$ is a non-zero polynomial of degree at most $k-1$, by \Cref{cor:root-count} it has at most $k-1$ roots in $\mathbb{F}$.
+  Therefore, we have that the weight of $\overline{f} - \overline{g}$ is at least $n-(k-1)=n-k+1$. Therefore $d_{\min} \geq n-k+1$, and since \Cref{prop:singleton} implies that $d_{\min} \leq n-k+1$, we have that $d_{\min} = n-k+1$.
 
-  The argument above also shows that the distinct polynomials $f_{\mathbf{m}_1}(T)$ and $f_{\mathbf{m}_2}(T)$ are mapped to distinct codewords $\mathsf{RS}(\mathbf{m}_1)$ and $\mathsf{RS}(\mathbf{m}_2)$. Therefore, the code contains $q^k$ codewords, and has dimension $k$.
+  The argument above also shows that the distinct polynomials $f$ and $g$ are mapped to distinct codewords $\overline{f}$ and $\overline{g}$. Therefore, the code contains $q^k$ codewords, and has dimension $k$.
 \end{proof}
+
+Consequently, the \emph{rate} of $\mathsf{RS}[\mathbb{F},\Omega,k]$ is $\rho(\mathsf{RS}[\mathbb{F},\Omega,k]) = k/n$.
 
 \begin{remark}
   By \Cref{prop:rs-distance}, Reed-Solomon codes are MDS codes. In particular,
-  $\mu(\mathsf{RS}) = 1 - \rho + \frac{1}{n}$, so lowering the rate directly increases the relative distance.
+  $\mu = 1 - \rho + 1/n$, so lowering the rate directly increases the relative distance (here, $\mu := \mu(\mathsf{RS}[\mathbb{F},\Omega,k])$ and $\rho := \rho(\mathsf{RS}[\mathbb{F},\Omega,k])$).
 \end{remark}
 
-%--------------------------------
+\begin{remark}
+  Since in practical applications $n$ is very large, we implicitly use the fact $\mu \approx 1-\rho$ for $\mu := \mu(\mathsf{RS}[\mathbb{F},\Omega,k])$ and $\rho := \rho(\mathsf{RS}[\mathbb{F},\Omega,k])$.
+\end{remark}
+
 \subsection{Proximity to a Code}\label{subsec:proximity}
-%--------------------------------
+
+\subsubsection{List Decoding}\label{subsubsec:list-decoding}
 
 The concepts discussed so far belong to classical coding theory, where the main objective is to recover the original message from a corrupted codeword. In our context, however, the requirement is weaker: the verifier does not actually need to know \emph{which} polynomial the prover committed to, but only whether the committed vector is close to \emph{some} valid codeword. To formalize this, we evaluate the distance between an arbitrary vector and the code as an entire set.
 
 \begin{definition}[Distance to a code]\label{def:dist-to-code}
-    Let $C \subseteq \Sigma^n$ be a code and $\mathbf{u} \in \Sigma^n$. The distance from
-    $\mathbf{u}$ to $C$ is
+    Let $\code \subseteq \Sigma^n$ be a code and $\mathbf{w} \in \Sigma^n$. The distance from
+    $\mathbf{w}$ to $\code$ is
     \begin{equation*}
-        \Delta(\mathbf{u}, C) := \min_{\mathbf{c} \in C} \Delta(\mathbf{u}, \mathbf{c}),
+        \Delta(\mathbf{w}, \code) := \min_{\mathbf{x} \in \code} \Delta(\mathbf{w}, \mathbf{x}),
     \end{equation*}
-    and the relative distance is $\delta(\mathbf{u}, C) := \frac{1}{n}\Delta(\mathbf{u}, C)$.
+    and the relative distance is $\delta(\mathbf{w}, \code) := \frac{1}{n}\Delta(\mathbf{w}, \code)$.
 \end{definition}
 
-\begin{definition}[$\delta$-far]\label{def:delta-far}
-    For $\delta \in [0,1]$, a vector $\mathbf{u} \in \Sigma^n$ is \textbf{$\delta$-far} from $C$
-    if $\delta(\mathbf{u}, C) > \delta$, and \textbf{$\delta$-close} otherwise.
+For convenience, we also use the terms \emph{$\delta$-close} and \emph{$\delta$-far}.
+Specifically, $\mathbf{w} \in \mathbb{F}^n$ is called \emph{$\delta$-close} to $\code$ if $\delta(\mathbf{w}, \code) \leq \delta$ and \emph{$\delta$-far} otherwise.
+
+Using this definition, it is also natural to consider the set of codewords that are \emph{$\delta$-close} to the given word.
+We give the following definition.
+\begin{definition}
+  Let $\code$ be an $[n,k,d]$ linear code. For a fixed $\mathbf{w} \in \mathbb{F}^n$ and $\delta \in [0,1]$, define
+  \begin{equation*}
+      \mathsf{List}[\mathbf{w},\code,\delta] := \{\mathbf{x} \in \code: \delta(\mathbf{x}, \mathbf{w}) \leq \delta\}.
+  \end{equation*}
 \end{definition}
+
+In many cryptographic applications, we are interested in the size of this list. 
+Fortunately, we can already give an answer for relatively small $\delta$'s.
 
 \begin{example}
-  Consider $\mathsf{RS}_5[\bm{\alpha},2]$ with $\bm{\alpha} = (0,1,2,3,4)$, that is, the evaluations of all polynomials of degree at most $1$ over $\mathbb{F}_5$. Let $\mathbf{u} = (0,1,4,4,1)$ be the evaluations of $T^2$. For every polynomial $g$ of degree at most $1$, the difference $T^2 - g(T)$ is a non-zero polynomial of degree $2$, so by \Cref{cor:root-count} it has at most $2$ roots. Hence $\mathbf{u}$ agrees with every codeword in at most $2$ positions, and $\Delta(\mathbf{u}, \mathsf{RS}) \geq 3$. The bound is attained by the constant codeword $(1,1,1,1,1)$, so $\delta(\mathbf{u}, \mathsf{RS}) = 3/5$, and $\mathbf{u}$ is, for instance, $1/2$-far from the code.
+    By \Cref{prop:unique-decoding-distance}, if $\delta < \mu(\code)/2$, there is at most one codeword that decodes the given word. Consequently, $\#\mathsf{List}(\mathbf{w},\code,\delta) \leq 1$.
 \end{example}
 
-Why is this notion useful? Assume $\mathbf{u}$ is $\delta$-far from $C$. This implies that regardless of which codeword $\mathbf{c}$ we compare it to, the two will differ in strictly more than $\delta n$ coordinates. Consequently, a single uniformly random query will detect a discrepancy with a probability greater than $\delta$. If we make $t$ independent queries, the probability of missing the error entirely drops below $(1-\delta)^t$. Thus, a constant relative distance ensures that the soundness error decays exponentially with the number of queries. The fundamental challenge, however, is that the verifier does not know in advance which codeword $\mathbf{c}$ they are checking against. Constructing an efficient test that overcomes this limitation using only a small number of queries to $\mathbf{u}$ is exactly what the FRI protocol achieves.
+Naturally, we would like to estimate the size of $\mathsf{List}[\mathbf{w},\code,\delta]$ when $\delta \geq \mu(\code)/2$.
+However, turns out that this situation becomes very tricky and our knowledge is quite limited.
+The following lemma answers the question of what happens up to $1-\sqrt{1-\mu(\code)}$, known as \emph{the Johnson bound}.
 
-%--------------------------------
-\subsection{Reed-Solomon Proximity Problem}\label{subsec:rs-proximity}
-%--------------------------------
+\begin{theorem}[Johnson bound]
+  For a code $\code \subseteq \mathbb{F}^n$, fixed $\mathbf{w} \in \mathbb{F}^n$, and distance parameter $0 < \delta < 1-\sqrt{1-\mu(\code)}$, we have
+  \begin{equation*}
+    \#\mathsf{List}[\mathbf{w},\code,\delta] \leq 1/\varepsilon_{\delta} \; \text{for} \; \varepsilon_{\delta} = 2\sqrt{1-\mu(\code)}(1-\sqrt{1-\mu(\code)}-\delta).
+  \end{equation*}
+\end{theorem}
 
-We now state the problem that FRI solves~\cite{bensasson18}. Let $D \subseteq \mathbb{F}_q$ be a set of $n$ evaluation points, and let $\mathsf{RS}_q[D,k]$ denote the Reed-Solomon code whose evaluation points are the elements of $D$ (\Cref{def:rs}). The verifier has \emph{oracle access} to a function $f : D \to \mathbb{F}_q$: it cannot read $f$ as a whole, but it may query its value at any point of $D$.
-In practice, the prover commits to $f$ with a Merkle tree (\Cref{section:commitment-schemes}), so that each query costs one opening.
+Note that by analyzing the expression $1/\varepsilon_{\delta}$, this bound only makes sense for $\delta < 1-\sqrt{1-\mu(\code)}$ since the expression $\varepsilon_{\delta} \to 0$ as $\delta \to 1-\sqrt{1-\mu(\code)}$.
 
-\begin{definition}[Reed-Solomon proximity problem]\label{def:rs-proximity}
-  Given oracle access to $f : D \to \mathbb{F}_q$ and $\delta \in (0,1)$, distinguish, with high confidence and few queries, between the case $f \in \mathsf{RS}_q[D,k]$ and the case that $f$ is $\delta$-far from $\mathsf{RS}_q[D,k]$.
-\end{definition}
+Finally, we can also give an estimate of the size of $\mathsf{List}[\mathbf{w},\code,\delta]$ when $\delta \geq \mu(\code)$.
+Indeed, in the worst case we expect the number of codewords to be fairly large. 
+One can show the following fact which we leave as an exercise.
 
-When the verifier is restricted to oracle access to $f$, the problem is known as \emph{Reed-Solomon proximity testing}. In this model, exactly $k+1$ queries are both necessary and sufficient: the verifier reads $k$ points to interpolate the unique polynomial of degree less than $k$, and then checks it for consistency against one additional random point. However, since $k$ is typically extremely large in real-world applications, this straightforward interpolation is computationally infeasible.
+\begin{exercise}
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code over a field of size $q$, and let $\delta \geq \mu(\code)$.
+  Show that there exists a word $\mathbf{w} \in \mathbb{F}^n$ such that $\#\mathsf{List}[\mathbf{w}, \code, \delta] \geq q$.
+\end{exercise}
 
-To overcome this limitation, we allow the prover to participate. In \emph{Reed-Solomon proximity verification}, the prover and verifier interact via an IOP (\Cref{fig:iop}). During each round, the prover commits to an additional oracle, and the verifier is allowed to query any of them. This interactive setup is known as an \emph{IOP of proximity} (IOPP), making standard proximity testing just the degenerate case where the prover provides no auxiliary information.
+The biggest question though is ``what happens between $1-\sqrt{1-\mu(\code)}$ and $\mu(\code)$?''
+Turns out that we cannot give a general answer: this largely depends on the specifics of $\code$.
+That said, the size of $\mathsf{List}[\mathbf{w}, \code, \delta]$ as a function of $\delta$ is depicted in \Cref{fig:list-size}.
 
-The \emph{Fast Reed-Solomon IOPP} (FRI) is precisely this type of protocol. It achieves linear prover complexity in $n$, while keeping both the verifier's computational effort and the query complexity strictly logarithmic in $n$.
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        lab/.style={font=\footnotesize},
+        seg/.style={line width=5pt},
+        tick/.style={thick, oc-gray-8},
+    ]
+        % positions of 0, mu/2, Johnson, mu, 1
+        \def\xa{0} \def\xb{2.3} \def\xc{5.6} \def\xd{8.6} \def\xe{10.8}
+ 
+        % regimes
+        \draw[seg, oc-teal-4]   (\xa, 0) -- (\xb, 0);
+        \draw[seg, oc-blue-4]   (\xb, 0) -- (\xc, 0);
+        \draw[seg, oc-orange-4] (\xc, 0) -- (\xd, 0);
+        \draw[seg, oc-red-4]    (\xd, 0) -- (\xe, 0);
+ 
+        % list sizes
+        \node[lab, above=5pt, text=oc-teal-9]   at ({(\xa+\xb)/2}, 0) {size $\leq 1$};
+        \node[lab, above=5pt, text=oc-blue-9]   at ({(\xb+\xc)/2}, 0) {size $\leq 1/\varepsilon_\delta$};
+        \node[lab, above=5pt, text=oc-orange-9] at ({(\xc+\xd)/2}, 0) {depends on $\code$};
+        \node[lab, above=5pt, text=oc-red-9]    at ({(\xd+\xe)/2}, 0) {size $\geq q$};
+ 
+        % ticks and thresholds
+        \foreach \x/\t in {\xa/{$\delta = 0$}, \xb/{$\mu/2$}, \xc/{$1 - \sqrt{1 - \mu}$}, \xd/{$\mu$}, \xe/{$1$}} {
+            \draw[tick] (\x, -0.22) -- (\x, 0.22);
+            \node[lab, below=1pt] at (\x, -0.25) {\t};
+        }
+        \foreach \x/\t in {\xb/{unique decoding\\radius}, \xc/{Johnson\\bound}, \xd/{capacity\\bound}} {
+            \node[lab, below, align=center, text=oc-gray-7] at (\x, -0.75) {\t};
+        }
+    \end{tikzpicture}
+    \caption{The size of the list $\mathsf{List}[\mathbf{w}, \code, \delta]$ of codewords within relative distance $\delta$ of a word $\mathbf{w}$, as a function of $\delta \in [0, 1]$, where $\mu = \mu(\code)$. Adapted from Dan Boneh's ZK Whiteboard Session S2M7.}
+    \label{fig:list-size}
+\end{figure}
+ 
+
+\subsubsection{List Decoding for Reed-Solomon Codes}
+
+Since in our applications we are interested in $\code = \mathsf{RS}[\mathbb{F},\Omega,k]$, it is natural to apply previous results to this code.
+By substituting $\mu(\code) \approx 1-\rho(\code)$, we get the following proposition.
+\begin{proposition}
+  Let $\code = \mathsf{RS}[\mathbb{F}_q,\Omega,k]$, $\mathbf{w} \in \mathbb{F}^n$, and $\rho = \rho(\code)$. Then,
+  \begin{enumerate}
+    \item for $\delta \leq (1-\rho)/2$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \leq 1$;
+    \item for $\delta < 1-\sqrt{\rho}$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \leq \varepsilon_{\delta}^{-1}$ for $\varepsilon_{\delta} := 2\sqrt{\rho}(1-\sqrt{\rho}-\delta)$;
+    \item for $\delta \geq 1-\rho$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \geq q$.
+  \end{enumerate}
+\end{proposition}
+
+This is precisely the previous observations from \Cref{subsubsec:list-decoding}, applied to Reed-Solomon codes.
+We provide the illustration in \Cref{fig:rs-list-size}.
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        lab/.style={font=\footnotesize},
+        seg/.style={line width=5pt},
+        tick/.style={thick, oc-gray-8},
+    ]
+        % positions of 0, (1-rho)/2, Johnson, 1-rho, 1
+        \def\xa{0} \def\xb{2.3} \def\xc{5.6} \def\xd{8.6} \def\xe{10.8}
+
+        % regimes
+        \draw[seg, oc-teal-4]   (\xa, 0) -- (\xb, 0);
+        \draw[seg, oc-blue-4]   (\xb, 0) -- (\xc, 0);
+        \draw[seg, oc-orange-4] (\xc, 0) -- (\xd, 0);
+        \draw[seg, oc-red-4]    (\xd, 0) -- (\xe, 0);
+
+        % list sizes
+        \node[lab, above=5pt, text=oc-teal-9]   at ({(\xa+\xb)/2}, 0) {size $\leq 1$};
+        \node[lab, above=5pt, text=oc-blue-9]   at ({(\xb+\xc)/2}, 0) {size $\leq 1/\varepsilon_\delta$};
+        \node[lab, above=5pt, text=oc-orange-9] at ({(\xc+\xd)/2}, 0) {unknown (only conjectured)};
+        \node[lab, above=5pt, text=oc-red-9]    at ({(\xd+\xe)/2}, 0) {size $\geq q$};
+
+        % ticks and thresholds
+        \foreach \x/\t in {\xa/{$\delta = 0$}, \xb/{$(1-\rho)/2$}, \xc/{$1 - \sqrt{\rho}$}, \xd/{$1 - \rho$}, \xe/{$1$}} {
+            \draw[tick] (\x, -0.22) -- (\x, 0.22);
+            \node[lab, below=1pt] at (\x, -0.25) {\t};
+        }
+        \foreach \x/\t in {\xb/{unique decoding\\radius}, \xc/{Johnson\\bound}, \xd/{capacity\\bound}} {
+            \node[lab, below, align=center, text=oc-gray-7] at (\x, -0.75) {\t};
+        }
+    \end{tikzpicture}
+    \caption{The size of the list $\mathsf{List}[\mathbf{w}, \code, \delta]$ for the Reed-Solomon code $\code = \mathsf{RS}[\mathbb{F}_q, \Omega, k]$ of rate $\rho$, as a function of $\delta \in [0,1]$.}
+    \label{fig:rs-list-size}
+\end{figure}
+
+The problem of finding the size of this list is so important that the Ethereum Foundation announced the \emph{Proximity Prize}\footnote{See \url{https://proximityprize.org/}} with a goal to verify or disprove the conjectures for larger $\delta$'s.
+One may find a comprehensive review of this topic in an awesome survey by Gal Arnon, Dan Boneh, and Giacomo Fenzi~\cite{proximity-prize-survey}.
+
+\subsubsection{Why do we need list decoding?}
+Assume that $\mathbf{w}$ is $\delta$-far from $\code$.
+Then, whichever codeword $\mathbf{x} \in \code$ we compare it to, the two differ in more than $\delta n$ positions.
+Consequently, a single uniformly random query detects a discrepancy with probability greater than $\delta$, and $t$ independent queries miss it with probability below $(1-\delta)^t$.
+Thus, the larger the $\delta$ we can afford, the fewer queries the verifier makes and the shorter the proof becomes.
+The fundamental challenge, however, is that the verifier does not know in advance which codeword $\mathbf{x}$ it is checking against.
+Constructing an efficient test that overcomes this limitation using only a small number of queries to $\mathbf{w}$ is exactly what the FRI protocol achieves.
+
+This is where the size of the list enters.
+If $\delta$ stays below the unique decoding radius $(1-\rho)/2$, each query is passed with probability more than $(1+\rho)/2 > 1/2$, so we get less than one bit of security per query.
+To do better, we must take $\delta$ beyond this radius, but then $\mathbf{w}$ no longer determines a single codeword: every element of $\mathsf{List}[\mathbf{w}, \code, \delta]$ is a candidate for ``the polynomial the prover committed to''.
+A cheating prover succeeds if any of these candidates passes the remaining checks, so the soundness error grows with $\#\mathsf{List}[\mathbf{w}, \code, \delta]$.
+Up to the Johnson bound $1 - \sqrt{\rho}$, this size is provably small, and a query is passed with probability about $\sqrt{\rho}$.
+Beyond the Johnson bound and up to $1 - \rho$, the list is only conjectured to be small, and protocols that set $\delta$ in this range rely on this conjecture for their security.
+For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes require roughly $148$, $100$, and $50$ queries, respectively.
 
 \subsection{Exercises}
 

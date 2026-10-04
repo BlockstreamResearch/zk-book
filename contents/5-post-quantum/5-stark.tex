@@ -1,6 +1,36 @@
 \documentclass[../../book]{subfiles}
 
 \begin{document}
+
+\subsection{Reed-Solomon Proximity Problem}\label{subsec:rs-proximity}
+
+We now state the problem that FRI solves~\cite{bensasson18}.
+Let $\code = \mathsf{RS}[\mathbb{F}, \Omega, k]$ be the Reed-Solomon code over an evaluation domain $\Omega \subseteq \mathbb{F}$ of size $n$ (\Cref{def:rs}).
+Recall that its codewords are the restrictions $\overline{f}: \Omega \to \mathbb{F}$, so we view an arbitrary word also as a function $\mathbf{w}: \Omega \to \mathbb{F}$.
+The verifier has \emph{oracle access} to $\mathbf{w}$: it cannot read $\mathbf{w}$ as a whole, but it may query its value at any point of $\Omega$.
+In practice, the prover commits to $\mathbf{w}$ with a Merkle tree (\Cref{section:commitment-schemes}), so that each query costs one opening.
+
+\begin{definition}[Reed-Solomon proximity problem]\label{def:rs-proximity}
+  Given oracle access to $\mathbf{w}: \Omega \to \mathbb{F}$ and $\delta \in (0,1)$, distinguish, with high confidence and few queries, between the case $\mathbf{w} \in \mathsf{RS}[\mathbb{F}, \Omega, k]$ and the case that $\mathbf{w}$ is $\delta$-far from $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
+\end{definition}
+
+When the verifier is restricted to oracle access to $\mathbf{w}$, the problem is known as \emph{Reed-Solomon proximity testing}.
+In this model, exactly $k+1$ queries are both necessary and sufficient: the verifier reads $k$ points to interpolate the unique polynomial of degree less than $k$, and then checks it for consistency against one additional random point.
+However, since $k$ is typically extremely large in real-world applications, reading this many points defeats the purpose of a succinct proof.
+
+To overcome this limitation, we allow the prover to participate.
+In \emph{Reed-Solomon proximity verification}, the prover and verifier interact via an IOP (\Cref{fig:iop}).
+During each round, the prover commits to an additional oracle, and the verifier is allowed to query any of them.
+This interactive setup is known as an \emph{IOP of proximity} (IOPP), making standard proximity testing just the degenerate case where the prover provides no auxiliary information.
+
+The \emph{Fast Reed-Solomon IOPP} (FRI) is precisely this type of protocol.
+It achieves linear prover complexity in $n$, while keeping both the verifier's computational effort and the query complexity strictly logarithmic in $n$.
+
+The proximity parameter $\delta$ is ours to choose, and \Cref{fig:rs-list-size} shows the trade-off.
+A larger $\delta$ means fewer queries, but once $\delta$ exceeds the unique decoding radius $(1-\rho)/2$, a word that passes the test is only guaranteed to be close to one of the codewords in $\mathsf{List}[\mathbf{w}, \code, \delta]$.
+The soundness of FRI is therefore proven for $\delta$ up to the Johnson bound $1-\sqrt{\rho}$ and only conjectured for $\delta$ up to $1-\rho$.
+
+
 %--------------------------------
 \subsection{FRI protocol}\label{subsec:fri}
 %--------------------------------
