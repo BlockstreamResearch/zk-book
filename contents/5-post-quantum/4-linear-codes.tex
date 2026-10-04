@@ -664,8 +664,8 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
 
 \begin{xexercise}
   {Exercise 1.}
-  {Over $\mathbb{F}_3$, consider $\mathbf{u} = (1,0,2,2,1)$ and $\mathbf{v} = (1,2,2,0,1)$. What are the
-  Hamming distance $\Delta(\mathbf{u},\mathbf{v})$ and the relative Hamming distance $\delta(\mathbf{u},\mathbf{v})$?}
+  {Over $\mathbb{F}_3$, consider $\mathbf{x} = (1,0,2,2,1)$ and $\mathbf{y} = (1,2,2,0,1)$. What are the
+  Hamming distance $\Delta(\mathbf{x},\mathbf{y})$ and the relative Hamming distance $\delta(\mathbf{x},\mathbf{y})$?}
   {2}
   {
     \item $\Delta = 2$, $\delta = 2/5$
@@ -677,8 +677,8 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
 
 \begin{xexercise}
   {Exercise 2.}
-  {Let $C \subseteq \mathbb{F}_2^4$ be the linear code spanned by $(1,1,0,1)$ and $(0,1,1,1)$. What is its
-  minimum distance $d_{\min}(C)$?}
+  {Let $\code \subseteq \mathbb{F}_2^4$ be the linear code spanned by vectors $(1,1,0,1)$ and $(0,1,1,1)$. What is its
+  minimum distance $d_{\min}(\code)$?}
   {4}
   {
     \item $1$
@@ -702,8 +702,8 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
 
 \begin{xexercise}
   {Exercise 4.}
-  {Consider the Reed--Solomon code $\mathsf{RS}_7[\bm{\alpha},2]$ with $\bm{\alpha} = (0,1,2,3,4,5,6)$.
-  What is the encoding of the message $\mathbf{m} = (3,2)$?}
+  {Consider the Reed--Solomon code $\mathsf{RS}[\mathbb{F}_7,\Omega:=\mathbb{F}_7,2]$.
+  What is the encoding of the message $(3,2)$?}
   {2}
   {
     \item $(2,5,1,4,0,3,6)$
@@ -715,8 +715,10 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
 
 \begin{xexercise}
   {Exercise 5.}
-  {Consider $\mathsf{RS}_7[\bm{\alpha},2]$ with $\bm{\alpha} = (0,1,\ldots,6)$, and let
-  $\mathbf{u} = (0,1,4,2,2,4,1)$ be the evaluations of $T^2$. What is $\delta(\mathbf{u}, \mathsf{RS})$?}
+  {Consider $\mathsf{RS}[\mathbb{F}_7,\Omega:=\mathbb{F}_7,2]$, and let
+  $\mathbf{w} := (0,1,4,2,2,4,1) \in \mathbb{F}_7^7$. What is $\delta(\mathbf{w}, \mathsf{RS})$?
+  
+  \textit{Hint:} use the fact that $\mathbf{w}$ is the evaluation of $T^2$ over $\Omega := \mathbb{F}_7$.}
   {4}
   {
     \item $2/7$
@@ -726,18 +728,36 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
   }
 \end{xexercise}
 
-\begin{xexercise}
-  {Exercise 6.}
-  {Suppose $\mathbf{u}$ is $1/2$-far from a code $C$, and the verifier compares $\mathbf{u}$ with a fixed
-  codeword at $t$ independent uniformly random positions. What is the smallest $t$ for which the bound
-  $(1-\delta)^t$ guarantees that the probability of missing every discrepancy is at most $2^{-40}$?}
-  {4}
-  {
-    \item $20$
-    \item $40$
-    \item $80$
-    \item $128$
-  }
-\end{xexercise}
+\subsubsection*{Application: Keys from Biometrics}\label{subsec:fuzzy-extractors}
+
+Error-correcting codes are useful in cryptography far beyond proof systems.
+Suppose that we want to derive a secret key from a biometric reading, such as a face scan, which a feature extractor turns into a binary string $\mathbf{w} \in \mathbb{F}_2^n$.
+The problem is that two readings of the same person are never identical: a fresh reading $\mathbf{w}'$ is only \emph{close} to $\mathbf{w}$ in the Hamming distance, while a key must be reproduced exactly.
+A \emph{fuzzy extractor} solves this problem, and its simplest instantiation, the \emph{code-offset construction}, uses nothing but a binary linear code $\code$ with parameters $[n, k, 2t+1]_2$, a decoder for $\code$ that corrects up to $t$ errors, and a hash function $\mathsf{H}$:
+\begin{itemize}
+    \item $\mathsf{Gen}(\mathbf{w})$: sample a random codeword $\mathbf{c} \leftarrowS \code$ and output the public \emph{helper string} $\mathbf{h} := \mathbf{c} + \mathbf{w}$ together with the secret key $\mathsf{sk} := \mathsf{H}(\mathbf{c})$.
+    \item $\mathsf{Rep}(\mathbf{h}, \mathbf{w}')$: decode $\mathbf{h} + \mathbf{w}'$ to a codeword $\mathbf{c}'$ and output $\mathsf{sk}' := \mathsf{H}(\mathbf{c}')$.
+\end{itemize}
+The helper string is stored in the clear, and the biometric itself is never stored.
+Throughout the exercises below, $\code$ is a binary Goppa code with parameters $[128, 44, 25]_2$, so that $t = 12$; we use it as a black box.
+
+\textbf{Exercise 6.}
+Show that $\mathsf{Rep}(\mathbf{h}, \mathbf{w}') = \mathsf{sk}$ whenever $\Delta(\mathbf{w}, \mathbf{w}') \leq t$.
+Which statement from this section guarantees that the decoder cannot return a different codeword?
+
+\textbf{Exercise 7.} Reed-Solomon codes are MDS, so it is tempting to split the $128$ bits into $16$ bytes and use $\mathsf{RS}[\mathbb{F}_{2^8}, \Omega, k]$ with $\#\Omega = 16$.
+Show that no choice of $k \geq 1$ lets this code correct every pattern of $12$ flipped bits.
+
+\textbf{Exercise 8.} Assume that every bit of a fresh reading flips independently with probability $p \in [0,1]$.
+Write the probability that an honest user is rejected as a function of $n$, $t$ and $p$.
+Then, using the Singleton bound, give an upper bound on $k$ for any code with $n = 128$ that tolerates the \emph{average} number of errors at $p = 0.2$.
+
+\textbf{Exercise 9.} The adversary sees $\mathbf{h}$ but not $\mathbf{w}$.
+How many candidates for $\mathbf{w}$ remain?
+Conclude that the key has at most $k$ bits of security, however good the biometric is.
+
+\textbf{Exercise 10.} An impostor submits a uniformly random $\mathbf{w}'' \leftarrowS \mathbb{F}_2^{128}$.
+What is the probability that $\mathsf{Rep}(\mathbf{h}, \mathbf{w}'') = \mathsf{sk}$?
+Compare it with the previous exercise: which attack is better?
 
 \end{document}
