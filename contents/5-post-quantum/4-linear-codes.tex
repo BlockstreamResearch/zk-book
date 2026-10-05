@@ -533,7 +533,7 @@ Naturally, we would like to estimate the size of $\mathsf{List}[\mathbf{w},\code
 However, turns out that this situation becomes very tricky and our knowledge is quite limited.
 The following lemma answers the question of what happens up to $1-\sqrt{1-\mu(\code)}$, known as \emph{the Johnson bound}.
 
-\begin{theorem}[Johnson bound]
+\begin{theorem}[Johnson bound]\label{th:johnson-bound}
   For a code $\code \subseteq \mathbb{F}^n$, fixed $\mathbf{w} \in \mathbb{F}^n$, and distance parameter $0 < \delta < 1-\sqrt{1-\mu(\code)}$, we have
   \begin{equation*}
     \#\mathsf{List}[\mathbf{w},\code,\delta] \leq 1/\varepsilon_{\delta} \; \text{for} \; \varepsilon_{\delta} = 2\sqrt{1-\mu(\code)}(1-\sqrt{1-\mu(\code)}-\delta).
@@ -660,7 +660,7 @@ Up to the Johnson bound $1 - \sqrt{\rho}$, this size is provably small, and a qu
 Beyond the Johnson bound and up to $1 - \rho$, the list is only conjectured to be small, and protocols that set $\delta$ in this range rely on this conjecture for their security.
 For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes require roughly $148$, $100$, and $50$ queries, respectively.
 
-\subsection{Exercises}
+\subsection{Exercises}\label{section:linear-codes-exercises}
 
 \begin{xexercise}
   {Exercise 1.}
@@ -728,8 +728,7 @@ For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes requ
   }
 \end{xexercise}
 
-\subsubsection*{Application: Keys from Biometrics}\label{subsec:fuzzy-extractors}
-
+\begin{exbox}{Exercises 6--10. Keys from Biometrics}
 Error-correcting codes are useful in cryptography far beyond proof systems.
 Suppose that we want to derive a secret key from a biometric reading, such as a face scan, which a feature extractor turns into a binary string $\mathbf{w} \in \mathbb{F}_2^n$.
 The problem is that two readings of the same person are never identical: a fresh reading $\mathbf{w}'$ is only \emph{close} to $\mathbf{w}$ in the Hamming distance, while a key must be reproduced exactly.
@@ -740,6 +739,7 @@ A \emph{fuzzy extractor} solves this problem, and its simplest instantiation, th
 \end{itemize}
 The helper string is stored in the clear, and the biometric itself is never stored.
 Throughout the exercises below, $\code$ is a binary Goppa code with parameters $[128, 44, 25]_2$, so that $t = 12$; we use it as a black box.
+\end{exbox}
 
 \textbf{Exercise 6.}
 Show that $\mathsf{Rep}(\mathbf{h}, \mathbf{w}') = \mathsf{sk}$ whenever $\Delta(\mathbf{w}, \mathbf{w}') \leq t$.
