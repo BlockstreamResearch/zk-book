@@ -523,9 +523,7 @@ group elements.
 
 \textbf{Exercise 10. Answer: A.} $c \gets H((u,v,w),(v_r,w_r))$.
 
-
 \subsection*{Lattice-Based Cryptography}
- 
  
 \textbf{Exercise 1. Answer: C.} A matrix $\mathbf{U} \in \mathbb{Z}^{2 \times 2}$ is a basis of $\mathbb{Z}^2$ if and only if $\mathbf{U}$ is unimodular, \textit{i.e.}, $\det \mathbf{U} = \pm 1$.
 The determinants of the options are $2, -2, 1, 2, 2$, respectively, so only (C) works.
@@ -586,5 +584,35 @@ Note that the adjoint plays the role of complex conjugation (for $n = 2$ it is l
 Among the options, only $\alpha = 4$ works, since $4^2 = 16$; the other square root of $-1$ is $13 = -4$.
 The two evaluations together give the map $f \mapsto (f(4), f(-4))$, which is an isomorphism $\mathbb{Z}_{17}[T]/(T^2+1) \cong \mathbb{Z}_{17} \times \mathbb{Z}_{17}$ that turns polynomial multiplication into coordinate-wise multiplication.
 This is precisely the NTT for $n = 2$, and it exists because $17 \equiv 1 \pmod{2n}$ for $n=2$. 
+
+\subsection*{Introduction to Code-based Cryptography}
+
+\textbf{Exercise 1. Answer: A.} The vectors differ in the 2nd and 4th positions, so $\Delta(\mathbf{x},\mathbf{y}) = 2$ and $\delta(\mathbf{x},\mathbf{y}) = 2/5$.
+
+\textbf{Exercise 2. Answer: B.} The code consists of $0000$, $1101$, $0111$ and $1010$. The smallest weight of a non-zero codeword is $\|1010\|_0 = 2$, so by \Cref{prop:dist-eq-weight} we get $d_{\min}(\code) = 2$.
+
+\textbf{Exercise 3. Answer: B.} By the Singleton bound (\Cref{prop:singleton}), $k \leq n-d+1$. For $[7,4,5]_q$ this gives $4 \leq 3$, which is false. The other three parameter sets satisfy the bound with equality, so they are MDS and are attained by Reed-Solomon codes over any field with $q \geq n$.
+
+\textbf{Exercise 4. Answer: C.} The message corresponds to $f = 3 + 2T$. Evaluating it at $0,1,\ldots,6$ modulo $7$ gives $\overline{f} = (3,5,0,2,4,6,1)$.
+
+\textbf{Exercise 5. Answer: C.} For every $g \in \mathbb{F}_7[T]^{<2}$, the polynomial $T^2 - g$ is non-zero of degree $2$ and thus has at most $2$ roots, so $\Delta(\mathbf{w}, \mathsf{RS}) \geq 5$. The constant codeword $(1,\ldots,1)$ agrees with $\mathbf{w}$ at $T = 1$ and $T = 6$, so $\Delta(\mathbf{w}, \mathsf{RS}) = 5$ and $\delta(\mathbf{w}, \mathsf{RS}) = 5/7$.
+
+\textbf{Exercise 6.} We have $\mathbf{h} + \mathbf{w}' = \mathbf{c} + (\mathbf{w} + \mathbf{w}')$, so the word given to the decoder differs from $\mathbf{c}$ exactly in the positions where $\mathbf{w}$ and $\mathbf{w}'$ differ. Hence, its distance from $\mathbf{c}$ is $\Delta(\mathbf{w}, \mathbf{w}') \leq t < d_{\min}(\code)/2$. By \Cref{prop:unique-decoding-distance}, $\mathbf{c}$ is the only codeword at such a distance, so the decoder returns $\mathbf{c}' = \mathbf{c}$ and $\mathsf{sk}' = \mathsf{H}(\mathbf{c}) = \mathsf{sk}$.
+
+\textbf{Exercise 7.} A single flipped bit changes the whole byte it belongs to, so $12$ flipped bits placed in $12$ different bytes corrupt $12$ symbols of the codeword. By \Cref{prop:rs-distance}, the code has $d_{\min} = 16 - k + 1 \leq 16$, so it corrects fewer than $d_{\min}/2 \leq 8$ symbol errors, that is, at most $7$. Since $12 > 7$, this error pattern cannot be corrected for any $k \geq 1$.
+
+\textbf{Exercise 8.} The number of flipped bits follows the binomial distribution with parameters $n$ and $p$, and an honest user is rejected when more than $t$ bits are flipped. Hence, the rejection probability is
+\begin{equation*}
+    \sum_{i=t+1}^{n} \binom{n}{i} p^i (1-p)^{n-i}.
+\end{equation*}
+For $n = 128$ and $t = 12$ it is about $1.2\%$ at $p = 0.05$, but already $99.9\%$ at $p = 0.2$. At $p = 0.2$ the average number of errors is $np = 25.6$, so we need $t \geq 26$ and $d \geq 2t + 1 = 53$. The Singleton bound then gives $k \leq n - d + 1 = 76$.
+
+\textbf{Exercise 9.} Since $\mathbf{w} = \mathbf{h} + \mathbf{c}$ for some $\mathbf{c} \in \code$, the adversary knows that $\mathbf{w}$ lies in the set $\mathbf{h} + \code$, which has $\#\code = 2^k$ elements, one for each codeword. Regardless of $\mathbf{w}$, the adversary can enumerate all $2^k$ codewords $\mathbf{c}$ and test each candidate key $\mathsf{H}(\mathbf{c})$. Thus, the key has at most $k = 44$ bits of security.
+
+\textbf{Exercise 10.} Since $\mathbf{w}''$ is uniformly random, so is $\mathbf{h} + \mathbf{w}''$. The decoder returns $\mathbf{c}$ exactly when this word is within distance $t$ of $\mathbf{c}$, and there are $\sum_{i=0}^{t} \binom{n}{i}$ such words. Hence, the probability is
+\begin{equation*}
+    2^{-n} \sum_{i=0}^{t} \binom{n}{i} \approx 2^{-73.4} \quad \text{for } n = 128, \; t = 12.
+\end{equation*}
+The attack from Exercise 9 needs only $2^{44}$ attempts, so it is far better than guessing the biometric at random.
 
 \end{document}

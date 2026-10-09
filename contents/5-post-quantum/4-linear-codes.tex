@@ -1,0 +1,763 @@
+\documentclass[../../book]{subfiles}
+
+\usetikzlibrary{decorations.pathmorphing, decorations.pathreplacing}
+
+\begin{document}
+Error-correcting codes date back to 1948, when Shannon showed that information can be transmitted reliably over noisy channels, provided that redundancy is added~\cite{shannon1948}. A few years later, Hamming showed that one can build codes that not only detect possible errors but also correct them~\cite{hamming1950}.
+
+The idea behind error-correcting codes is quite simple: encode a message of $k$ symbols into a longer \emph{codeword} of $n > k$ symbols, so that any two codewords differ in many positions. Then a few corrupted symbols cannot turn one codeword into another, and the original message can still be recovered.
+
+The same idea turns out to be useful in cryptography. Shamir's secret sharing (\Cref{fig:shamir}) is, in fact, a Reed--Solomon code~\cite{mceliece1981}, and the Reed--Solomon fingerprinting from \Cref{section:toolkit} relies on the same property of polynomials. McEliece used codes to build one of the first public-key encryption schemes~\cite{McEliece78}, and code-based schemes are today among the main candidates for post-quantum cryptography.
+
+In proof systems, codes play a different role. The simplest commitment that relies only on hash functions is a Merkle tree (\Cref{section:commitment-schemes}), but it gives the verifier only local access: it can open individual positions of the committed vector, and nothing more. If the prover committed to the message itself, a change in a single symbol would affect a single position, which the verifier would almost certainly miss. Committing to an encoding of the message with a code of large distance makes local access sufficient: a committed vector is either close to a single codeword, which binds the prover to a single message, or far from all codewords, which can be detected by checking only a few random positions using a test of proximity to the code. Many modern proof systems are built on this principle, including STARKs~\cite{EPRINT:BBHR18}, Ligero~\cite{CCS:AHIV17}, Brakedown~\cite{C:GLSTW23} and Binius~\cite{EC:DiaPos25}. Since they rely only on hash functions, they need no trusted setup and are believed to be secure against quantum adversaries.
+
+In this section, we introduce linear codes and Reed-Solomon codes~\cite{guruswami23}, together with the notion of proximity to a code, which is the central tool behind STARKs (\Cref{section:zk-stark}).
+
+\subsection{Error-Correcting Codes}
+
+\subsubsection{Motivation}
+
+Let us first explain the basic idea of error-correcting codes.
+First, we fix an alphabet $\Sigma$ which lists a set of letters our message will consist of (say, if our messages are binary strings, then $\Sigma = \{0,1\}$).
+Consider the following problem:
+\begin{quote}
+    \underline{Problem.} Alice wants to send Bob a message $m \in \Sigma^k$. 
+    However, there is a problem: Alice sits in Germany, while Bob is on the Moon.
+    Assume that it so happens that no matter what message Alice picks, two random letters of $m$ get corrupted.
+    How can Alice transmit an exact message $m$ to Bob?
+\end{quote}
+
+The idea how to resolve this issue is as follows: we construct an encoder that maps $k$ digits to the $n>k$ encoded symbols, called a \emph{codeword}. 
+This way we add $n-k$ redundant symbols to the message. 
+Then, we transmit the codeword over the noisy channel.
+The receiver gets a \emph{received word} of $n$ symbols, which may differ from the original codeword in some positions (in our example above, the new codeword has two positions corrupted). 
+The receiver then uses a decoder to recover the original message $m$ from the received word based on the redundant information that $n-k$ additional slots introduced.
+The process is illustrated in \Cref{fig:ecc-channel}.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        cell/.style={draw=oc-gray-7, thick, minimum size=0.5cm, inner sep=0pt, font=\small\ttfamily},
+        msg/.style={cell, fill=oc-blue-1},
+        red/.style={cell, fill=oc-teal-1},
+        err/.style={cell, fill=oc-red-2, draw=oc-red-8, very thick},
+        proc/.style={draw=oc-gray-7, thick, rounded corners, fill=oc-gray-1, minimum height=0.8cm, minimum width=1.7cm, font=\small},
+        arr/.style={-stealth, very thick, oc-gray-7},
+        lab/.style={font=\footnotesize},
+        brace/.style={decorate, decoration={brace, amplitude=4pt, mirror}, thick, oc-gray-7},
+    ]
+        % ---------- top row: message -> encoder -> codeword ----------
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (m\i) at (0.5*\i, 0) {\b};
+        }
+        \node[lab, above=2pt] at (0.75, 0.25) {message $m \in \Sigma^k$};
+ 
+        \node[proc] (enc) at (3.9, 0) {Encoder};
+ 
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (c\i) at (6.4+0.5*\i, 0) {\b};
+        }
+        \foreach \b [count=\i from 4] in {0,1,0} {
+            \node[red] (c\i) at (6.4+0.5*\i, 0) {\b};
+        }
+        \node[lab, above=2pt] at (7.9, 0.25) {codeword $c \in \Sigma^n$};
+        \draw[brace] (8.15, -0.32) -- node[lab, below=4pt] {$n-k$ redundant symbols} (9.65, -0.32);
+ 
+        \draw[arr] (m3.east) -- (enc.west);
+        \draw[arr] (enc.east) -- (c0.west);
+ 
+        % ---------- noisy channel ----------
+        \draw[-stealth, very thick, oc-red-7, decorate, decoration={snake, amplitude=1.5pt, segment length=7pt, post length=4pt}]
+            (7.4, -1.05) -- node[right=4pt, lab, text=oc-red-8] {noisy channel} (7.4, -2.05);
+ 
+        % ---------- bottom row: received word -> decoder -> message ----------
+        \foreach \b [count=\i from 0] in {1,0,0,1} {
+            \ifnum\i=2
+                \node[err] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+            \else
+                \node[msg] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+            \fi
+        }
+        \foreach \b [count=\i from 4] in {0,1,0} {
+            \node[red] (y\i) at (6.4+0.5*\i, -2.6) {\b};
+        }
+        \node[lab, below=2pt] at (7.9, -2.85) {received word $y \in \Sigma^n$};
+        \draw[-stealth, thick, oc-red-8] (6.45, -1.75) node[above, lab, text=oc-red-8, inner sep=1pt] {error} -- (y2.north west);
+ 
+        \node[proc] (dec) at (3.9, -2.6) {Decoder};
+ 
+        \foreach \b [count=\i from 0] in {1,0,1,1} {
+            \node[msg] (r\i) at (0.5*\i, -2.6) {\b};
+        }
+        \node[lab, below=2pt] at (0.75, -2.85) {recovered message $m$};
+ 
+        \draw[arr] (y0.west) -- (dec.east);
+        \draw[arr] (dec.west) -- (r3.east);
+ 
+        % the message is the same on both sides
+        \draw[densely dashed, thick, oc-blue-7] (0.75, -0.3) -- node[right, lab, text=oc-blue-8] {same} (0.75, -2.3);
+    \end{tikzpicture}
+    \caption{Transmission over a noisy channel with an error-correcting code. The encoder expands the message of $k = 4$ symbols into a codeword of $n = 7$ symbols by adding $n - k = 3$ redundant symbols. The channel corrupts one symbol of the codeword, and the decoder still recovers the original message from the received word.}
+    \label{fig:ecc-channel}
+\end{figure}
+ 
+Now we can formalize the notion of a code and its encoding function.
+\begin{definition}[Code]\label{def:code}
+  A \emph{code} of block length $n$ over an alphabet $\Sigma$ is a subset $\code \subseteq \Sigma^n$, whose elements are called \emph{codewords}. 
+  We write $\#\code$ for the number of codewords and $k := \log_{\#\Sigma} \#\code$ for the number of message symbols. 
+  An \emph{encoding} for $\code$ is an injective map $\Sigma^k \to \Sigma^n$ whose image is $\code$.
+\end{definition}
+
+\subsubsection{Hamming Metric}
+
+Now we need to capture the notion of how much two messages differ.
+We employ the notion of the \emph{Hamming distance}.
+
+\begin{definition}[Hamming distance]\label{def:hamming-distance}
+  Given $\mathbf{x}, \mathbf{y} \in \Sigma^n$, the \emph{Hamming distance} between $\mathbf{x}$ and $\mathbf{y}$, denoted as $\Delta(\mathbf{x}, \mathbf{y})$, is defined to be the number of positions in which they differ. Formally, $\Delta(\mathbf{x}, \mathbf{y}) := \#\{i \in [n]: x_i \neq y_i\}$.
+\end{definition}
+
+\begin{example}
+    We provide a small example to understand the Hamming distance. Let $\Sigma := \{0,1\}$ be a binary alphabet and assume $\mathbf{x} := 00000$ and $\mathbf{y} := 10100$.
+    Then, $\Delta(\mathbf{x}, \mathbf{y}) = 2$ since $\mathbf{x}$ and $\mathbf{y}$ differ on positions 1 and 3.
+\end{example}
+
+\begin{exercise}
+    Check that Hamming distance is indeed a valid \emph{distance function}, \emph{i.e.}, that $(\Sigma^n,\Delta)$ is a metric space.
+    Recall that it is the case if four conditions are satisfied:
+    \begin{enumerate}
+      \item $\Delta(\mathbf{x},\mathbf{x}) = 0$ for all $\mathbf{x} \in \Sigma^n$;
+      \item $\Delta(\mathbf{x},\mathbf{y}) > 0$ for all $\mathbf{x} \neq \mathbf{y} \in \Sigma^n$ \commentgray{positivity};
+      \item $\Delta(\mathbf{x}, \mathbf{y}) = \Delta(\mathbf{y}, \mathbf{x})$ for all $\mathbf{x},\mathbf{y} \in \Sigma^n$ \commentgray{symmetry};
+      \item $\Delta(\mathbf{x},\mathbf{z}) \leq \Delta(\mathbf{x},\mathbf{y}) + \Delta(\mathbf{y},\mathbf{z})$ for all $\mathbf{x},\mathbf{y},\mathbf{z} \in \Sigma^n$ \commentgray{triangle inequality}.
+    \end{enumerate}
+\end{exercise}
+
+Hamming distance alone does not give you the full picture. For example, two vectors of length $1000$ that differ in $5$ places are much more similar than two vectors of length $10$ that also differ in $5$ places. Because of this, it is a standard practice to normalize the distance by the block length.
+
+\begin{definition}[Relative Hamming distance]\label{def:rel-distance}
+  Let $\mathbf{x}, \mathbf{y} \in \Sigma^n$. The \emph{relative Hamming distance} between $\mathbf{x}$ and $\mathbf{y}$, denoted as $\delta(\mathbf{x}, \mathbf{y})$, is defined to be the Hamming distance between $\mathbf{x}$ and $\mathbf{y}$ divided by $n$:
+  \begin{equation*}
+    \delta(\mathbf{x}, \mathbf{y}) = \frac{1}{n} \Delta(\mathbf{x}, \mathbf{y}).
+  \end{equation*}
+\end{definition}
+
+\subsubsection{Minimum Distance}
+
+While comparing individual vectors is helpful, a code's effectiveness depends on the entire set. Specifically, we care about the distance between codewords, where the worst-case spacing between any two codewords is the key metric.
+\begin{definition}[Minimum distance]\label{def:min-distance}
+  Let $\code\subseteq \Sigma^n$ be a code. The \emph{minimum distance} of $\code$, denoted by $d_{\min}(\code)$, is defined as 
+  \begin{equation*}
+    d_{\min}(\code) = \min_{\mathbf{x}\neq \mathbf{y} \in \code} \Delta(\mathbf{x}, \mathbf{y})
+  \end{equation*}
+    and the \emph{relative minimum distance} of $\code$ is $\mu(\code) := \frac{1}{n} d_{\min}(\code)$.
+\end{definition}
+
+The minimum distance is the foundation of error correction. If $d_{\min}(\code) = d$, introducing fewer than $d$ errors will never result in another valid codeword. Furthermore, with fewer than $d/2$ errors, the corrupted string remains strictly closer to the original codeword than to any other. Essentially, a larger minimum distance forces codewords further apart, so the original codeword can be recovered as long as fewer than $d/2$ errors occur.
+Another way to write this fact is as follows.
+\begin{proposition}\label{prop:unique-decoding-distance}
+    Let $\code \subseteq \Sigma^n$ be a code. For every $\mathbf{w} \in \Sigma^n$ there exists at most one codeword $\mathbf{x} \in \code$ such that $\delta(\mathbf{x},\mathbf{w}) < \mu(\code)/2$.
+\end{proposition}
+
+\begin{proof}
+    Recall from the previous Exercise that $\Delta$ (and consequently $\delta$) satisfies the triangle inequality: $\delta(\mathbf{x}, \mathbf{x}') \leq \delta(\mathbf{x}, \mathbf{w}) + \delta(\mathbf{w}, \mathbf{x}')$.
+    Now suppose, for contradiction, that two distinct codewords $\mathbf{x}, \mathbf{x}' \in \code$ satisfy $\delta(\mathbf{x}, \mathbf{w}) < \mu(\code)/2$ and $\delta(\mathbf{x}', \mathbf{w}) < \mu(\code)/2$.
+    Then
+    \begin{equation*}
+        \delta(\mathbf{x}, \mathbf{x}') \leq \delta(\mathbf{x}, \mathbf{w}) + \delta(\mathbf{w}, \mathbf{x}') < \frac{\mu(\code)}{2} + \frac{\mu(\code)}{2} = \mu(\code).
+    \end{equation*}
+    However, $\mathbf{x}$ and $\mathbf{x}'$ are distinct codewords, so $\delta(\mathbf{x}, \mathbf{x}') \geq \mu(\code)$ by \Cref{def:min-distance}, which is a contradiction.
+    \Cref{fig:unique-decoding-proof} illustrates the proof: the sides of the triangle with vertices $\mathbf{x}$, $\mathbf{w}$, $\mathbf{x}'$ cannot both be shorter than $\mu(\code)/2$.
+\end{proof}
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        ball/.style={draw=oc-blue-6, thick, densely dashed, fill=oc-blue-1},
+        cw/.style={circle, fill=oc-blue-8, inner sep=1.6pt},
+        word/.style={circle, fill=oc-red-7, inner sep=1.6pt},
+        lab/.style={font=\footnotesize},
+        tag/.style={lab, fill=white, rounded corners=1pt, inner sep=1.5pt},
+    ]
+        \def\r{2}
+        \coordinate (x) at (0, 0);
+        \coordinate (y) at (4, 0);
+        \coordinate (w) at (0.5, 1.2);
+
+        \draw[ball] (x) circle (\r);
+        \draw[ball] (y) circle (\r);
+
+        % the triangle x, w, x'
+        \draw[very thick, oc-gray-8] (x) -- node[tag, below=3pt] {$\delta(\mathbf{x}, \mathbf{x}') \geq \mu(\code)$} (y);
+        \draw[very thick, oc-teal-7] (x) -- node[tag, left=2pt, text=oc-teal-9, fill=none] {$< \mu(\code)/2$} (w);
+        \draw[very thick, oc-red-7, densely dotted] (w) -- node[tag, above=3pt, sloped, text=oc-red-8, pos=0.74] {$> \mu(\code)/2$} (y);
+
+        % radius of a ball
+        \draw[thick, oc-blue-7, -stealth] (y) -- node[lab, below, sloped, text=oc-blue-8] {$\mu(\code)/2$} ++(-60:\r);
+
+        \node[cw, label={[lab]below left:$\mathbf{x}$}] at (x) {};
+        \node[cw, label={[lab]above right:$\mathbf{x}'$}] at (y) {};
+        \node[word, label={[lab]above:$\mathbf{w}$}] at (w) {};
+    \end{tikzpicture}
+    \caption{The triangle inequality behind the proof. Two distinct codewords $\mathbf{x}, \mathbf{x}' \in \code$ are at relative distance at least $\mu(\code)$. If the word $\mathbf{w}$ is at distance less than $\mu(\code)/2$ from $\mathbf{x}$, then its distance from $\mathbf{x}'$ must exceed $\mu(\code)/2$, since otherwise the two short sides of the triangle would sum to less than the third one.}
+    \label{fig:unique-decoding-proof}
+\end{figure}
+
+Since the minimum distance is a central property of codes, we illustrate its meaning once more. 
+Specifically, consider the \Cref{fig:unique-decoding}.
+Suppose that a codeword $\mathbf{x}$ is corrupted into a word $\mathbf{w}$.
+If fewer than a $\mu(\code)/2$ fraction of the symbols are corrupted, then $\mathbf{w}$ stays inside the ball of $\mathbf{x}$, and $\mathbf{x}$ is the only codeword that close to $\mathbf{w}$.
+If more symbols are corrupted, then $\mathbf{w}$ may land in the ball of another codeword, and the original codeword can no longer be identified.
+For this reason, $\mu(\code)/2$ is called the \emph{unique decoding radius} of $\code$.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        ball/.style={draw=oc-gray-5, thick, densely dashed, fill=oc-gray-1},
+        cw/.style={circle, fill=oc-gray-7, inner sep=1.3pt},
+        src/.style={circle, fill=oc-blue-8, inner sep=1.6pt},
+        word/.style={circle, fill=oc-red-7, inner sep=1.6pt},
+        lab/.style={font=\footnotesize},
+    ]
+        % codewords with their balls of radius mu/2 = 0.6
+        \newcommand{\codewords}{
+            \foreach \name/\px/\py in {n1/1.3/0.35, n2/-0.9/1.5, n3/-1.7/-0.4, n4/0.3/-1.75, n5/1.9/-1.4, n6/1.6/1.75} {
+                \coordinate (\name) at (\px, \py);
+                \draw[ball] (\name) circle (0.6);
+                \node[cw] at (\name) {};
+            }
+            \coordinate (x) at (0,0);
+            \draw[draw=oc-blue-6, thick, densely dashed, fill=oc-blue-1] (x) circle (0.6);
+        }
+
+        % ================= (a) few errors =================
+        \begin{scope}[scale=1.1]
+            \codewords
+            \fill[oc-cyan-2, opacity=0.25] (x) circle (0.5);
+            \draw[oc-cyan-6, thick] (x) circle (0.5);
+            \coordinate (w) at (-0.33, 0.33);
+            \draw[very thick, oc-red-7, -stealth, shorten >=1.5pt] (x) -- (w);
+            \node[src, label={[lab, label distance=-2pt]below right:$\mathbf{x}$}] at (x) {};
+            \node[word, label={[lab, label distance=-2pt]above left:$\mathbf{w}$}] at (w) {};
+            \draw[thick, oc-gray-8, -stealth] (n5) -- ++(0:0.6);
+            \node[lab, below] at (1.9, -2.0) {$\mu(\code)/2$};
+            \node[lab] at (0, -2.95) {(a) fewer than $\mu(\code)/2$ errors};
+        \end{scope}
+
+        % ================= (b) many errors =================
+        \begin{scope}[xshift=5.9cm, scale=1.1]
+            \codewords
+            \foreach \n in {n1, n2, n3, n4} {
+                \draw[draw=oc-red-5, thick, densely dashed, fill=oc-red-1] (\n) circle (0.6);
+                \node[cw] at (\n) {};
+            }
+            \fill[oc-red-4, opacity=0.25] (x) circle (1.25);
+            \draw[oc-red-7, thick] (x) circle (1.25);
+            \coordinate (w) at (0.96, 0.26);
+            \draw[very thick, oc-red-7, -stealth, shorten >=1.5pt] (x) -- (w);
+            \node[src, label={[lab]below left:$\mathbf{x}$}] at (x) {};
+            \node[word, label={[lab, label distance=-2pt]below:$\mathbf{w}$}] at (w) {};
+            \node[lab, right=1pt] at (n1) {$\mathbf{x}'$};
+            \node[lab] at (0, -2.95) {(b) more than $\mu(\code)/2$ errors};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Corrupting a codeword $\mathbf{x}$. Dots are codewords, and the dashed ball around each one has relative radius $\mu(\code)/2$; the balls never overlap (due to the definition of $\mu(\code)$). The solid ball around $\mathbf{x}$ contains all words that the corruption can produce. In (a), fewer than $\mu(\code)/2$ symbols are corrupted, so every such word $\mathbf{w}$ stays inside the ball of $\mathbf{x}$ and decodes to $\mathbf{x}$. In (b), the corruption is larger and reaches into the balls of other codewords: the word $\mathbf{w}$ shown is closer to $\mathbf{x}'$ than to $\mathbf{x}$, so the decoder returns the wrong codeword.}
+    \label{fig:unique-decoding}
+\end{figure}
+
+\begin{example}\label{ex:repetition}
+  The \emph{Repetition code} over $\mathbb{F}_2$ of block length $3$ repeats a single bit three times: $\code=\{000, 111\}$. Here $k=1$ and $d_{\min}(\code)=3$. If one bit of a codeword is flipped, e.g. $000 \mapsto 100$, the received word is still closer to $000$ than to $111$, so the error can be corrected since $d/2 = 3/2>1$. The opposite: if two bits are flipped, e.g. $000 \mapsto 110$, the received word is closer to $111$, and decoding fails since two errors are not fewer than $d/2$.
+\end{example}
+
+\subsubsection{Linear Error-Correcting Codes}
+
+While calculating $d_{\min}(\code)$ directly from the definition requires comparing every possible pair, practical codes offer a much faster shortcut. To introduce it, we first need to notion of the Hamming weight.
+
+\begin{definition}[Hamming weight]\label{def:hamming-weight}
+  The \emph{Hamming weight} of a vector $\mathbf{x} \in \Sigma^n$, denoted by $\|\mathbf{x}\|_0$, is defined as the number of non-zero symbols in $\mathbf{x}$.
+\end{definition}
+
+When $\Sigma$ is a field\footnote{Technically, $\Sigma$ being a group also suffices, but in practice we operate over fields.}, these two concepts are directly linked by the equation $\Delta(\mathbf{u}, \mathbf{v}) = \|\mathbf{u} - \mathbf{v}\|_0$, which means that two vectors differ precisely in the coordinates where their difference is non-zero. 
+
+In practice, cryptographic codes are never just arbitrary subsets of $\Sigma^n$ --- they are built with underlying algebraic structure. Assuming a code is closed under addition and scalar multiplication imposes virtually no practical limitations, yet provides a lot of nice conveniences.
+
+\begin{definition}[Linear code]\label{def:linear-code}
+  Let $\mathbb{F}_q$ be a finite field. A code $\code \subseteq \mathbb{F}_q^n$ is a \emph{linear code} if it is a linear subspace of $\mathbb{F}_q^n$. If $\code$ has dimension $k$ and minimum distance $d$, we denote it as an $[n,k,d]_q$ code.
+\end{definition}
+
+\begin{exercise}
+  Show that any linear encoding function $\mathbb{F}^k \to \code$ can be represented as a matrix operation $\mathbf{x} \mapsto \mathbf{G}\mathbf{x}$ for some $\mathbf{G} \in \mathbb{F}^{n \times k}$.
+  What is $\text{rank}(\mathbf{G})$?
+\end{exercise}
+
+Now let us revisit some of the older notions and simplify them given that $\code$ is a linear space now. 
+Since the difference of two codewords of a linear code is again a codeword, the minimisation over all pairs collapses into a minimisation over single codewords.
+
+\begin{proposition}\label{prop:dist-eq-weight}
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code. Then
+  \begin{equation*}
+    \mu(\code) = \frac{1}{n}\cdot \min_{0 \neq \mathbf{x} \in \code} \|\mathbf{x}\|_0.
+  \end{equation*}
+\end{proposition}
+
+\begin{proof}
+  Since $\mu(\code) = \frac{1}{n} d_{\min}(\code)$, it suffices to show that $d_{\min}(\code)$ equals the minimum weight of a non-zero codeword.
+
+  First, we show that $d_{\min}(\code)$ is at most the minimum weight. Let $\mathbf{x}$ be a non-zero codeword of minimum weight. Since $\code$ is a linear subspace, $0 \in \code$, and the distance from $\mathbf{x}$ to $0$ equals its weight. Hence $d_{\min}(\code) \leq \Delta(0, \mathbf{x}) = \|\mathbf{x}\|_0$.
+
+  Next, we show that $d_{\min}(\code)$ is at least the minimum weight. Let $\mathbf{x} \neq \mathbf{y} \in \code$ be such that $\Delta(\mathbf{x}, \mathbf{y}) = d_{\min}(\code)$. By linearity, $\mathbf{x} - \mathbf{y} \in \code$, and it is non-zero since $\mathbf{x} \neq \mathbf{y}$. The non-zero symbols of $\mathbf{x} - \mathbf{y}$ occur exactly in the positions where the two codewords differ, so $\|\mathbf{x} - \mathbf{y}\|_0 = \Delta(\mathbf{x}, \mathbf{y}) = d_{\min}(\code)$. Therefore the minimum weight of a non-zero codeword is at most $d_{\min}(\code)$.
+\end{proof}
+
+We also define the measure of how the given error-correcting code extends the message space.
+
+\begin{definition}[Rate]\label{def:rate}
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code of dimension $k$. The \emph{rate} of $\code$ is defined as $\rho(\code) := k/n$.
+\end{definition}
+
+A codeword consists of $n$ symbols but carries only $k$ symbols of information; thus $\rho$ is the fraction of each codeword that is actual payload. The rate and the relative minimum distance pull in opposite directions: adding redundancy lowers the rate but makes room for codewords that lie further apart.
+
+\begin{example}[Parity code]\label{ex:parity}
+  The \emph{parity code} $\code \subseteq \mathbb{F}_2^n$ consists of all vectors with an even number of ones:
+  \begin{equation*}
+    \code = \left\{ \mathbf{c} \in \mathbb{F}_2^n : c_1 + c_2 + \dots + c_n = 0 \right\}.
+  \end{equation*}
+  To encode a message $\mathbf{m} \in \mathbb{F}_2^{n-1}$, we append a single \emph{parity bit} equal to the sum of the message bits.
+  For example, for $n = 4$, the message $101$ is encoded as $1010$, and the message $111$ as $1111$.
+
+  The code $\code$ is linear, and its dimension is $n-1$, since the first $n-1$ bits can be chosen freely and determine the last one.
+  A non-zero codeword cannot have weight $1$, and $110\ldots0 \in \code$ has weight exactly $2$, so $d_{\min}(\code) = 2$ by \Cref{prop:dist-eq-weight}.
+  Thus, $\code$ is an $[n, n-1, 2]_2$ code with rate $\rho(\code) = 1 - 1/n$.
+
+  Flipping one bit of a codeword makes the number of ones odd, so a single error is always \emph{detected}.
+  However, it cannot be \emph{corrected}: the received word $1110$ is at distance $1$ from both $1010$ and $1111$, so we cannot tell which codeword was sent.
+\end{example}
+
+Intuitively, rate and distance pull in opposite directions: every symbol of a codeword is spent either on carrying the message or on keeping codewords apart.
+The following bound gives the extent of such a trade-off: to guarantee distance $d$, a code must dedicate at least $d-1$ of its $n$ symbols to redundancy.
+
+\begin{proposition}[Singleton bound]\label{prop:singleton}
+  Every $[n,k,d]_q$ code satisfies $k \leq n-d+1$, equivalently $\#\code \leq q^{n-d+1}$.
+\end{proposition}
+
+\begin{proof}
+  Delete the first $d-1$ symbols of every codeword.
+  Two distinct codewords differ in at least $d$ positions, so they still differ in at least one of the remaining $n-d+1$ positions.
+  Hence, the shortened codewords are pairwise distinct strings of length $n-d+1$ over an alphabet of size $q$, and there are at most $q^{n-d+1}$ such strings.
+  Therefore, $\#\code \leq q^{n-d+1}$, and since $\#\code = q^k$, we get $k \leq n-d+1$.
+\end{proof}
+
+Codes attaining this bound, that is, codes with $d = n-k+1$, are called \emph{maximum distance separable} (MDS).
+They have the largest distance possible for their rate: no redundant symbol is wasted.
+Equivalently, any $k$ symbols of a codeword of an MDS code already determine the whole codeword, so the message can be recovered even if any $n-k$ symbols are erased.
+
+\begin{definition}[MDS code]\label{def:mds}
+  An $[n,k,d]_q$ code is called \textbf{maximum distance separable} (MDS) if $d = n-k+1$, that is, if it attains the Singleton bound.
+\end{definition}
+
+\begin{example}
+  Both codes above are MDS: the repetition code of length $n$ is an $[n,1,n]_2$ code and the parity code is an $[n,n-1,2]_2$ code, and in both cases $d = n-k+1$. On the other hand, a $[7,4,3]_2$ code is not MDS, since $n-k+1 = 4 > 3$.
+\end{example}
+
+\subsection{Reed-Solomon Code}
+
+We now introduce the primary code that forms the foundation for the rest of this section.
+Turns out (as with many previously considered zero-knowledge protocols) it is best to first encode data into polynomials and store \emph{their evaluations in the large domain} as a codeword.
+Specifically, given a message $(m_i)_{i \in [k]}$ in $\mathbb{F}^k$ (over some finite field $\mathbb{F}$), we encode this message into the polynomial given by $f = \sum_{i \in [k]}m_iT^i \in \mathbb{F}[T]^{<k}$ (\emph{i.e.}, we put data into coefficients of a polynomial).
+Then, to form the codeword, we fix the \emph{evaluation domain} $\Omega = (\omega_i)_{i \in [n]} \subseteq \mathbb{F}^n$ (for $n>k$) and form the codeword as $(f(\omega_i))_{i \in [n]}$ (\emph{i.e.}, evaluation of a polynomial $f$ at $n$ points of evaluation domain $\Omega$).
+The idea of decoding the codeword closely follows the idea of Shamir secret sharing (previously considered in \Cref{subsec:shamir-secret-sharing}): suppose some number of evaluations gets corrupted.
+Since the polynomial is of degree $k-1$, as long as this number is low, we can still interpolate the polynomial and recover the polynomial $f$.
+The described idea is the \emph{Reed-Solomon Codes}!
+
+Now we formalize this concept using the previously defined machinery.
+First, it is conventional to work with the so-called \emph{restrictions}.
+Given a polynomial $f \in \mathbb{F}[T]^{<k}$, the restriction to the domain $\Omega \subseteq \mathbb{F}$ is $\overline{f}: \Omega \to \mathbb{F}$.
+Simply said, instead of viewing polynomial as a function $\mathbb{F} \to \mathbb{F}$, we inspect only it on inputs from the domain $\Omega$.
+Clearly, this restriction can be treated as simply evaluations over $\Omega$, as was described just above.
+
+\begin{remark}
+  If you feel confused about the notion of restrictions, feel free to treat $\overline{\cdot}$ as the map $\overline{f} = (f(\omega_0),\dots,f(\omega_{n-1}))$ given $\Omega := (\omega_0,\dots,\omega_{n-1})$.
+\end{remark}
+
+Now we give the definition of Reed-Solomon codes.
+
+\begin{definition}[Reed-Solomon Code]\label{def:rs}
+    The \textbf{Reed-Solomon code} over the finite field $\mathbb{F}$, evaluation domain $\Omega \subseteq \mathbb{F}$ (with $\#\Omega = n > k$), and degree $k$, is the linear code
+    \begin{equation*}
+        \mathsf{RS}[\mathbb{F},\Omega,k] := \{\overline{f}: \Omega \to \mathbb{F}, \; f \in \mathbb{F}[T]^{<k}\}.
+    \end{equation*}
+\end{definition}
+
+Let us consider some concrete example.
+
+\begin{example}\label{ex:rs}
+    Consider the code $\mathsf{RS}[\mathbb{F}_7, \Omega, 3]$ with $\Omega = \mathbb{F}_7 = \{0, 1, \dots, 6\}$, so that $n = 7$ and $k = 3$.
+    The message $(1, 2, 3)$ corresponds to the polynomial $f = 1 + 2T + 3T^2$, and the message $(4, 0, 2)$ to $g = 4 + 2T^2$.
+    Evaluating both polynomials over $\Omega$ gives the codewords
+    \begin{equation*}
+        \overline{f} = (1, 6, 3, 6, 1, 2, 2), \qquad \overline{g} = (4, 6, 5, 1, 1, 5, 6),
+    \end{equation*}
+    shown in \Cref{fig:rs-example}.
+    The two codewords agree only at the points $1$ and $4$.
+    This is not a coincidence: $f - g = (T-1)(T-4)$ is a non-zero polynomial of degree less than $k = 3$, so it has at most $k - 1 = 2$ roots.
+    Hence, $\overline{f}$ and $\overline{g}$ differ in $5$ of the $7$ positions.
+\end{example}
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        x=0.8cm, y=0.5cm,
+        lab/.style={font=\footnotesize},
+        cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+    ]
+        % ---------- plot over F_7 ----------
+        \foreach \v in {0,...,6} {
+            \draw[oc-gray-3] (\v, 0) -- (\v, 6);
+            \draw[oc-gray-3] (0, \v) -- (6, \v);
+            \node[lab, left=3pt] at (0, \v) {\v};
+        }
+        \node[lab, rotate=90] at (-1, 3) {value in $\mathbb{F}_7$};
+        % agreement columns
+        \foreach \v in {1, 4} {
+            \fill[oc-orange-2, opacity=0.6] (\v-0.5, -0.5) rectangle (\v+0.5, 6.5);
+        }
+        % g: teal squares, f: blue circles
+        \foreach \px/\py in {0/4, 1/6, 2/5, 3/1, 4/1, 5/5, 6/6} {
+            \node[rectangle, fill=oc-teal-6, inner sep=2.6pt] at (\px, \py) {};
+        }
+        \foreach \px/\py in {0/1, 1/6, 2/3, 3/6, 4/1, 5/2, 6/2} {
+            \node[circle, fill=oc-blue-7, inner sep=1.7pt] at (\px, \py) {};
+        }
+
+        % ---------- codewords ----------
+        \foreach \v [count=\i from 0] in {1,6,3,6,1,2,2} {
+            \node[cell, fill=oc-blue-1] at (\i, -1.6) {\v};
+        }
+        \foreach \v [count=\i from 0] in {4,6,5,1,1,5,6} {
+            \node[cell, fill=oc-teal-1] at (\i, -2.6) {\v};
+        }
+        \foreach \v in {1, 4} {
+            \draw[oc-orange-7, very thick] (\v-0.5, -3.1) rectangle (\v+0.5, -1.1);
+        }
+        \node[lab, left=3pt, text=oc-blue-8] at (-0.5, -1.6) {$\overline{f}$};
+        \node[lab, left=3pt, text=oc-teal-8] at (-0.5, -2.6) {$\overline{g}$};
+        \foreach \v in {0,...,6} {
+            \node[lab] at (\v, -3.7) {\v};
+        }
+        \node[lab] at (3, -4.7) {evaluation point $\omega \in \Omega$};
+    \end{tikzpicture}
+    \caption{Two codewords of $\mathsf{RS}[\mathbb{F}_7, \Omega := \mathbb{F}_7, 3]$: the restrictions of $f = 1 + 2T + 3T^2$ (blue circles) and $g = 4 + 2T^2$ (teal squares). The two codewords agree only at the points $1$ and $4$, which are the roots of $f - g$.}
+    \label{fig:rs-example}
+\end{figure}
+
+Now let us verify that Reed-Solomon code is indeed a \emph{linear} code.
+It suffices to check that $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is a linear subspace of $\mathbb{F}^n$ (see \Cref{def:linear-subspace}).
+
+\begin{proposition}\label{prop:rs-linear}
+    The Reed-Solomon code $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is a linear code of length $n = \#\Omega$ and dimension $k$.
+\end{proposition}
+
+\begin{proof}
+    Let $a \in \mathbb{F}$ and $f, g \in \mathbb{F}[T]^{<k}$.
+    The polynomials $f + g$ and $af$ also have degree less than $k$, and restricting to $\Omega$ commutes with both operations:
+    \begin{equation*}
+        \overline{f} + \overline{g} = \overline{f + g}, \qquad a \overline{f} = \overline{af}.
+    \end{equation*}
+    Therefore, $\mathsf{RS}[\mathbb{F}, \Omega, k]$ is closed under addition and scalar multiplication, so it is a linear code.
+
+    For the dimension, note that the restriction map $f \mapsto \overline{f}$ is linear and injective: if $\overline{f} = 0$, then $f$ has $n > k - 1$ roots, which for a polynomial of degree less than $k$ is only possible if $f = 0$.
+    Hence, the dimension of the code equals the dimension of $\mathbb{F}[T]^{<k}$, which is $k$.
+\end{proof}
+
+\begin{proposition}\label{prop:rs-distance}
+  The Reed-Solomon code $\mathsf{RS}[\mathbb{F}, \Omega, k]$ with $n = \#\Omega$ and $q = \#\mathbb{F}$ is an $[n,k,n-k+1]_q$ code. That is, it attains the Singleton bound.
+\end{proposition}
+\begin{proof}
+  Let us fix arbitrary distinct $f, g \in \mathbb{F}[T]^{<k}$. Then, the polynomial $f - g$ is also a non-zero polynomial of degree at most $k-1$.
+
+  Note that $\|\overline{f} - \overline{g}\|_0 = \Delta(\overline{f}, \overline{g})$. The weight of $\overline{f} - \overline{g}$ is $n$ minus the number of zeroes in $\overline{f} - \overline{g}$, which is equal to $n$ minus the number of roots that $f - g$ has in $\Omega$. That is,
+  \begin{equation*}
+    \Delta(\overline{f}, \overline{g}) = n - \#\{\omega \in \Omega : f(\omega) = g(\omega)\}.
+  \end{equation*}
+  Since $f - g$ is a non-zero polynomial of degree at most $k-1$, by \Cref{cor:root-count} it has at most $k-1$ roots in $\mathbb{F}$.
+  Therefore, we have that the weight of $\overline{f} - \overline{g}$ is at least $n-(k-1)=n-k+1$. Therefore $d_{\min} \geq n-k+1$, and since \Cref{prop:singleton} implies that $d_{\min} \leq n-k+1$, we have that $d_{\min} = n-k+1$.
+
+  The argument above also shows that the distinct polynomials $f$ and $g$ are mapped to distinct codewords $\overline{f}$ and $\overline{g}$. Therefore, the code contains $q^k$ codewords, and has dimension $k$.
+\end{proof}
+
+Consequently, the \emph{rate} of $\mathsf{RS}[\mathbb{F},\Omega,k]$ is $\rho(\mathsf{RS}[\mathbb{F},\Omega,k]) = k/n$.
+
+\begin{remark}
+  By \Cref{prop:rs-distance}, Reed-Solomon codes are MDS codes. In particular,
+  $\mu = 1 - \rho + 1/n$, so lowering the rate directly increases the relative distance (here, $\mu := \mu(\mathsf{RS}[\mathbb{F},\Omega,k])$ and $\rho := \rho(\mathsf{RS}[\mathbb{F},\Omega,k])$).
+\end{remark}
+
+\begin{remark}
+  Since in practical applications $n$ is very large, we implicitly use the fact $\mu \approx 1-\rho$ for $\mu := \mu(\mathsf{RS}[\mathbb{F},\Omega,k])$ and $\rho := \rho(\mathsf{RS}[\mathbb{F},\Omega,k])$.
+\end{remark}
+
+\subsection{Proximity to a Code}\label{subsec:proximity}
+
+\subsubsection{List Decoding}\label{subsubsec:list-decoding}
+
+The concepts discussed so far belong to classical coding theory, where the main objective is to recover the original message from a corrupted codeword. In our context, however, the requirement is weaker: the verifier does not actually need to know \emph{which} polynomial the prover committed to, but only whether the committed vector is close to \emph{some} valid codeword. To formalize this, we evaluate the distance between an arbitrary vector and the code as an entire set.
+
+\begin{definition}[Distance to a code]\label{def:dist-to-code}
+    Let $\code \subseteq \Sigma^n$ be a code and $\mathbf{w} \in \Sigma^n$. The distance from
+    $\mathbf{w}$ to $\code$ is
+    \begin{equation*}
+        \Delta(\mathbf{w}, \code) := \min_{\mathbf{x} \in \code} \Delta(\mathbf{w}, \mathbf{x}),
+    \end{equation*}
+    and the relative distance is $\delta(\mathbf{w}, \code) := \frac{1}{n}\Delta(\mathbf{w}, \code)$.
+\end{definition}
+
+For convenience, we also use the terms \emph{$\delta$-close} and \emph{$\delta$-far}.
+Specifically, $\mathbf{w} \in \mathbb{F}^n$ is called \emph{$\delta$-close} to $\code$ if $\delta(\mathbf{w}, \code) \leq \delta$ and \emph{$\delta$-far} otherwise.
+
+Using this definition, it is also natural to consider the set of codewords that are \emph{$\delta$-close} to the given word.
+We give the following definition.
+\begin{definition}
+  Let $\code$ be an $[n,k,d]$ linear code. For a fixed $\mathbf{w} \in \mathbb{F}^n$ and $\delta \in [0,1]$, define
+  \begin{equation*}
+      \mathsf{List}[\mathbf{w},\code,\delta] := \{\mathbf{x} \in \code: \delta(\mathbf{x}, \mathbf{w}) \leq \delta\}.
+  \end{equation*}
+\end{definition}
+
+In many cryptographic applications, we are interested in the size of this list. 
+Fortunately, we can already give an answer for relatively small $\delta$'s.
+
+\begin{example}
+    By \Cref{prop:unique-decoding-distance}, if $\delta < \mu(\code)/2$, there is at most one codeword that decodes the given word. Consequently, $\#\mathsf{List}(\mathbf{w},\code,\delta) \leq 1$.
+\end{example}
+
+Naturally, we would like to estimate the size of $\mathsf{List}[\mathbf{w},\code,\delta]$ when $\delta \geq \mu(\code)/2$.
+However, turns out that this situation becomes very tricky and our knowledge is quite limited.
+The following lemma answers the question of what happens up to $1-\sqrt{1-\mu(\code)}$, known as \emph{the Johnson bound}.
+
+\begin{theorem}[Johnson bound]\label{th:johnson-bound}
+  For a code $\code \subseteq \mathbb{F}^n$, fixed $\mathbf{w} \in \mathbb{F}^n$, and distance parameter $0 < \delta < 1-\sqrt{1-\mu(\code)}$, we have
+  \begin{equation*}
+    \#\mathsf{List}[\mathbf{w},\code,\delta] \leq 1/\varepsilon_{\delta} \; \text{for} \; \varepsilon_{\delta} = 2\sqrt{1-\mu(\code)}(1-\sqrt{1-\mu(\code)}-\delta).
+  \end{equation*}
+\end{theorem}
+
+Note that by analyzing the expression $1/\varepsilon_{\delta}$, this bound only makes sense for $\delta < 1-\sqrt{1-\mu(\code)}$ since the expression $\varepsilon_{\delta} \to 0$ as $\delta \to 1-\sqrt{1-\mu(\code)}$.
+
+Finally, we can also give an estimate of the size of $\mathsf{List}[\mathbf{w},\code,\delta]$ when $\delta \geq \mu(\code)$.
+Indeed, in the worst case we expect the number of codewords to be fairly large. 
+One can show the following fact which we leave as an exercise.
+
+\begin{exercise}
+  Let $\code \subseteq \mathbb{F}^n$ be a linear code over a field of size $q$, and let $\delta \geq \mu(\code)$.
+  Show that there exists a word $\mathbf{w} \in \mathbb{F}^n$ such that $\#\mathsf{List}[\mathbf{w}, \code, \delta] \geq q$.
+\end{exercise}
+
+The biggest question though is ``what happens between $1-\sqrt{1-\mu(\code)}$ and $\mu(\code)$?''
+Turns out that we cannot give a general answer: this largely depends on the specifics of $\code$.
+That said, the size of $\mathsf{List}[\mathbf{w}, \code, \delta]$ as a function of $\delta$ is depicted in \Cref{fig:list-size}.
+
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        lab/.style={font=\footnotesize},
+        seg/.style={line width=5pt},
+        tick/.style={thick, oc-gray-8},
+    ]
+        % positions of 0, mu/2, Johnson, mu, 1
+        \def\xa{0} \def\xb{2.3} \def\xc{5.6} \def\xd{8.6} \def\xe{10.8}
+ 
+        % regimes
+        \draw[seg, oc-teal-4]   (\xa, 0) -- (\xb, 0);
+        \draw[seg, oc-blue-4]   (\xb, 0) -- (\xc, 0);
+        \draw[seg, oc-orange-4] (\xc, 0) -- (\xd, 0);
+        \draw[seg, oc-red-4]    (\xd, 0) -- (\xe, 0);
+ 
+        % list sizes
+        \node[lab, above=5pt, text=oc-teal-9]   at ({(\xa+\xb)/2}, 0) {size $\leq 1$};
+        \node[lab, above=5pt, text=oc-blue-9]   at ({(\xb+\xc)/2}, 0) {size $\leq 1/\varepsilon_\delta$};
+        \node[lab, above=5pt, text=oc-orange-9] at ({(\xc+\xd)/2}, 0) {depends on $\code$};
+        \node[lab, above=5pt, text=oc-red-9]    at ({(\xd+\xe)/2}, 0) {size $\geq q$};
+ 
+        % ticks and thresholds
+        \foreach \x/\t in {\xa/{$\delta = 0$}, \xb/{$\mu/2$}, \xc/{$1 - \sqrt{1 - \mu}$}, \xd/{$\mu$}, \xe/{$1$}} {
+            \draw[tick] (\x, -0.22) -- (\x, 0.22);
+            \node[lab, below=1pt] at (\x, -0.25) {\t};
+        }
+        \foreach \x/\t in {\xb/{unique decoding\\radius}, \xc/{Johnson\\bound}, \xd/{capacity\\bound}} {
+            \node[lab, below, align=center, text=oc-gray-7] at (\x, -0.75) {\t};
+        }
+    \end{tikzpicture}
+    \caption{The size of the list $\mathsf{List}[\mathbf{w}, \code, \delta]$ of codewords within relative distance $\delta$ of a word $\mathbf{w}$, as a function of $\delta \in [0, 1]$, where $\mu = \mu(\code)$. Adapted from Dan Boneh's ZK Whiteboard Session S2M7.}
+    \label{fig:list-size}
+\end{figure}
+ 
+
+\subsubsection{List Decoding for Reed-Solomon Codes}
+
+Since in our applications we are interested in $\code = \mathsf{RS}[\mathbb{F},\Omega,k]$, it is natural to apply previous results to this code.
+By substituting $\mu(\code) \approx 1-\rho(\code)$, we get the following proposition.
+\begin{proposition}
+  Let $\code = \mathsf{RS}[\mathbb{F}_q,\Omega,k]$, $\mathbf{w} \in \mathbb{F}^n$, and $\rho = \rho(\code)$. Then,
+  \begin{enumerate}
+    \item for $\delta \leq (1-\rho)/2$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \leq 1$;
+    \item for $\delta < 1-\sqrt{\rho}$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \leq \varepsilon_{\delta}^{-1}$ for $\varepsilon_{\delta} := 2\sqrt{\rho}(1-\sqrt{\rho}-\delta)$;
+    \item for $\delta \geq 1-\rho$, $\#\mathsf{List}[\mathbf{w},\code,\delta] \geq q$.
+  \end{enumerate}
+\end{proposition}
+
+This is precisely the previous observations from \Cref{subsubsec:list-decoding}, applied to Reed-Solomon codes.
+We provide the illustration in \Cref{fig:rs-list-size}.
+\begin{figure}[ht]
+    \centering
+    \begin{tikzpicture}[
+        lab/.style={font=\footnotesize},
+        seg/.style={line width=5pt},
+        tick/.style={thick, oc-gray-8},
+    ]
+        % positions of 0, (1-rho)/2, Johnson, 1-rho, 1
+        \def\xa{0} \def\xb{2.3} \def\xc{5.6} \def\xd{8.6} \def\xe{10.8}
+
+        % regimes
+        \draw[seg, oc-teal-4]   (\xa, 0) -- (\xb, 0);
+        \draw[seg, oc-blue-4]   (\xb, 0) -- (\xc, 0);
+        \draw[seg, oc-orange-4] (\xc, 0) -- (\xd, 0);
+        \draw[seg, oc-red-4]    (\xd, 0) -- (\xe, 0);
+
+        % list sizes
+        \node[lab, above=5pt, text=oc-teal-9]   at ({(\xa+\xb)/2}, 0) {size $\leq 1$};
+        \node[lab, above=5pt, text=oc-blue-9]   at ({(\xb+\xc)/2}, 0) {size $\leq 1/\varepsilon_\delta$};
+        \node[lab, above=5pt, text=oc-orange-9] at ({(\xc+\xd)/2}, 0) {unknown (only conjectured)};
+        \node[lab, above=5pt, text=oc-red-9]    at ({(\xd+\xe)/2}, 0) {size $\geq q$};
+
+        % ticks and thresholds
+        \foreach \x/\t in {\xa/{$\delta = 0$}, \xb/{$(1-\rho)/2$}, \xc/{$1 - \sqrt{\rho}$}, \xd/{$1 - \rho$}, \xe/{$1$}} {
+            \draw[tick] (\x, -0.22) -- (\x, 0.22);
+            \node[lab, below=1pt] at (\x, -0.25) {\t};
+        }
+        \foreach \x/\t in {\xb/{unique decoding\\radius}, \xc/{Johnson\\bound}, \xd/{capacity\\bound}} {
+            \node[lab, below, align=center, text=oc-gray-7] at (\x, -0.75) {\t};
+        }
+    \end{tikzpicture}
+    \caption{The size of the list $\mathsf{List}[\mathbf{w}, \code, \delta]$ for the Reed-Solomon code $\code = \mathsf{RS}[\mathbb{F}_q, \Omega, k]$ of rate $\rho$, as a function of $\delta \in [0,1]$.}
+    \label{fig:rs-list-size}
+\end{figure}
+
+The problem of finding the size of this list is so important that the Ethereum Foundation announced the \emph{Proximity Prize}\footnote{See \url{https://proximityprize.org/}} with a goal to verify or disprove the conjectures for larger $\delta$'s.
+One may find a comprehensive review of this topic in an awesome survey by Gal Arnon, Dan Boneh, and Giacomo Fenzi~\cite{proximity-prize-survey}.
+
+\subsubsection{Why do we need list decoding?}
+Assume that $\mathbf{w}$ is $\delta$-far from $\code$.
+Then, whichever codeword $\mathbf{x} \in \code$ we compare it to, the two differ in more than $\delta n$ positions.
+Consequently, a single uniformly random query detects a discrepancy with probability greater than $\delta$, and $t$ independent queries miss it with probability below $(1-\delta)^t$.
+Thus, the larger the $\delta$ we can afford, the fewer queries the verifier makes and the shorter the proof becomes.
+The fundamental challenge, however, is that the verifier does not know in advance which codeword $\mathbf{x}$ it is checking against.
+Constructing an efficient test that overcomes this limitation using only a small number of queries to $\mathbf{w}$ is exactly what the FRI protocol achieves.
+
+This is where the size of the list enters.
+If $\delta$ stays below the unique decoding radius $(1-\rho)/2$, each query is passed with probability more than $(1+\rho)/2 > 1/2$, so we get less than one bit of security per query.
+To do better, we must take $\delta$ beyond this radius, but then $\mathbf{w}$ no longer determines a single codeword: every element of $\mathsf{List}[\mathbf{w}, \code, \delta]$ is a candidate for ``the polynomial the prover committed to''.
+A cheating prover succeeds if any of these candidates passes the remaining checks, so the soundness error grows with $\#\mathsf{List}[\mathbf{w}, \code, \delta]$.
+Up to the Johnson bound $1 - \sqrt{\rho}$, this size is provably small, and a query is passed with probability about $\sqrt{\rho}$.
+Beyond the Johnson bound and up to $1 - \rho$, the list is only conjectured to be small, and protocols that set $\delta$ in this range rely on this conjecture for their security.
+For example, for $\rho = 1/4$ and $100$ bits of security, the three regimes require roughly $148$, $100$, and $50$ queries, respectively.
+
+\subsection{Exercises}\label{section:linear-codes-exercises}
+
+\begin{xexercise}
+  {Exercise 1.}
+  {Over $\mathbb{F}_3$, consider $\mathbf{x} = (1,0,2,2,1)$ and $\mathbf{y} = (1,2,2,0,1)$. What are the
+  Hamming distance $\Delta(\mathbf{x},\mathbf{y})$ and the relative Hamming distance $\delta(\mathbf{x},\mathbf{y})$?}
+  {2}
+  {
+    \item $\Delta = 2$, $\delta = 2/5$
+    \item $\Delta = 3$, $\delta = 3/5$
+    \item $\Delta = 2$, $\delta = 2/3$
+    \item $\Delta = 4$, $\delta = 4/5$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 2.}
+  {Let $\code \subseteq \mathbb{F}_2^4$ be the linear code spanned by vectors $(1,1,0,1)$ and $(0,1,1,1)$. What is its
+  minimum distance $d_{\min}(\code)$?}
+  {4}
+  {
+    \item $1$
+    \item $2$
+    \item $3$
+    \item $4$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 3.}
+  {Which of the following parameters $[n,k,d]_q$ cannot be achieved by any linear code?}
+  {4}
+  {
+    \item $[7,4,4]_q$
+    \item $[7,4,5]_q$
+    \item $[5,1,5]_q$
+    \item $[6,3,4]_q$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 4.}
+  {Consider the Reed--Solomon code $\mathsf{RS}[\mathbb{F}_7,\Omega:=\mathbb{F}_7,2]$.
+  What is the encoding of the message $(3,2)$?}
+  {2}
+  {
+    \item $(2,5,1,4,0,3,6)$
+    \item $(3,5,7,9,11,13,15)$
+    \item $(3,5,0,2,4,6,1)$
+    \item $(3,2,0,0,0,0,0)$
+  }
+\end{xexercise}
+
+\begin{xexercise}
+  {Exercise 5.}
+  {Consider $\mathsf{RS}[\mathbb{F}_7,\Omega:=\mathbb{F}_7,2]$, and let
+  $\mathbf{w} := (0,1,4,2,2,4,1) \in \mathbb{F}_7^7$. What is $\delta(\mathbf{w}, \mathsf{RS})$?
+  
+  \textit{Hint:} use the fact that $\mathbf{w}$ is the evaluation of $T^2$ over $\Omega := \mathbb{F}_7$.}
+  {4}
+  {
+    \item $2/7$
+    \item $3/7$
+    \item $5/7$
+    \item $6/7$
+  }
+\end{xexercise}
+
+\begin{exbox}{Exercises 6--10. Keys from Biometrics}
+Error-correcting codes are useful in cryptography far beyond proof systems.
+Suppose that we want to derive a secret key from a biometric reading, such as a face scan, which a feature extractor turns into a binary string $\mathbf{w} \in \mathbb{F}_2^n$.
+The problem is that two readings of the same person are never identical: a fresh reading $\mathbf{w}'$ is only \emph{close} to $\mathbf{w}$ in the Hamming distance, while a key must be reproduced exactly.
+A \emph{fuzzy extractor} solves this problem, and its simplest instantiation, the \emph{code-offset construction}, uses nothing but a binary linear code $\code$ with parameters $[n, k, 2t+1]_2$, a decoder for $\code$ that corrects up to $t$ errors, and a hash function $\mathsf{H}$:
+\begin{itemize}
+    \item $\mathsf{Gen}(\mathbf{w})$: sample a random codeword $\mathbf{c} \leftarrowS \code$ and output the public \emph{helper string} $\mathbf{h} := \mathbf{c} + \mathbf{w}$ together with the secret key $\mathsf{sk} := \mathsf{H}(\mathbf{c})$.
+    \item $\mathsf{Rep}(\mathbf{h}, \mathbf{w}')$: decode $\mathbf{h} + \mathbf{w}'$ to a codeword $\mathbf{c}'$ and output $\mathsf{sk}' := \mathsf{H}(\mathbf{c}')$.
+\end{itemize}
+The helper string is stored in the clear, and the biometric itself is never stored.
+Throughout the exercises below, $\code$ is a binary Goppa code with parameters $[128, 44, 25]_2$, so that $t = 12$; we use it as a black box.
+\end{exbox}
+
+\textbf{Exercise 6.}
+Show that $\mathsf{Rep}(\mathbf{h}, \mathbf{w}') = \mathsf{sk}$ whenever $\Delta(\mathbf{w}, \mathbf{w}') \leq t$.
+Which statement from this section guarantees that the decoder cannot return a different codeword?
+
+\textbf{Exercise 7.} Reed-Solomon codes are MDS, so it is tempting to split the $128$ bits into $16$ bytes and use $\mathsf{RS}[\mathbb{F}_{2^8}, \Omega, k]$ with $\#\Omega = 16$.
+Show that no choice of $k \geq 1$ lets this code correct every pattern of $12$ flipped bits.
+
+\textbf{Exercise 8.} Assume that every bit of a fresh reading flips independently with probability $p \in [0,1]$.
+Write the probability that an honest user is rejected as a function of $n$, $t$ and $p$.
+Then, using the Singleton bound, give an upper bound on $k$ for any code with $n = 128$ that tolerates the \emph{average} number of errors at $p = 0.2$.
+
+\textbf{Exercise 9.} The adversary sees $\mathbf{h}$ but not $\mathbf{w}$.
+How many candidates for $\mathbf{w}$ remain?
+Conclude that the key has at most $k$ bits of security, however good the biometric is.
+
+\textbf{Exercise 10.} An impostor submits a uniformly random $\mathbf{w}'' \leftarrowS \mathbb{F}_2^{128}$.
+What is the probability that $\mathsf{Rep}(\mathbf{h}, \mathbf{w}'') = \mathsf{sk}$?
+Compare it with the previous exercise: which attack is better?
+
+\end{document}
