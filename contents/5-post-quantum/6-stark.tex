@@ -757,85 +757,80 @@ We can now put everything together. The prover commits to the boundary quotients
   \end{algoen}
   The verifier accepts if and only if all these checks and all checks of FRI pass.
 \end{definition}
+\begin{example}\label{ex:stark-fibsq-8}
+  We finish our running example. The prover has committed to the boundary quotients (\Cref{ex:stark-fibsq-6}) and computed the codeword of $g = 16 + 8T + 6T^2 + 5T^3$ on $D$ (\Cref{ex:stark-fibsq-7}), which becomes the first layer $f_0$ of FRI.
+  Since $k = 4$, FRI takes $r = 2$ rounds.
+  For the FRI challenge $\beta_0 = 2$, we have $f_{0,E} = 16 + 6T$ and $f_{0,O} = 8 + 5T$, so $f_1 = f_{0,E} + 2 \cdot f_{0,O} = 15 + 16T$ on $D_1 = \{9, 15, 8, 2\}$.
+  For $\beta_1 = 5$, we get the constant $f_2 = 15 + 5 \cdot 16 = 10$.
 
-\begin{figure}[h!]
-    \centering
-    \scalebox{0.74}{
+  Suppose the verifier samples $x_0 = 3$, so $x_1 = 9$ and $x_2 = 13$. The opened cells are shown below.
+  \begin{center}
     \begin{tikzpicture}[
-        arr/.style   = {-{Stealth[length=2.5mm]}, line width=0.4mm},
-        act/.style   = {draw=oc-blue-7, fill=oc-blue-1, rounded corners=2pt,
-                        line width=0.4mm, inner sep=4pt, font=\small},
-        data/.style  = {draw=gray, rounded corners=2pt, line width=0.4mm,
-                        inner sep=4pt, font=\small},
-        lbl/.style   = {font=\scriptsize, inner sep=2pt},
-        phase/.style = {draw=gray, dashed, rounded corners=8pt, line width=0.4mm},
-        proc/.style  = {draw=gray, fill=gray!20!white, rounded corners=2pt,
-                        line width=0.4mm, inner sep=4pt, font=\small},
-        check/.style = {draw=black, rounded corners=2pt, line width=0.6mm,
-                        inner sep=4pt, font=\small},
+        x=0.8cm, y=0.6cm,
+        cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+        dom/.style={cell, fill=oc-gray-1},
+        val/.style={cell, fill=oc-teal-1},
+        qry/.style={cell, fill=oc-orange-3, draw=oc-orange-8},
+        lab/.style={font=\footnotesize},
+        arr/.style={-stealth, thick, oc-orange-8},
     ]
-        % ---------------- Prover row
-        \draw[phase] (-0.8,1.05) rectangle (13.1,-2.3);
-        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,0.95) {Prover};
-        \node[inner sep=0pt, align=center] at (-1.6,-0.6)
-            {\includegraphics[width=1.0cm]{contents/images/common/prover.png}\\ $\mathcal{P}$};
-
-        \node[data] (W)  at (-0.15,0)   {$W$};
-        \node[data] (tj) at (2.3,0)     {$t_j$};
-        \node[act]  (qB) at (6.7,0)     {$q^{\mathcal{B}}_j$};
-        \node[data] (cl) at (4.6,-1.55) {$c_\ell$};
-        \node[data] (qT) at (6.7,-1.55) {$q^{\mathcal{T}}_\ell$};
-        \node[act]  (g)  at (9.2,-0.78) {$g$};
-        \node[proc] (fri) at (11.8,-0.78) {FRI (\Cref{fig:fri-scheme})};
-
-        \draw[arr] (W) -- node[lbl, above] {inverse NTT} (tj);
-        \draw[arr] (tj) -- node[lbl, above] {$(t_j - I_j)/Z_{\mathcal{B}_j}$} (qB);
-        \draw[arr, rounded corners=4pt] (tj.south) |- node[lbl, pos=0.75, below] {$p_\ell$} (cl.west);
-        \draw[arr] (cl) -- node[lbl, above] {$\div Z$} (qT);
-        \draw[arr] (qB.east) -- (g.north west);
-        \draw[arr] (qT.east) -- (g.south west);
-        \draw[arr] (g) -- (fri);
-        \node[lbl, above=1mm of g] {$\alpha_q, \beta_q$};
-
-        % ---------------- Verifier row
-        \draw[phase] (-0.8,-2.75) rectangle (13.1,-5.35);
-        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,-2.85)
-            {Verifier, at every point $x$ queried by FRI};
-        \node[inner sep=0pt, align=center] at (-1.6,-4.05)
-            {\includegraphics[width=1.0cm]{contents/images/common/verifier.png}\\ $\mathcal{V}$};
-
-        \node[data] (v1) at (1.05,-3.9) {$q^{\mathcal{B}}_j(x),\ q^{\mathcal{B}}_j(h x)$};
-        \node[data] (v2) at (4.6,-3.9)  {$t_j(x),\ t_j(h x)$};
-        \node[data] (v3) at (6.9,-3.9)  {$c_\ell(x)$};
-        \node[data] (v4) at (8.8,-3.9)  {$q^{\mathcal{T}}_\ell(x)$};
-        \node[check] (v5) at (11.5,-3.9) {$g(x) \stackrel{?}{=} f_0(x)$};
-
-        \draw[arr] (v1) -- (v2);
-        \draw[arr] (v2) -- (v3);
-        \draw[arr] (v3) -- (v4);
-        \draw[arr] (v4) -- (v5);
-        \draw[arr, rounded corners=4pt] (v1.south) -- ++(0,-0.55) -| (v5.south);
+        % ---------- layer 0 ----------
+        \foreach \x/\v/\s [count=\i from 0] in {3/8/qry, 10/1/val, 5/15/val, 11/5/val, 14/13/qry, 7/7/val, 12/11/val, 6/0/val} {
+            \node[dom] at (\i, 0) {\x};
+            \node[\s] (a\i) at (\i, -1) {\v};
+        }
+        \node[lab, left=6pt] at (-0.5, 0) {$x \in D_0$};
+        \node[lab, left=6pt] at (-0.5, -1) {$f_0(x)$};
+        % ---------- layer 1 ----------
+        \foreach \x/\v/\s [count=\i from 0] in {9/6/qry, 15/0/val, 8/7/qry, 2/13/val} {
+            \node[dom] (d\i) at (\i+2, -2.8) {\x};
+            \node[\s] (b\i) at (\i+2, -3.8) {\v};
+        }
+        \node[lab, left=6pt] at (1.5, -2.8) {$x \in D_1$};
+        \node[lab, left=6pt] at (1.5, -3.8) {$f_1(x)$};
+        % ---------- layer 2 ----------
+        \node[qry] (c0) at (3.5, -5.6) {10};
+        \node[lab, left=6pt] at (3, -5.6) {$f_2$};
+        % ---------- folding of the queried pairs ----------
+        \draw[arr] (a0.south) to[out=-90, in=150] (d0.north west);
+        \draw[arr] (a4.south) to[out=-90, in=30] (d0.north east);
+        \node[lab, text=oc-orange-8, right] at (4.4, -1.9) {$\beta_0 = 2$};
+        \draw[arr] (b0.south) to[out=-90, in=150] (c0.north west);
+        \draw[arr] (b2.south) to[out=-90, in=30] (c0.north east);
+        \node[lab, text=oc-orange-8, right] at (4.4, -4.75) {$\beta_1 = 5$};
     \end{tikzpicture}
-    }
-    \caption{Overview of the STARK protocol. The prover commits only to the highlighted polynomials:
-    the boundary quotients $q^{\mathcal{B}}_j$ and, through FRI, the nonlinear combination $g$. The trace
-    polynomials $t_j$, the transition polynomials $c_\ell$ and the transition quotients
-    $q^{\mathcal{T}}_\ell$ are never committed. At every point queried by FRI, the verifier recomputes
-    them from the opened values of the boundary quotients and compares the result with the first layer
-    of FRI. Adapted from~\cite{szepieniec2021anatomy}.}
-    \label{fig:stark-scheme}
-\end{figure}
+  \end{center}
+  The points $(3, 8)$, $(14, 13)$ and $(\beta_0, f_1(9)) = (2, 6)$ lie on the line $y = 2x + 2$, and the points $(9, 6)$, $(8, 7)$ and $(\beta_1, f_2) = (5, 10)$ lie on the line $y = 15 - x$, so both collinearity checks pass.
 
+  It remains to check that $f_0(3)$ is consistent with the trace. Since $h \cdot 3 = 5$, the prover opens $q^{\mathcal{B}}_0(3) = 9$, $q^{\mathcal{B}}_0(5) = 7$, $q^{\mathcal{B}}_1(3) = 9$ and $q^{\mathcal{B}}_1(5) = 8$. The verifier recovers
+  \begin{gather*}
+    t_0(3) = 9 \cdot (3 - 1) + 1 = 2, \qquad t_0(5) = 7 \cdot (5 - 1) + 1 = 12, \\
+    t_1(3) = 9 \cdot (3 - 4) + 13 = 4, \qquad t_1(5) = 8 \cdot (5 - 4) + 13 = 4.
+  \end{gather*}
+  Then 
+  \begin{gather*}
+    c_0(3) = 12 - 4 = 8 \qquad c_1(3) = 4 - 2^2 - 4^2 = 1.
+  \end{gather*} 
+  Since $Z(3) = 5$, he gets $q^{\mathcal{T}}_0(3) = 5$ and $q^{\mathcal{T}}_1(3) = 7$, and finally
+  \begin{equation*}
+    g(3) = 16 \cdot 9 + 3 \cdot 9 + 5 \cdot 5 + 12 \cdot 7 = 8 = f_0(3),
+  \end{equation*}
+  so the verifier accepts.
+  Of course, over $\mathbb{F}_{17}$ the soundness error is far from negligible, and the opened values reveal a lot about the trace. Real STARKs use large fields, many queries and randomization of the trace.
+\end{example}
 If the trace is correct, the honest prover is always accepted. If it is not, then by
 \Cref{prop:stark-quotients} at least one quotient is not a polynomial of bounded degree, so with high
 probability the codeword of $g$ is far from $\mathsf{RS}_q[D,k]$, and FRI rejects. The prover cannot
 avoid this by running FRI on a different function that is close to a codeword: step 5 ties the values
 of $f_0$ at the queried points to the committed boundary quotients.
-
+\begin{remark}
+  The protocol described in this section is not zero-knowledge: the opened values of the boundary quotients reveal information about the trace.
+  The original construction~\cite{EPRINT:BBHR18} does provide zero-knowledge, which is achieved by randomizing the trace polynomials outside of $H$ and masking the input of FRI with a random polynomial; see~\cite{EPRINT:HabKin24} for a detailed treatment.
+  However, many practical applications of STARKs, such as validity rollups, only need succinct verification of computational integrity, so they do not use the zero-knowledge property at all.
+\end{remark}
 \begin{remark}
   As with FRI, the whole protocol is made non-interactive using the Fiat--Shamir transformation
-  (\Cref{subsection:fiat-shamir}). Practical STARKs also add several details that we omit: randomization
-  of the trace for zero-knowledge, and additional checks that improve soundness, such as DEEP.
+  (\Cref{subsection:fiat-shamir}). Practical STARKs also can add several details that we omit.
 \end{remark}
 
 \end{document}
