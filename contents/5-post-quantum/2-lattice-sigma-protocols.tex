@@ -602,7 +602,7 @@ The challenge is computed as $\mathbf{c} \gets \mathsf{H}(\mu, \mathbf{w})$ for 
 For about $100$ bits of security, Lyubashevsky~\cite{EC:Lyubashevsky12} proposes, among others, the parameters $n = 512$, $q = 2^{27}$, $m = 8786$, $k = 80$, $\eta = 1$, and $\omega = 28$, which give $\sigma \approx 31495$.
 The resulting signatures take about $19.9$~KB and the keys about $128$~KB each, which is far from practical.
 Most of the size comes from the unstructured matrix and the large dimension $m$.
-Moving to Module-SIS and Module-LWE over $\mathcal{R}_q$ (\Cref{section:structured-lattices}), switching to uniform masks, and compressing the public key and the signature yield ML-DSA (Dilithium)~\cite{TCHES:DKLLSS18}, standardized in FIPS~204~\cite{fips-204}, with signatures of about $2.4$~KB and public keys of about $1.3$~KB at its lowest security level.
+Moving to Module-SIS and Module-LWE over $\mathcal{R}_q$ (\Cref{section:structured-lattices}), switching to uniform masks, and compressing the public key and the signature yield ML-DSA (Dilithium)~\cite{TCHES:DKLLSS18}, standardized in FIPS~204, with signatures of about $2.4$~KB and public keys of about $1.3$~KB at its lowest security level.
 
 \subsection{Proving Products of Committed Values}\label{section:als20}
 

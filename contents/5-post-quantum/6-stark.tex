@@ -2,9 +2,7 @@
 
 \begin{document}
 
-%--------------------------------
 \subsection{The FRI Protocol}\label{subsec:fri}
-%--------------------------------
 
 In \Cref{fig:poly-iop-third-attempt}, the whole compilation of a Poly-IOP into an IOP was based on a single black box: a $\delta$-RS-IOPP (\Cref{def:rs-proximity}) that tests whether one function $h: \Omega \to \mathbb{F}$ is close to $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
 In this subsection, we open this ``box''.
@@ -20,9 +18,7 @@ FRI applies it again and again: after $\log_2 k$ folds the dimension drops to $1
 Throughout this subsection, we keep the setting of \Cref{lemma:two-way-folding} and assume that $k = 2^\ell$.
 To avoid confusion with the evaluation points $r_i$ of \Cref{fig:poly-iop-third-attempt}, we denote the folding challenges by $\beta$.
 
-%--------------------------------
 \subsubsection{Folding Is Local}\label{subsubsec:fri-folding}
-%--------------------------------
 
 There is one obstacle: the verifier cannot compute $\mathsf{Fold}(g, \beta)$ itself, since that would require reading all of $g$.
 Instead, the prover will send the fold as a new oracle, and the verifier will spot-check it.
@@ -77,9 +73,7 @@ Let us consider some concrete example.
     As expected, these are the evaluations of $f_E + 2 f_O = 5 + 12T$, a polynomial of degree less than $2$.
 \end{example}
 
-%--------------------------------
 \subsubsection{The Protocol}\label{subsubsec:fri-protocol}
-%--------------------------------
 
 To fold $\ell$ times, write $\Omega_i := \Omega^{2^i}$ for the domain after $i$ folds (so $\Omega_0 = \Omega$ and $\Omega_1 = \Omega^2$), and $\code_i := \mathsf{RS}[\mathbb{F}, \Omega_i, k/2^i]$ for the corresponding code; all these codes have the same rate $\rho$, and the last one, $\code_\ell$, consists of the constant functions.
 The prover sends every fold as a new oracle, and the verifier spot-checks consecutive oracles.
@@ -263,9 +257,7 @@ By the first claim of \Cref{lemma:two-way-folding}, an honest prover is always a
     Why must the verifier send $\beta_i$ only \emph{after} receiving $g_i$? Describe a cheating strategy if all challenges were known in advance.
 \end{exercise}
 
-%--------------------------------
 \subsubsection{Efficiency and Soundness}\label{subsubsec:fri-soundness}
-%--------------------------------
 
 \paragraph{Efficiency.}
 The prover computes each fold in time linear in the size of the current domain, so its total work is $O(n + n/2 + \dots) = O(n)$ field operations.
@@ -292,7 +284,7 @@ The second term is the probability that all $s$ query paths miss the inconsisten
 
 \begin{remark}
     The original analysis in~\cite[Theorem~3.3]{bensasson18} gives a weaker bound: the verifier accepts with probability at most $3n/\#\mathbb{F} + (1 - \min\{\delta, \delta_0\})^s$, where $\delta_0 \approx (1 - 3\rho)/4$ lies below the unique decoding radius.
-    The improvement to the Johnson bound came later, first with DEEP-FRI~\cite{BGKS20} % TODO: bib key
+    The improvement to the Johnson bound came later, first with DEEP-FRI~\cite{ITCS:BGKS20} % TODO: bib key
     and then with the proximity gap theorem of~\cite{FOCS:BCIKS20}.
     Already~\cite[Conjecture~1.5]{bensasson18} conjectured that the bound holds up to the capacity $1 - \rho$; this is the conjecture discussed in \Cref{subsubsec:list-decoding}.
 \end{remark}
@@ -309,9 +301,7 @@ The second term is the probability that all $s$ query paths miss the inconsisten
     How should the prover arrange the leaves of the Merkle tree of $g_i$ to halve the number of paths?
 \end{exercise}
 
-%--------------------------------
 \subsubsection{FRI in the Big Picture}\label{subsubsec:fri-big-picture}
-%--------------------------------
 
 Let us now return to \Cref{fig:poly-iop-third-attempt}.
 There, the input of the RS-IOPP is the virtual function $h = \sum_j \alpha^j \mathsf{q}_j$, which the prover never commits to.
@@ -319,7 +309,7 @@ FRI handles this without any change: whenever the verifier needs $h(\pm x_0)$ in
 So the first layer of FRI comes for free: only the folds $g_1, \dots, g_{\ell-1}$ and the constant $c$ are new messages of the prover.
 
 What remains is to turn the IOP into a SNARK.
-This is done by the transformation of Ben-Sasson, Chiesa and Spooner~\cite{BCS16}: % TODO: bib key
+This is done by the transformation of Ben-Sasson, Chiesa and Spooner~\cite{TCC:BenChiSpo16}:
 \begin{algoen}
     \item every oracle is replaced by the root of a Merkle tree (\Cref{section:commitment-schemes}), and every query is answered with an authentication path;
     \item every challenge, including the query points $x_0$, is derived by hashing the transcript so far (\Cref{subsection:fiat-shamir}).
@@ -344,9 +334,7 @@ Both steps need only a hash function, so the resulting proof system needs no tru
     \label{fig:fri-pipeline}
 \end{figure}
 
-%--------------------------------
 \subsubsection{Variants and Newer Protocols}\label{subsubsec:fri-variants}
-%--------------------------------
 
 Of course the protocol of \Cref{def:fri} is the simplest approach that has seen numerous improvements since the first introduction.
 The most common change is the \emph{folding factor}.
@@ -391,14 +379,14 @@ Another common change is to stop folding early, before reaching a constant, and 
 
 The domains may also differ.
 The original FRI is stated for binary fields, where squaring is not two-to-one; there, the domains are additive cosets, and the map $x \mapsto x^2$ is replaced by a polynomial that vanishes on a small subspace~\cite{bensasson18}.
-Some approaches take even a step further: for example, Circle STARKs~\cite{EPRINT:HLP24} % TODO: bib key
+Some approaches take even a step further: for example, Circle STARKs~\cite{EPRINT:HabLevPap24}
 work over $p = 2^{31} - 1$, where $p - 1$ has no large power of two as a factor, and use the points of the circle $x^2 + y^2 = 1$ instead, a group of the smooth order $p + 1 = 2^{31}$.
 
 Finally, FRI is no longer the only RS-IOPP in use.
-STIR~\cite{stir} % TODO: bib key for ePrint 2024/390
+STIR~\cite{C:ACFY24}
 lowers the rate in every round in addition to the degree, so that later rounds need fewer queries, and it achieves this by performing the out-of-domain sampling and quotienting of \Cref{fig:poly-iop-second-attempt} inside every round.
-WHIR~\cite{EPRINT:ACFY24b} % TODO: bib key
-and Basefold~\cite{C:ZCF24} % TODO: bib key
+WHIR~\cite{EC:ACFY25}
+and Basefold~\cite{C:ZeiCheFis24}
 carry the same ideas over to multilinear polynomials, which combines our considered approach with sum-check-based Poly-IOPs of \Cref{section:sumcheck}.
 
 \subsection{Arithmetic Intermediate Representation (AIR)}\label{subsec:air}
@@ -689,7 +677,7 @@ This is exactly the input of the compilation of \Cref{fig:poly-iop-third-attempt
   \item \textbf{Test.} The parties run FRI (\Cref{def:fri}) on $h$ against $\mathsf{RS}[\mathbb{F}, \Omega, \tau - 2]$.
 \end{algoen}
 The resulting protocol, after the BCS transformation, is a STARK.
-It is essentially the DEEP-ALI protocol used by deployed STARKs~\cite{BGKS20}. % TODO: bib key
+It is essentially the DEEP-ALI protocol used by deployed STARKs~\cite{ITCS:BGKS20}. % TODO: bib key
 
 There is one subtlety: the domain $\Omega$.
 The verifier divides by $\nu_{\mathcal{T}}$ and $\nu_j$, which vanish on $H$, and by $\nu'$, which vanishes at $r_0$ and $\omega_\tau r_0$; and FRI needs $-x \in \Omega$ for every $x \in \Omega$.

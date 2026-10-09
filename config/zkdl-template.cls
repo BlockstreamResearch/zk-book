@@ -559,3 +559,12 @@
 \RequirePackage{mathrsfs}
 \newcommand{\dgaussian}{\mathscr{D}}
 \newcommand{\code}{\mathscr{C}}
+
+% --- Neat Ukrainian flag ---
+\definecolor{uablue}{HTML}{0057B7}
+\definecolor{uayellow}{HTML}{FFD700}
+\newcommand{\uaflag}{%
+\tikz[baseline=0pt, x=1.5ex, y=1.5ex]{%
+    \fill[uablue]   (0,0.5) rectangle (1.5,1);
+    \fill[uayellow] (0,0)   rectangle (1.5,0.5);
+}}

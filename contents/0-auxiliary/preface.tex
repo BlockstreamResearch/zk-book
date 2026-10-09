@@ -52,19 +52,18 @@ scratch (such as basic number and group theory, security analysis), but this
 material is rather supplementary and is not the main focus of the book. That
 being said, you do not need Math PhD, but be prepared: the book is challenging.
 
-\textbf{How to use this book?} The book is structured in the following way:
+\textbf{How to use this book?} The book is structured as follows:
 \begin{enumerate}
-    \item The first part of the book, consisting of sections from
-    \Cref{section:number-theory} to \Cref{section:commitment-schemes}, is dedicated to
-    the theoretical background on Mathematics and Cryptography needed for
-    understanding the zero-knowledge protocols. If you feel comfortable with
-    polynomials, groups, elliptic curves and commitment schemes, you can skip
-    this part.
-    \item The main part of the book starts from \Cref{section:intro-zk}, where 
-    we first define the zero-knowledge proofs and explain the basic concepts
-    behind them. We then proceed to the more advanced topics, such as Sigma
-    protocols (\Cref{section:sigma}), SNARKs (from \Cref{section:r1cs}
-    to \Cref{section:circom}), PlonK (\Cref{section:plonk}), and sum-check protocols (\Cref{section:sumcheck,section:gkr}).
+    \item The first part of the book, consisting of \Cref{section:number-theory} to \Cref{section:commitment-schemes}, covers the mathematical and cryptographic background needed to understand zero-knowledge protocols.
+    If you feel comfortable with polynomials, groups, elliptic curves, and commitment schemes, you can skip this part.
+    If not, this is a perfect place to get a basic understanding of these topics.
+    Keep in mind that they are useful well beyond the scope of this book.
+    \item The main part of the book starts with \Cref{section:intro-zk}, where we define zero-knowledge proofs and explain the basic concepts behind them.
+    Then we consider $\Sigma$-protocols (\Cref{section:sigma}), the simplest yet one of the most fundamental families of zero-knowledge protocols.
+    \item We then proceed to more advanced topics: zk-SNARKs (\Cref{section:r1cs} to \Cref{section:circom}), PlonK (\Cref{section:plonk}), and Bulletproofs (\Cref{section:bulletproofs}).
+    \item From this point on, the book becomes progressively more challenging.
+    We first consider the sum-check protocol and its applications (\Cref{section:sumcheck,section:gkr}), together with lookup arguments (\Cref{section:toolkit,section:lookups,section:ultragroth}).
+    Then we move to post-quantum schemes, both lattice-based (\Cref{section:lattices,section:lattice-sigma-protocols,section:labrador}) and code-based, including the famous ZK-STARK (\Cref{section:linear-codes,section:iopp,section:zk-stark}).
 \end{enumerate}
 
 \end{document}

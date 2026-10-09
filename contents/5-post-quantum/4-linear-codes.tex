@@ -11,7 +11,7 @@ The same idea turns out to be useful in cryptography. Shamir's secret sharing (\
 
 In proof systems, codes play a different role. The simplest commitment that relies only on hash functions is a Merkle tree (\Cref{section:commitment-schemes}), but it gives the verifier only local access: it can open individual positions of the committed vector, and nothing more. If the prover committed to the message itself, a change in a single symbol would affect a single position, which the verifier would almost certainly miss. Committing to an encoding of the message with a code of large distance makes local access sufficient: a committed vector is either close to a single codeword, which binds the prover to a single message, or far from all codewords, which can be detected by checking only a few random positions using a test of proximity to the code. Many modern proof systems are built on this principle, including STARKs~\cite{EPRINT:BBHR18}, Ligero~\cite{CCS:AHIV17}, Brakedown~\cite{C:GLSTW23} and Binius~\cite{EC:DiaPos25}. Since they rely only on hash functions, they need no trusted setup and are believed to be secure against quantum adversaries.
 
-In this section, we introduce linear codes and Reed-Solomon codes~\cite{guruswami23}, together with the notion of proximity to a code, which is the central tool behind STARKs (\Cref{section:stark}).
+In this section, we introduce linear codes and Reed-Solomon codes~\cite{guruswami23}, together with the notion of proximity to a code, which is the central tool behind STARKs (\Cref{section:zk-stark}).
 
 \subsection{Error-Correcting Codes}
 
