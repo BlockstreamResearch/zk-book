@@ -6,8 +6,8 @@
 \subsection{The FRI Protocol}\label{subsec:fri}
 %--------------------------------
 
-In \Cref{fig:poly-iop-third-attempt}, the whole compilation of a Poly-IOP into an IOP rested on a single black box: a $\delta$-RS-IOPP (\Cref{def:rs-proximity}) that tests whether one function $h: \Omega \to \mathbb{F}$ is close to $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
-In this subsection, we open this box.
+In \Cref{fig:poly-iop-third-attempt}, the whole compilation of a Poly-IOP into an IOP was based on a single black box: a $\delta$-RS-IOPP (\Cref{def:rs-proximity}) that tests whether one function $h: \Omega \to \mathbb{F}$ is close to $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
+In this subsection, we open this ``box''.
 
 Recall why the problem is not trivial.
 Without the help of the prover, the verifier needs $k + 1$ queries: it interpolates $h$ through $k$ points and checks the result at one more point.
@@ -28,7 +28,7 @@ There is one obstacle: the verifier cannot compute $\mathsf{Fold}(g, \beta)$ its
 Instead, the prover will send the fold as a new oracle, and the verifier will spot-check it.
 This works because folding is \emph{local}: by \Cref{def:fold}, the value of $\mathsf{Fold}(g, \beta)$ at $x^2$ depends only on the two values $g(x)$ and $g(-x)$.
 So to check one value of the fold, the verifier reads just two cells of $g$.
-There is also a pleasant geometric way to see this, which is how folding is described in~\cite{bensasson18}.
+There is also a pleasant geometric way to see this, which is how folding is described in~\cite{bensasson18} and illustrated in \Cref{fig:fri-fold-line}.
 
 \begin{exercise}\label{ex:fri-line}
     Let $L$ be the line through the points $(x, g(x))$ and $(-x, g(-x))$, that is, the unique polynomial of degree at most $1$ with $L(x) = g(x)$ and $L(-x) = g(-x)$.
@@ -58,6 +58,8 @@ There is also a pleasant geometric way to see this, which is how folding is desc
     \caption{One value of the fold. The two values of $g$ at the pair $\pm x$ determine a line $L$, and the fold at $x^2$ is the value of this line at the challenge $\beta$ (\Cref{ex:fri-line}). The picture is drawn over the reals only for intuition.}
     \label{fig:fri-fold-line}
 \end{figure}
+
+Let us consider some concrete example.
 
 \begin{example}\label{ex:fri-fold}
     Let $\mathbb{F} = \mathbb{F}_{17}$, $\Omega = \langle 2 \rangle$ and $k = 4$, so that $\rho = 1/2$.
@@ -258,11 +260,6 @@ By the first claim of \Cref{lemma:two-way-folding}, an honest prover is always a
 \end{example}
 
 \begin{exercise}
-    In \Cref{ex:fri-run}, verify that $g_1(4) = 2$ by evaluating $5 + 12T$ at $T = 4$, and compute $g_1(13)$.
-    \commentgray{Answer: $5 + 48 = 53 = 2$ and $5 + 156 = 161 = 8$ in $\mathbb{F}_{17}$.}
-\end{exercise}
-
-\begin{exercise}
     Why must the verifier send $\beta_i$ only \emph{after} receiving $g_i$? Describe a cheating strategy if all challenges were known in advance.
 \end{exercise}
 
@@ -276,11 +273,10 @@ The oracles $g_1, \dots, g_{\ell-1}$ have total length $n/2 + n/4 + \dots < n$, 
 Every repetition of the query phase reads $2$ values in each of the $\ell$ rounds, so the query complexity is $2\ell s = O(s \log n)$, and the verifier's work is of the same order.
 
 \paragraph{Soundness.}
-The soundness argument mirrors the protocol.
 In the commit phase, by the second claim of \Cref{lemma:two-way-folding}, every round keeps a far function far, except with probability $\varepsilon_\delta$ over $\beta_i$.
 If the prover sends an oracle $g_{i+1}$ that is close to the code, then $g_{i+1}$ must differ from the true fold of $g_i$ on many points, and the round consistency check detects this at a random point.
 Either way, a far input leaves a trace of inconsistencies of density about $\delta$ along the path of a random query.
-The following theorem makes this precise.
+The following theorem makes this intuition precise.
 
 \begin{theorem}[FRI soundness, informal]\label{thm:fri-soundness}
     Let $g_0$ be $\delta$-far from $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
@@ -302,8 +298,9 @@ The second term is the probability that all $s$ query paths miss the inconsisten
 \end{remark}
 
 \begin{exercise}
-    Let $\rho = 1/4$, and ignore the first term of the soundness error.
-    How many repetitions $s$ give $100$ bits of security with (a) the original bound with $\delta = \delta_0 = 1/16$, (b) the Johnson bound, letting $\delta \to 1/2$, and (c) the conjectured bound, letting $\delta \to 3/4$?
+    Let $\rho = 1/4$, and ignore the first term of the soundness error in \Cref{thm:fri-soundness}.
+    Find the smallest $s$ for which the remaining term is at most $2^{-100}$, using (a) the original bound from the remark above, (b) \Cref{thm:fri-soundness} with $\delta$ approaching the Johnson bound, and (c) the conjectured bound with $\delta$ approaching the capacity $1 - \rho$.
+
     \commentgray{Answer: $s \geq 100 / \log_2(1/(1-\delta))$, which gives about $1074$, $100$ and $50$ repetitions.}
 \end{exercise}
 
@@ -351,7 +348,7 @@ Both steps need only a hash function, so the resulting proof system needs no tru
 \subsubsection{Variants and Newer Protocols}\label{subsubsec:fri-variants}
 %--------------------------------
 
-The protocol of \Cref{def:fri} is the simplest member of a large family, and practical implementations rarely use it verbatim.
+Of course the protocol of \Cref{def:fri} is the simplest approach that has seen numerous improvements since the first introduction.
 The most common change is the \emph{folding factor}.
 Instead of pairs $\{x, -x\}$, one can fold whole cosets of size $2^\eta$ at once, using the map $x \mapsto x^{2^\eta}$ and reducing the degree by a factor of $2^\eta$ in one round.
 The fold is then the value at $\beta_i$ of the polynomial of degree less than $2^\eta$ that interpolates $g_i$ on the coset, exactly as in \Cref{ex:fri-line}, which was the case $\eta = 1$.
@@ -394,7 +391,7 @@ Another common change is to stop folding early, before reaching a constant, and 
 
 The domains may also differ.
 The original FRI is stated for binary fields, where squaring is not two-to-one; there, the domains are additive cosets, and the map $x \mapsto x^2$ is replaced by a polynomial that vanishes on a small subspace~\cite{bensasson18}.
-At the other extreme, Circle STARKs~\cite{EPRINT:HLP24} % TODO: bib key
+Some approaches take even a step further: for example, Circle STARKs~\cite{EPRINT:HLP24} % TODO: bib key
 work over $p = 2^{31} - 1$, where $p - 1$ has no large power of two as a factor, and use the points of the circle $x^2 + y^2 = 1$ instead, a group of the smooth order $p + 1 = 2^{31}$.
 
 Finally, FRI is no longer the only RS-IOPP in use.
@@ -402,7 +399,7 @@ STIR~\cite{stir} % TODO: bib key for ePrint 2024/390
 lowers the rate in every round in addition to the degree, so that later rounds need fewer queries, and it achieves this by performing the out-of-domain sampling and quotienting of \Cref{fig:poly-iop-second-attempt} inside every round.
 WHIR~\cite{EPRINT:ACFY24b} % TODO: bib key
 and Basefold~\cite{C:ZCF24} % TODO: bib key
-carry the same ideas over to multilinear polynomials, which makes them natural partners of the sum-check-based Poly-IOPs of \Cref{section:sumcheck}.
+carry the same ideas over to multilinear polynomials, which combines our considered approach with sum-check-based Poly-IOPs of \Cref{section:sumcheck}.
 
 \subsection{Arithmetic Intermediate Representation (AIR)}\label{subsec:air}
 Similar to SNARK, the STARK proof system involves intermediate stages, the first two of which are the \emph{arithmetic constraint system} and the \emph{IOP}.
