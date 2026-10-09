@@ -402,27 +402,37 @@ and Basefold~\cite{C:ZCF24} % TODO: bib key
 carry the same ideas over to multilinear polynomials, which combines our considered approach with sum-check-based Poly-IOPs of \Cref{section:sumcheck}.
 
 \subsection{Arithmetic Intermediate Representation (AIR)}\label{subsec:air}
-Similar to SNARK, the STARK proof system involves intermediate stages, the first two of which are the \emph{arithmetic constraint system} and the \emph{IOP}.
+
+By now, we have a complete, hash-based compiler: \Cref{fig:poly-iop-third-attempt} turns any Poly-IOP into an IOP with a single run of FRI, and the BCS transformation (\Cref{fig:fri-pipeline}) turns this IOP into a SNARK.
+What is still missing is the Poly-IOP itself: a way to express the statement ``this computation was performed correctly'' as claims about polynomials.
+In \Cref{section:plonk}, PlonK did this for arithmetic circuits.
+STARKs use a different arithmetization, tailored to computations that repeat the same step many times, such as the execution of a virtual machine or the rounds of a hash function.
+It is called the \emph{arithmetic intermediate representation} (AIR).
+
+Similar to other SNARKs, the STARK proof system thus has intermediate stages: the computation is first expressed as an \emph{arithmetic constraint system} (the AIR), which is then turned into a Poly-IOP, compiled into an IOP, and finally into a SNARK.
 
 \begin{definition}\label{def:air}
-  The \emph{arithmetic intermediate representation (AIR)} or arithmetic internal representation, is a way of describing a computation in terms of an execution trace that satisfies a number of constraints induced by the correct evolution of the state.
+  The \emph{arithmetic intermediate representation (AIR)} is a way of describing a computation in terms of an execution trace that satisfies a number of constraints induced by the correct evolution of the state.
 \end{definition}
 
 \begin{definition}\label{def:aet}
-  Let $\mathbb{F}_q$ be the field of definition, and the computation describes the evolution of a state of $w$ registers for $\tau$ cycles. We define the \emph{algebraic execution trace (AET)} as the table of $\tau \times w$ field elements where every row describes the state of the system at the given point in time, and every column tracks the value of the given register.
+  Let $\mathbb{F}$ be the field of definition, and suppose the computation describes the evolution of a state of $w$ registers for $\tau$ cycles.
+  We define the \emph{algebraic execution trace (AET)} as the table $W \in \mathbb{F}^{\tau \times w}$ where every row describes the state of the system at the given point in time, and every column tracks the value of the given register.
 \end{definition}
 
 \begin{definition}\label{def:st-function}
-  A \emph{state transition function} $\phi:\mathbb{F}_q^{w}\rightarrow\mathbb{F}_q^{w}$ determines the state at the next cycle as a function of the state at the previous cycle. Furthermore, a set of boundary conditions 
+  A \emph{state transition function} $\phi: \mathbb{F}^{w} \to \mathbb{F}^{w}$ determines the state at the next cycle as a function of the state at the previous cycle.
+  Furthermore, a set of \emph{boundary conditions}
   \begin{equation*}
-    \mathcal{B}\subseteq \mathbb{Z}_\tau \times\mathbb{Z}_w\times\mathbb{F}_q
+    \mathcal{B} \subseteq [\tau] \times [w] \times \mathbb{F}
   \end{equation*}
-  fixes the values of some registers at some cycles: a triple $(i,j,e) \in \mathcal{B}$ means that register $j$ holds the value $e$ at cycle $i$.
+  fixes the values of some registers at some cycles: a triple $(i, j, v) \in \mathcal{B}$ means that register $j$ holds the value $v$ at cycle $i$.
 \end{definition}
 
 \begin{example}\label{ex:stark-fibsq-1}
   Consider a toy computation of the Fibonacci square sequence $a_{i+2} = a_{i+1}^2 + a_i^2$ over $\mathbb{F}_{17}$, with $a_0 = 1$ and $a_1 = s$.
-  The prover claims that he knows $s$ such that $a_4 = 13$. Indeed, $s = 3$ works, since $a_2 = 1^2 + 3^2 = 10$, $a_3 = 3^2 + 10^2 = 109 = 7$ and $a_4 = 10^2 + 7^2 = 149 = 13$.
+  The prover claims that he knows $s$ such that $a_4 = 13$.
+  Indeed, $s = 3$ works, since $a_2 = 1^2 + 3^2 = 10$, $a_3 = 3^2 + 10^2 = 109 = 7$ and $a_4 = 10^2 + 7^2 = 149 = 13$.
 
   We use $w = 2$ registers and $\tau = 4$ cycles: at cycle $i$, the registers hold two consecutive elements $a_i$ and $a_{i+1}$, so that $W_{[i,0]} = a_i$ and $W_{[i,1]} = a_{i+1}$.
   The algebraic execution trace is shown below.
@@ -457,101 +467,140 @@ Similar to SNARK, the STARK proof system involves intermediate stages, the first
         \node[lab, anchor=west] at (2.55, -2.5) {copied to the next row};
     \end{tikzpicture}
   \end{center}
-  The state transition function is $\phi(x_0, x_1) = (x_1, x_0^2 + x_1^2)$, and the boundary conditions are $\mathcal{B} = \{(0,0,1), (3,1,13)\}$.
+  The state transition function is $\phi(x_0, x_1) = (x_1, x_0^2 + x_1^2)$, and the boundary conditions are $\mathcal{B} = \{(0, 0, 1), (3, 1, 13)\}$.
 \end{example}
 
-The \emph{computational integrity claim} consists of the state transition function and the boundary conditions. The \emph{witness} to this claim is the algebraic execution trace. The claim is \emph{true} if there is a witness $W\in \mathbb{F}_q^{\tau \times w}$ such that:
+The \emph{computational integrity claim} consists of the state transition function and the boundary conditions.
+The \emph{witness} to this claim is the algebraic execution trace.
+The claim is \emph{true} if there is a witness $W \in \mathbb{F}^{\tau \times w}$ such that:
 \begin{itemize}
-  \item For every cycle, the state evolves correctly: $\forall i\in [\tau-1], \phi(W_{[i, :]})=W_{[i+1, :]}$
-  \item All boundary conditions are satisfied: $\forall (i, j, e)\in \mathcal{B}, W_{[i, j]}=e$
+  \item for every cycle, the state evolves correctly: that is, the condition $\phi(W_{[i, :]}) = W_{[i+1, :]}$ holds for all $i \in [\tau - 1]$;
+  \item all boundary conditions are satisfied: $W_{[i, j]} = v$ for all $(i, j, v) \in \mathcal{B}$.
 \end{itemize}
-Actually, the state transition function hides a lot of complexity and requires to be describable as low degree polynomials that are independent of the cycle.
-However, this list of polynomials does not need to compute the next state from the current one; it merely needs to distinguish correct evolutions from incorrect ones. Specifically, the state transition function $\phi$ is represented by a list of polynomials $\mathbf{p}(x_0,\ldots,x_{w-1}, y_0,\ldots,y_{w-1})$ such that $\phi(\mathbf{x})=\mathbf{y}$ if and only if $\mathbf{p}(\mathbf{x},\mathbf{y})=0$. Say there are $m$ such state transition verification polynomials. Then the transition constraints become:
+Actually, the state transition function hides a lot of complexity, since it must be describable by low-degree polynomials that are independent of the cycle.
+However, these polynomials do not need to compute the next state from the current one; they merely need to distinguish correct evolutions from incorrect ones.
+Specifically, the state transition function $\phi$ is represented by a list of polynomials $p_u(X_0, \ldots, X_{w-1}, Y_0, \ldots, Y_{w-1})$, $u \in [\kappa]$, such that $\phi(\mathbf{x}) = \mathbf{y}$ if and only if $p_u(\mathbf{x}, \mathbf{y}) = 0$ for all $u \in [\kappa]$.
+We call them \emph{transition verification polynomials}.
+Then the transition constraints become: for all $i \in [\tau - 1]$ and $u \in [\kappa]$,
 \begin{equation*}
-  \forall i\in[\tau-1],\forall  \ell\in[m]: p_\ell(W_{[i, 0]},\ldots,W_{[i, w-1]},W_{[i+1, 0]},\ldots,W_{[i+1, w-1]})=0
+  p_u(W_{[i, 0]}, \ldots, W_{[i, w-1]}, W_{[i+1, 0]}, \ldots, W_{[i+1, w-1]}) = 0.
 \end{equation*}
+
 \begin{example}\label{ex:stark-fibsq-2}
-  We continue \Cref{ex:stark-fibsq-1}. The state transition function is verified by $m = 2$ polynomials
+  We continue \Cref{ex:stark-fibsq-1}.
+  The state transition function is verified by $\kappa = 2$ polynomials
   \begin{equation*}
-    p_0 = y_0 - x_1, \qquad p_1 = y_1 - x_0^2 - x_1^2.
+    p_0 = Y_0 - X_1, \qquad p_1 = Y_1 - X_0^2 - X_1^2.
   \end{equation*}
   The first one says that $a_{i+1}$ is copied to the next row, and the second one is the recurrence itself.
-
-  We can check that the transition constraint $p_\ell(x_0,x_1,y_0,y_1)$ are satisfied for the witness $W$ at cycle $i = 0$:
+  We can check that both transition constraints are satisfied for the witness $W$ at cycle $i = 0$:
   \begin{align*}
     p_0(W_{[0, 0]}, W_{[0, 1]}, W_{[1, 0]}, W_{[1, 1]}) &= 3 - 3 = 0, \\
     p_1(W_{[0, 0]}, W_{[0, 1]}, W_{[1, 0]}, W_{[1, 1]}) &= 10 - 1^2 - 3^2 = 0.
   \end{align*}
 \end{example}
-This representation admits non-determinism: the verification polynomials may have much lower degree than any polynomial that computes the next state. For instance, the transition $y = x^{-1}$ requires computing $x^{q-2}$, but it is verified by the degree-$2$ polynomial $xy - 1$.
 
-\subsubsection{Trace interpolation}
-We saw that the arithmetic constraint system described above represents the computational integrity claim as a bunch of polynomials, where each such polynomial corresponds to a constraint. To turn this constraint system into an IOP, we also need to represent the witness by polynomials..
+This representation admits non-determinism: the verification polynomials may have much lower degree than any polynomial that computes the next state.
+For instance, the transition $y = x^{-1}$ requires computing $x^{\#\mathbb{F} - 2}$, but it is verified by the degree-$2$ polynomial $XY - 1$.
 
-Let $H = \langle h \rangle$ be a multiplicative subgroup of $\mathbb{F}_q^{\times}$ of order $\tau$, which we call the \emph{trace evaluation domain}. For simplicity, we assume that $\tau$ is a power of two; otherwise the trace is padded. The trace domain is smaller than the FRI evaluation domain $D$ by a factor exactly equal to the blowup factor $1/\rho$.
+\begin{remark}
+  It is instructive to compare AIR with the arithmetic circuits of \Cref{section:r1cs}.
+  A circuit can describe an arbitrary computation, but every gate needs its own constraint.
+  An AIR describes only computations that repeat one step, but the same $\kappa$ polynomials describe all $\tau - 1$ steps, so the description of the computation does not grow with $\tau$.
+  As we see next, this uniformity matches the cyclic structure of the evaluation domains perfectly: moving to the next row will become multiplication of the argument by a root of unity.
+\end{remark}
 
-For every register $j \in [w]$, the \emph{trace polynomial} $t_j \in \mathbb{F}_q[T]$ is the unique polynomial of degree less than $\tau$ such that
+\subsubsection{Trace Interpolation}
+
+We saw that the arithmetic constraint system described above represents the computational integrity claim by a list of polynomials, one for each constraint.
+To turn this constraint system into a Poly-IOP, we also need to represent the \emph{witness} by polynomials.
+
+Let $\omega_\tau \in \mathbb{F}$ be a primitive $\tau$th root of unity, and let $H := \langle \omega_\tau \rangle$ be the subgroup of order $\tau$, which we call the \emph{trace domain}.
+For simplicity, we assume that $\tau$ is a power of two; otherwise the trace is padded.
+For every register $j \in [w]$, the \emph{trace polynomial} $t_j \in \mathbb{F}[T]^{<\tau}$ is the unique polynomial such that
 \begin{equation*}
-  t_j(h^i) = W_{[i,j]} \quad \forall i \in [\tau].
+  t_j(\omega_\tau^i) = W_{[i,j]} \quad \text{for all} \; i \in [\tau].
 \end{equation*}
-In practice, it is computed with the inverse NTT (\Cref{section:ntt}). The trace polynomials
-$t_0, \ldots, t_{w-1}$ represent the algebraic execution trace in terms of univariate polynomials.
+In practice, it is computed with the inverse NTT (\Cref{section:ntt}).
+The trace polynomials $t_0, \ldots, t_{w-1}$ represent the algebraic execution trace in terms of univariate polynomials: the $j$th column of $W$ is the restriction of $t_j$ to $H$.
 
 \begin{example}\label{ex:stark-fibsq-3}
-  We continue \Cref{ex:stark-fibsq-1} and compute the trace polynomials. Take the trace evaluation domain $H = \langle 13 \rangle = \{1, 13, 16, 4\}$ of order $\tau = 4= 2^2$, where $h = 13$. Then, we construct the trace polynomials $t_0$ and $t_1$ of degree less than $4$ by interpolating the sets of points $\{(h^i, W_{[i,0]})\}_{i=0}^{3}$ and $\{(h^i, W_{[i,1]})\}_{i=0}^{3}$, respectively. We get
+  We continue \Cref{ex:stark-fibsq-1} and compute the trace polynomials.
+  Take the trace domain $H = \langle 13 \rangle = \{1, 13, 16, 4\}$ of order $\tau = 4$, so that $\omega_\tau = 13$.
+  Interpolating the columns of $W$ over $H$, we get
   \begin{equation*}
     t_0(T) = 1 + 15T + 13T^2 + 6T^3, \qquad t_1(T) = 4 + 13T + T^2 + 2T^3.
   \end{equation*}
-  For instance, $t_0(h^2) = t_0(-1) = 1 - 15 + 13 - 6 = 10 = W_{[2,0]}$.
+  For instance, $t_0(\omega_\tau^2) = t_0(-1) = 1 - 15 + 13 - 6 = 10 = W_{[2,0]}$.
 \end{example}
 
 Translating the computational integrity claim to the trace polynomials, we get:
 \begin{itemize}
-  \item All boundary constraints are satisfied: $\forall (i,j,e)\in \mathcal{B}, t_j(h^i)=e$.
-  \item For all cycles, all transition constraints are satisfied: $\forall i\in [\tau-1],\forall \ell\in[m]$
+  \item all boundary constraints are satisfied: $t_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$;
+  \item all transition constraints are satisfied: for all $i \in [\tau - 1]$ and $u \in [\kappa]$,
   \begin{equation*}
-    p_\ell(t_0(h^i),\dots,t_{w-1}(h^i),t_0(h^{i+1}),\dots,t_{w-1}(h^{i+1}))=0
+    p_u\big(t_0(\omega_\tau^i), \ldots, t_{w-1}(\omega_\tau^i), t_0(\omega_\tau^{i+1}), \ldots, t_{w-1}(\omega_\tau^{i+1})\big) = 0.
   \end{equation*}
 \end{itemize}
-If we look at the left-hand side of the equation, we can see that it is a univariate polynomial $p_\ell(t_0(T),\dots,t_{w-1}(T),t_0(h\cdot T),\dots,t_{w-1}(h\cdot T))$ evaluated at $T = h^i$. This just means that all $m$ of these transition polynomials evaluate to $0$ on $\{h^i : i \in [\tau-1]\}$, that is, on all points of $H$ except the last one.
+Here the structure of $H$ pays off: the next row is reached by multiplying the argument by $\omega_\tau$, since $\omega_\tau^{i+1} = \omega_\tau \cdot \omega_\tau^i$.
+Hence, the left-hand side of the transition constraint is the univariate \emph{constraint polynomial}
+\begin{equation*}
+  c_u(T) := p_u\big(t_0(T), \ldots, t_{w-1}(T), t_0(\omega_\tau T), \ldots, t_{w-1}(\omega_\tau T)\big)
+\end{equation*}
+evaluated at $T = \omega_\tau^i$.
+This just means that all $\kappa$ constraint polynomials vanish on $\{\omega_\tau^i : i \in [\tau - 1]\}$, that is, on all points of $H$ except the last one.
 
-This observation gives rise to the high-level protocol shown in \Cref{fig:stark-high-level}
-\begin{algoen}
-  \item The prover commits to the trace polynomials $t_0(T), \ldots, t_{w-1}(T)$.
-  \item The verifier checks that $t_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$.
-  \item The prover commits to the transition polynomials
-  \begin{equation*}
-    c_\ell(T) := p_\ell\big(t_0(T), \ldots, t_{w-1}(T), t_0(h \cdot T), \ldots, t_{w-1}(h \cdot T)\big),
-    \quad \ell \in [m].
-  \end{equation*}
-  \item The verifier checks that $c_\ell(T)$ and $t_j(T)$ are correctly related by:
+\subsubsection{Constraints as Divisibility}
+
+We already know how to express ``a polynomial vanishes on a set'' as a statement about degrees: this is exactly what quotienting did in \Cref{prop:multiple-quotientings}.
+By \Cref{th:root-div}, a polynomial vanishes at every point of a set $S$ if and only if it is divisible by the vanishing polynomial $\prod_{x \in S}(T - x)$.
+Both kinds of AIR constraints are instances of this single principle.
+
+\begin{definition}[Generalized AIR constraint]\label{def:gen-air}
+  A \emph{generalized AIR constraint} is given by two polynomials:
   \begin{itemize}
-    \item choosing a random point $z \leftarrowS \mathbb{F}_q^{\times}$;
-    \item querying the values $t_j(z)$ and $t_j(h \cdot z)$ $\forall j \in [w]$;
-    \item evaluating the transition verification polynomials $p_\ell$ at
-    \begin{equation*}
-      \big(t_0(z), \ldots, t_{w-1}(z), t_0(h \cdot z), \ldots, t_{w-1}(h \cdot z)\big)
-    \end{equation*}
-    \item querying the values $c_\ell(z)$;
-    \item checking that the values obtained in the previous two steps match.
+    \item The \emph{numerator} determines which equation between elements of the algebraic execution trace holds, in a manner that is independent of the cycle.
+    For transition constraints, the numerator is exactly the constraint polynomial $c_u$.
+    For the boundary constraints of register $j$, the numerator is $t_j - \iota_j$, where $\iota_j$ interpolates the required boundary values.
+    \item The \emph{denominator} is a vanishing polynomial that determines where the equation is supposed to hold, by vanishing in those points.
+    For transition constraints, it vanishes on all points of the trace domain except the last.
+    For boundary constraints, it vanishes only on the boundary points.
   \end{itemize}
-  \item The verifier checks that the transition polynomials $c_\ell(T)$ evaluate to zero on
-  $\{h^i : i \in [\tau-1]\}$.
-\end{algoen}
+  The constraint is satisfied if and only if the numerator is divisible by the denominator, that is, if the \emph{quotient} of the numerator by the denominator is a polynomial.
+\end{definition}
 
-In fact, the commitment to the transition polynomials can be omitted. Instead, the verifier uses
-the values of $t_j$ at $z$ and $h \cdot z$ to compute the value of $c_\ell(T)$ at the one point
-needed to verify that $c_\ell(T)$ evaluates to $0$ on $\{h^i : i \in [\tau-1]\}$.
+Explicitly, for every register $j \in [w]$, let $\mathcal{B}_j := \{\omega_\tau^i : (i, j, v) \in \mathcal{B}\}$ be its set of boundary points, let the \emph{boundary interpolant} $\iota_j$ be the polynomial of degree less than $\#\mathcal{B}_j$ such that $\iota_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$, and let $\nu_j(T) := \prod_{x \in \mathcal{B}_j} (T - x)$.
+These are precisely the polynomials $\iota$ and $\nu$ of \Cref{prop:multiple-quotientings}, applied to the points $\mathcal{B}_j$.
+The \emph{transition vanishing polynomial} is
+\begin{equation*}
+  \nu_{\mathcal{T}}(T) := \prod_{i \in [\tau - 1]} (T - \omega_\tau^i) = \frac{T^\tau - 1}{T - \omega_\tau^{\tau - 1}},
+\end{equation*}
+where the second equality follows from \Cref{lemma:vanishing-polynomial}.
+The quotients are
+\begin{equation*}
+  q^{\mathcal{B}}_j := \frac{t_j - \iota_j}{\nu_j}, \quad j \in [w], \qquad q^{\mathcal{T}}_u := \frac{c_u}{\nu_{\mathcal{T}}}, \quad u \in [\kappa].
+\end{equation*}
+If $p_u$ has total degree $d_u$, then $\deg c_u \leq d_u (\tau - 1)$, so a valid trace gives $\deg q^{\mathcal{T}}_u \leq (d_u - 1)(\tau - 1)$ and $\deg q^{\mathcal{B}}_j < \tau - \#\mathcal{B}_j$.
+
+\begin{proposition}\label{prop:stark-quotients}
+  The trace $W$ satisfies all boundary and transition constraints if and only if all boundary quotients $q^{\mathcal{B}}_j$ and all transition quotients $q^{\mathcal{T}}_u$ are polynomials.
+\end{proposition}
+
+\begin{proof}
+  A quotient is a polynomial if and only if its numerator vanishes at every root of its denominator (\Cref{th:root-div}, applied to each root in turn).
+  For the boundary quotients, this means $t_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$, and for the transition quotients it means $c_u(\omega_\tau^i) = 0$ for all $i \in [\tau - 1]$, which are exactly the constraints.
+\end{proof}
 
 \begin{example}\label{ex:stark-fibsq-4}
-  We continue \Cref{ex:stark-fibsq-3}. Substituting $x_j \to t_j(T)$ and $y_j \to t_j(hT)$ into $p_0$ and $p_1$, we get the transition polynomials as
-    \begin{align*}
-     c_0(T) &= t_0(hT) - t_1(T) = 14 + 12T + 3T^2 + 5T^3, \\
-     c_1(T) &= t_1(hT) - t_0(T)^2 - t_1(T)^2 =\\
-            &= 4 + T + 13T^2 + 6T^3 + 6T^4 + 10T^5 + 11T^6.
-   \end{align*}
-  In particular, $c_0(h) = t_0(h^2) - t_1(h) = W_{[2,0]} - W_{[1,1]} = 10 - 10 = 0$.
-    \begin{center}
+  We continue \Cref{ex:stark-fibsq-3}.
+  Substituting $X_j \mapsto t_j(T)$ and $Y_j \mapsto t_j(\omega_\tau T)$ into $p_0$ and $p_1$, we get the constraint polynomials
+  \begin{align*}
+    c_0(T) &= t_0(\omega_\tau T) - t_1(T) = 14 + 12T + 3T^2 + 5T^3, \\
+    c_1(T) &= t_1(\omega_\tau T) - t_0(T)^2 - t_1(T)^2 \\
+           &= 4 + T + 13T^2 + 6T^3 + 6T^4 + 10T^5 + 11T^6.
+  \end{align*}
+  Their values on $H$ are shown below: both vanish on $\omega_\tau^0, \omega_\tau^1, \omega_\tau^2$, but not on $\omega_\tau^3$, where there is no next row to compare with.
+  \begin{center}
     \begin{tikzpicture}[
         x=0.8cm, y=0.6cm,
         cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
@@ -568,114 +617,103 @@ needed to verify that $c_\ell(T)$ evaluates to $0$ on $\{h^i : i \in [\tau-1]\}$
         \node[lab, left=6pt] at (-0.5, 0) {$x \in H$};
         \node[lab, left=6pt] at (-0.5, -1) {$c_0(x)$};
         \node[lab, left=6pt] at (-0.5, -2) {$c_1(x)$};
-        \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, oc-gray-7] (-0.45, -2.5) -- node[lab, below=4pt] {$\{h^i : i \in [\tau - 1]\}$} (2.45, -2.5);
-        \node[lab, right=6pt, align=left, text=oc-red-8] at (3.5, -1.5) {at $h^3$:\\non-zero,\\no transition};
+        \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, oc-gray-7] (-0.45, -2.5) -- node[lab, below=4pt] {$\{\omega_\tau^i : i \in [\tau - 1]\}$} (2.45, -2.5);
+        \node[lab, right=6pt, align=left, text=oc-red-8] at (3.5, -1.5) {at $\omega_\tau^3$:\\non-zero,\\no transition};
     \end{tikzpicture}
   \end{center}
-
-  In step 4, suppose the verifier chooses $z = 2$, so $h \cdot z = 9$. He queries $t_0(2) = 12$, $t_0(9) = 4$, $t_1(2) = 16$ and $t_1(9) = 11$, and evaluates the transition constraints at these values: 
+  Each register has one boundary condition, namely $(0, 0, 1)$ and $(3, 1, 13)$.
+  Since $\omega_\tau^0 = 1$ and $\omega_\tau^3 = 4$, we get $\mathcal{B}_0 = \{1\}$ and $\mathcal{B}_1 = \{4\}$, so $\iota_0 = 1$, $\iota_1 = 13$, $\nu_0 = T - 1$ and $\nu_1 = T - 4$.
+  The transition vanishing polynomial is
   \begin{equation*}
-    p_0 = 4 - 16 = 5, \qquad p_1 = 11 - 12^2 - 16^2 = 2,
+    \nu_{\mathcal{T}}(T) = (T - 1)(T - 13)(T - 16) = \frac{T^4 - 1}{T - 4} = T^3 + 4T^2 + 16T + 13.
   \end{equation*}
-  which match $c_0(2) = 5$ and $c_1(2) = 2$.
+  All four divisions are exact:
+  \begin{gather*}
+    q^{\mathcal{B}}_0 = \frac{t_0 - 1}{T - 1} = 2T + 6T^2, \qquad
+    q^{\mathcal{B}}_1 = \frac{t_1 - 13}{T - 4} = 15 + 9T + 2T^2, \\
+    q^{\mathcal{T}}_0 = \frac{c_0}{\nu_{\mathcal{T}}} = 5, \qquad
+    q^{\mathcal{T}}_1 = \frac{c_1}{\nu_{\mathcal{T}}} = 16 + 11T^3.
+  \end{gather*}
 \end{example}
 
-We could use the protocol above if it did not have a flaw: the verifier cannot perform steps 2 and 5, because he sees the values of the polynomials only on the domain $D$, while these checks concern the trace domain $H$. That is why we use FRI to simulate these evaluation checks, with a trick similar to the one used for KZG polynomial commitments. By \Cref{th:root-div}, $g(x) = y$ if and only if $(T - x) \mid g(T) - y$. Hence an evaluation check can be simulated by:
-\begin{itemize}
-  \item subtracting the $y$-coordinate;
-  \item dividing out the \emph{zerofier}, which is the minimal polynomial that vanishes at the $x$-coordinate;
-  \item proving with FRI that the resulting quotient has a bounded degree.
-\end{itemize}
+\subsubsection{AIR as a Poly-IOP}
 
-This procedure happens twice for the STARK polynomials: (1) first, applied to the trace polynomials to show satisfaction of the boundary constraints and (2) second, applied to the transition polynomials to show that the transition constraints are satisfied. We call the resulting lists of quotient polynomials the \emph{boundary quotients} and the \emph{transition quotients} respectively.
+\Cref{prop:stark-quotients} reduces the computational integrity claim to ``certain rational functions are polynomials''.
+To check this with few evaluations, we combine all quotients into one with a random challenge, as in the batching of \Cref{lemma:proximity-gap-simplified},
+and check the defining identity of the combination at a single random point.
+For simplicity, from now on we assume that all transition verification polynomials have degree at most $2$, as in \Cref{ex:stark-fibsq-2}.
+Then all quotients have degree less than $\tau$.
 
-Both kinds of constraints are instances of a single, more general notion.
-
-\begin{definition}[Generalized AIR constraint]\label{def:gen-air}
-  A \emph{generalized AIR constraint} is given by two polynomials:
-  \begin{itemize}
-    \item The \emph{numerator} determines which equation between elements of the algebraic execution
-    trace holds, in a manner that is independent of the cycle. For transition constraints, the numerator
-    is exactly the transition polynomial $c_\ell(T)$. For a boundary constraint $(i,j,e) \in \mathcal{B}$,
-    the numerator is simply $t_j(T) - e$.
-    \item The \emph{denominator} is a zerofier that determines where the equation is supposed to hold,
-    by vanishing in those points. For transition constraints, this zerofier vanishes on all points of the
-    trace evaluation domain except the last. For boundary constraints, it vanishes only on the boundary points.
-  \end{itemize}
-  The constraint is satisfied if and only if the numerator is divisible by the denominator, that is,
-  if the \emph{quotient} of the numerator by the denominator is a polynomial.
+\begin{definition}[AIR Poly-IOP]\label{def:air-poly-iop}
+  The AIR $\big(\tau, w, \{p_u\}_{u \in [\kappa]}, \mathcal{B}\big)$ is public, and the prover knows a trace $W$.
+  \begin{algoen}
+    \item The prover sends the trace polynomials $t_0, \ldots, t_{w-1} \in \mathbb{F}[T]^{<\tau}$.
+    \item The verifier samples $\gamma \leftarrowS \mathbb{F}$, and the prover sends the \emph{composition polynomial}
+    \begin{equation*}
+      \psi := \sum_{u \in [\kappa]} \gamma^u \cdot q^{\mathcal{T}}_u + \sum_{j \in [w]} \gamma^{\kappa + j} \cdot q^{\mathcal{B}}_j \in \mathbb{F}[T]^{<\tau}.
+    \end{equation*}
+    \item The verifier samples $r_0 \leftarrowS \mathbb{F}$, queries $t_j(r_0)$ and $t_j(\omega_\tau r_0)$ for all $j \in [w]$, and $\psi(r_0)$.
+    Writing $\mathbf{t}(r_0) := (t_0(r_0), \ldots, t_{w-1}(r_0))$, it checks that
+    \begin{equation*}
+      \psi(r_0) = \sum_{u \in [\kappa]} \gamma^u \cdot \frac{p_u\big(\mathbf{t}(r_0), \mathbf{t}(\omega_\tau r_0)\big)}{\nu_{\mathcal{T}}(r_0)} + \sum_{j \in [w]} \gamma^{\kappa + j} \cdot \frac{t_j(r_0) - \iota_j(r_0)}{\nu_j(r_0)}.
+    \end{equation*}
+  \end{algoen}
 \end{definition}
 
-For every register $j \in [w]$, let $\mathcal{B}_j := \{h^i : (i,j,e) \in \mathcal{B}\}$ be its set of
-boundary points, let the \emph{boundary interpolant} $I_j$ be the polynomial of degree less than
-$|\mathcal{B}_j|$ such that $I_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$, and let
-$Z_{\mathcal{B}_j}(T) := \prod_{x \in \mathcal{B}_j} (T - x)$ be the \emph{boundary zerofier}.
-The \emph{transition zerofier} is
-\begin{equation*}
-  Z(T) := \prod_{i \in [\tau-1]} (T - h^i) = \frac{T^\tau - 1}{T - h^{\tau-1}},
-\end{equation*}
-where the second equality follows from \Cref{lemma:vanishing-polynomial}. The quotients are
-\begin{equation*}
-  q^{\mathcal{B}}_j(T) := \frac{t_j(T) - I_j(T)}{Z_{\mathcal{B}_j}(T)}, \quad j \in [w],
-  \qquad
-  q^{\mathcal{T}}_\ell(T) := \frac{c_\ell(T)}{Z(T)}, \quad \ell \in [m].
-\end{equation*}
+The right-hand side is computed by the verifier itself from the queried values and the public polynomials $p_u$, $\iota_j$, $\nu_j$ and $\nu_{\mathcal{T}}$, just as it computed the quotients $\mathsf{q}_j$ cell by cell in \Cref{fig:poly-iop-third-attempt}.
+If the trace is valid, then by \Cref{prop:stark-quotients} the right-hand side is the evaluation of the polynomial $\psi$ at $r_0$, so the check passes.
+If some constraint fails, then some quotient is not a polynomial, and with high probability over $\gamma$ neither is their combination; so no polynomial $\psi$ can agree with it at a random point $r_0$, except with probability about $2\tau/\#\mathbb{F}$ by \Cref{lemma:one-sz}.
 
 \begin{example}\label{ex:stark-fibsq-5}
-  We continue \Cref{ex:stark-fibsq-4}. Each register has one boundary condition, namely $(0,0,1)$ and $(3,1,13)$.
-  Since $h^0 = 1$ and $h^3 = 4$, we get $\mathcal{B}_0 = \{1\}$ and $\mathcal{B}_1 = \{4\}$, so the boundary interpolants are constants, $I_0 = 1$ and $I_1 = 13$, and the boundary zerofiers are $Z_{\mathcal{B}_0} = T - 1$ and $Z_{\mathcal{B}_1} = T - 4$.
-  Dividing, we get
+  We continue \Cref{ex:stark-fibsq-4} with $\gamma = 2$.
+  The composition polynomial is
   \begin{equation*}
-    q^{\mathcal{B}}_0(T) = \frac{t_0(T) - 1}{T - 1} = 2T + 6T^2, \qquad
-    q^{\mathcal{B}}_1(T) = \frac{t_1(T) - 13}{T - 4} = 15 + 9T + 2T^2.
+    \psi = q^{\mathcal{T}}_0 + 2 q^{\mathcal{T}}_1 + 4 q^{\mathcal{B}}_0 + 8 q^{\mathcal{B}}_1 = 4 + 12T + 6T^2 + 5T^3.
   \end{equation*}
-
-  The transition constraints must hold at $h^0, h^1, h^2$, so the transition zerofier is
+  Suppose the verifier samples $r_0 = 2$, so that $\omega_\tau r_0 = 9$.
+  It learns $t_0(2) = 12$, $t_0(9) = 4$, $t_1(2) = 16$, $t_1(9) = 11$ and $\psi(2) = 7$.
+  It computes $p_0 = 4 - 16 = 5$, $p_1 = 11 - 12^2 - 16^2 = 2$ and $\nu_{\mathcal{T}}(2) = 1$, and checks
   \begin{equation*}
-    Z(T) = (T - 1)(T - 13)(T - 16) = \frac{T^4 - 1}{T - 4} = T^3 + 4T^2 + 16T + 13.
-  \end{equation*}
-  Since $c_0$ and $c_1$ vanish at these points, both divisions are exact:
-  \begin{equation*}
-    q^{\mathcal{T}}_0(T) = \frac{c_0(T)}{Z(T)} = 5, \qquad
-    q^{\mathcal{T}}_1(T) = \frac{c_1(T)}{Z(T)} = 16 + 11T^3.
+    5 + 2 \cdot 2 + 4 \cdot \frac{12 - 1}{2 - 1} + 8 \cdot \frac{16 - 13}{2 - 4} = 7 = \psi(2).
   \end{equation*}
 \end{example}
 
-The degree bounds are $\deg q^{\mathcal{B}}_j < \tau - |\mathcal{B}_j|$ and, if $p_\ell$ has degree $d_\ell$, $\deg q^{\mathcal{T}}_\ell \leq (d_\ell - 1)(\tau - 1)$. As a result, we can summarize the discussion as follows.
+\subsubsection{Compiling the AIR Poly-IOP}
 
-\begin{proposition}\label{prop:stark-quotients}
-  The trace $W$ satisfies all boundary and transition constraints if and only if all boundary quotients $q^{\mathcal{B}}_j$ and all transition quotients $q^{\mathcal{T}}_\ell$ are polynomials.
-\end{proposition}
+The AIR Poly-IOP sends $w + 1$ polynomials of degree less than $\tau$ and queries them at the two points $r_0$ and $\omega_\tau r_0$.
+This is exactly the input of the compilation of \Cref{fig:poly-iop-third-attempt}, with $m = w + 1$ polynomials and $t = 1$ additional point:
+\begin{algoen}
+  \item \textbf{Commit.} The prover sends the restrictions $\overline{t_0}, \ldots, \overline{t_{w-1}}$ and $\overline{\psi}$ to an evaluation domain $\Omega$ of size $n = \tau / \rho$.
+  \item \textbf{Bind and query.} The point $r_0$ is already a random point, so it doubles as the binding point of \Cref{fig:poly-iop-second-attempt}; we only need $r_0 \notin \Omega$. The prover sends the claimed values at $r_0$ and $\omega_\tau r_0$.
+  \item \textbf{Quotient and batch.} Both parties define the virtual quotients $\mathsf{q}_j := (g_j - \iota'_j)/\nu'$ with $\nu' := (T - r_0)(T - \omega_\tau r_0)$, where $g_j$ runs over the committed oracles and $\iota'_j$ interpolates the claimed values, and batch them into $h := \sum_j \alpha^j \mathsf{q}_j$.
+  \item \textbf{Test.} The parties run FRI (\Cref{def:fri}) on $h$ against $\mathsf{RS}[\mathbb{F}, \Omega, \tau - 2]$.
+\end{algoen}
+The resulting protocol, after the BCS transformation, is a STARK.
+It is essentially the DEEP-ALI protocol used by deployed STARKs~\cite{BGKS20}. % TODO: bib key
 
-\begin{proof}
-  A quotient is a polynomial if and only if its numerator vanishes at every root of its denominator (\Cref{th:root-div}, applied to each root in turn). For the boundary quotients this means $t_j(h^i) = e$ for all $(i,j,e) \in \mathcal{B}$, and for the transition quotients it means $c_\ell(h^i) = 0$ for all $i \in [\tau-1]$, which are exactly the constraints.
-\end{proof}
+There is one subtlety: the domain $\Omega$.
+The verifier divides by $\nu_{\mathcal{T}}$ and $\nu_j$, which vanish on $H$, and by $\nu'$, which vanishes at $r_0$ and $\omega_\tau r_0$; and FRI needs $-x \in \Omega$ for every $x \in \Omega$.
+The standard choice is a coset of a larger subgroup.
 
-The trace polynomial $t_j$ appears in both types of quotients, while $I_j$ and $Z_{\mathcal{B}_j}$ are public. Therefore, the trace can be reconstructed from the boundary quotient,
-\begin{equation*}
-  t_j(T) = q^{\mathcal{B}}_j(T) \cdot Z_{\mathcal{B}_j}(T) + I_j(T),
-\end{equation*}
-and the prover commits to the boundary quotients instead of the trace polynomials. After opening $q^{\mathcal{B}}_j$ at the points $x$ and $h \cdot x$, the verifier computes $t_j$ itself, then derives $c_\ell$ from it, and finally derives $q^{\mathcal{T}}_\ell$ from $c_\ell$.
-
-\begin{remark}
-  The zerofiers $Z$ and $Z_{\mathcal{B}_j}$ vanish on points of $H$, so the quotients cannot be evaluated there. Since $H = \langle h \rangle$ is a subgroup of $\langle \omega \rangle$, we take the FRI domain to be a coset $D = c \cdot \langle \omega \rangle$ with $c \notin \langle \omega \rangle$, which does not intersect $H$. Moreover, $h = \omega^{1/\rho}$, so $h \cdot x \in D$ for every $x \in D$. FRI works on a coset in exactly the same way: $-x \in D$ for every $x \in D$, and since $(cx)^2 = c^2 x^2$, squaring maps $D$ onto the coset $c^2 \cdot \langle \omega^2 \rangle$ of half the size.
+\begin{remark}\label{remark:stark-coset}
+  Let $\omega$ be a primitive $n$th root of unity with $\omega^{n/\tau} = \omega_\tau$, so that $H \subseteq \langle \omega \rangle$, and take $\Omega := c \cdot \langle \omega \rangle$ for some $c \notin \langle \omega \rangle$.
+  Then $\Omega \cap H = \emptyset$.
+  FRI works on a coset in exactly the same way: $-x \in \Omega$ for every $x \in \Omega$, and squaring maps $\Omega$ onto the coset $c^2 \cdot \langle \omega^2 \rangle$ of half the size.
 \end{remark}
 
 \begin{example}\label{ex:stark-fibsq-6}
-  We continue \Cref{ex:stark-fibsq-5}. Take $\rho = 1/2$, so the FRI domain has $n = \tau / \rho = 8$ elements.
-  Let $\omega = 9$, which has order $8$ in $\mathbb{F}_{17}^\times$, so that $h = \omega^2 = 13$ and
+  We continue \Cref{ex:stark-fibsq-5} with $\rho = 1/2$, so $n = \tau / \rho = 8$.
+  Let $\omega = 9$, which has order $8$ in $\mathbb{F}_{17}^\times$, so that $\omega^2 = 13 = \omega_\tau$ and
   \begin{equation*}
     \langle \omega \rangle = \{1, 9, 13, 15, 16, 8, 4, 2\} \supseteq H.
   \end{equation*}
   The element $c = 3$ does not belong to $\langle \omega \rangle$, so we take
   \begin{equation*}
-    D = 3 \cdot \langle \omega \rangle = \{3, 10, 5, 11, 14, 7, 12, 6\},
+    \Omega = 3 \cdot \langle \omega \rangle = \{3, 10, 5, 11, 14, 7, 12, 6\},
   \end{equation*}
-  where the $i$-th element is $3 \cdot \omega^i$. Indeed, $D$ does not intersect $H$.
-  Taking $x = 3$, we see that $-3 = 14 \in D$ and $h \cdot 3 = 5 \in D$; in general, multiplication by $h = \omega^2$ shifts the index by $2$.
-  Squaring maps $D$ onto $9 \cdot \langle 13 \rangle = \{9, 15, 8, 2\}$, which is the coset $c^2 \cdot \langle \omega^2 \rangle$ of half the size.
-
-  Now the prover evaluates the boundary quotients from \Cref{ex:stark-fibsq-5} on $D$ and commits to these codewords:
+  where the $i$th element is $3 \cdot \omega^i$.
+  Indeed, $\Omega \cap H = \emptyset$, and the point $r_0 = 2$ from \Cref{ex:stark-fibsq-5} and $\omega_\tau r_0 = 9$ lie outside $\Omega$ as well.
+  The prover commits to the following three codewords:
   \begin{center}
     \begin{tikzpicture}[
         x=0.8cm, y=0.6cm,
@@ -683,154 +721,158 @@ and the prover commits to the boundary quotients instead of the trace polynomial
         dom/.style={cell, fill=oc-gray-1},
         lab/.style={font=\footnotesize},
     ]
-        \foreach \x/\a/\b [count=\i from 0] in {3/9/9, 10/8/16, 5/7/8, 11/0/16, 14/14/6, 7/2/6, 12/4/3, 6/7/5} {
+        \foreach \x/\a/\b/\c [count=\i from 0] in {3/2/4/8, 10/5/7/12, 5/12/4/6, 11/1/6/3, 14/13/5/6, 7/13/14/6, 12/11/3/13, 6/2/6/12} {
             \node[dom] at (\i, 0) {\x};
             \node[cell, fill=oc-blue-1] at (\i, -1) {\a};
             \node[cell, fill=oc-blue-1] at (\i, -2) {\b};
+            \node[cell, fill=oc-blue-1] at (\i, -3) {\c};
         }
-        \node[lab, left=6pt] at (-0.5, 0) {$x \in D$};
-        \node[lab, left=6pt] at (-0.5, -1) {$q^{\mathcal{B}}_0(x)$};
-        \node[lab, left=6pt] at (-0.5, -2) {$q^{\mathcal{B}}_1(x)$};
+        \node[lab, left=6pt] at (-0.5, 0) {$x \in \Omega$};
+        \node[lab, left=6pt] at (-0.5, -1) {$\overline{t_0}(x)$};
+        \node[lab, left=6pt] at (-0.5, -2) {$\overline{t_1}(x)$};
+        \node[lab, left=6pt] at (-0.5, -3) {$\overline{\psi}(x)$};
     \end{tikzpicture}
   \end{center}
-  Note that $D \cap H = \emptyset$ is essential here: the quotients are computed pointwise as fractions, for instance, the verifier later computes $q^{\mathcal{T}}_\ell(x) = c_\ell(x)/Z(x)$, which requires $Z(x) \neq 0$.
+  Besides the values at $r_0 = 2$ from \Cref{ex:stark-fibsq-5}, the prover sends $t_0(9) = 4$, $t_1(9) = 11$ and $\psi(9) = 10$.
+  With $\nu' = (T - 2)(T - 9)$, the three quotients are $\mathsf{q}_0 = 11 + 6T$, $\mathsf{q}_1 = 6 + 2T$ and $\mathsf{q}_2 = 10 + 5T$, and the batching challenge $\alpha = 3$ gives
+  \begin{equation*}
+    h = \mathsf{q}_0 + 3 \mathsf{q}_1 + 9 \mathsf{q}_2 = 6T,
+  \end{equation*}
+  a codeword of $\mathsf{RS}[\mathbb{F}_{17}, \Omega, 2]$.
+  FRI needs a single fold: with $\beta_0 = 5$, the fold of $\overline{h}$ is the constant $13$ on $\Omega^2 = \{9, 15, 8, 2\}$.
 \end{example}
-
-\subsubsection{Nonlinear Combination}
-
-Instead of running FRI separately for every quotient, the prover combines all of them into a single polynomial. For simplicity, we assume from now on that all transition verification polynomials have degree at most $2$, as in~\cite{szepieniec2021anatomy}. Then every quotient has degree less than $\tau$, and we run FRI with the degree bound $k := \tau$, so that $n = \tau/\rho$.
-
-Let $\mathcal{Q}$ denote the list of all boundary and transition quotients, and for $q \in \mathcal{Q}$ let $d_q$ be its degree bound: $d_q = \tau - |\mathcal{B}_j| - 1$ for $q = q^{\mathcal{B}}_j$, and $d_q = (d_\ell - 1)(\tau - 1)$ for $q = q^{\mathcal{T}}_\ell$. After receiving random weights $\alpha_q, \gamma_q \leftarrowS \mathbb{F}_q$ from the verifier, the prover computes
-\begin{equation*}
-  g(T) := \sum_{q \in \mathcal{Q}} \big( \alpha_q \cdot q(T) + \gamma_q \cdot T^{\,k-1-d_q} \cdot q(T) \big).
-\end{equation*}
-
-Each quotient enters the sum twice. The first term alone would not be enough: a quotient whose degree exceeds its own bound $d_q$ but is still less than $k$ would not affect the degree of $g$ and would go unnoticed. The second term shifts $q$ so that its degree bound becomes exactly $k-1$: if $\deg q > d_q$, this term has degree at least $k$. Hence, with high probability over the choice of the weights, $\deg g < k$ if and only if $\deg q \leq d_q$ for every $q \in \mathcal{Q}$. Likewise, if some quotient is not a polynomial at all, then with high probability the codeword of $g$ on $D$ is far from $\mathsf{RS}_q[D,k]$. Following~\cite{szepieniec2021anatomy}, we call $g$ a \emph{nonlinear combination}, because of the factors $T^{\,k-1-d_q}$. It therefore suffices to run FRI once, on $g$.
 
 \begin{example}\label{ex:stark-fibsq-7}
-  We continue \Cref{ex:stark-fibsq-6}. Here $k = \tau = 4$, and $\mathcal{Q}$ consists of four quotients from \Cref{ex:stark-fibsq-5}.
-  Their degree bounds are $d_q = 2, 2, 0, 3$ for $q^{\mathcal{B}}_0, q^{\mathcal{B}}_1, q^{\mathcal{T}}_0, q^{\mathcal{T}}_1$, respectively, so the shifts $T^{\,k-1-d_q}$ are $T^1, T^1, T^3, T^0$.
-  Suppose the verifier sends the weights $(\alpha_q) = (1, 2, 3, 4)$ and $(\gamma_q) = (5, 6, 7, 8)$ in the same order. Then
-  \begin{gather*}
-    g(T) = (1 + 5T) \cdot q^{\mathcal{B}}_0(T) + (2 + 6T) \cdot q^{\mathcal{B}}_1(T) + (3 + 7T^3) \cdot q^{\mathcal{T}}_0(T) + \\ (4 + 8) \cdot q^{\mathcal{T}}_1(T) = 16 + 8T + 6T^2 + 5T^3.
-  \end{gather*}
-  If we write out the sum, then we can see that every summand has degree at most $3$, so $\deg g < k$, as expected.
-
-  The prover evaluates $g$ on $D$, and this codeword becomes the input $f_0$ of FRI:
+  We finish our running example.
+  Since $h \in \mathsf{RS}[\mathbb{F}_{17}, \Omega, 2]$, FRI has a single round: the input layer is the virtual function $h$, and after $\beta_0 = 5$ the prover sends the constant $c = 13$.
+  Suppose the verifier samples $x_0 = 3$, so it needs $h(3)$ and $h(-3) = h(14)$.
+  It opens the committed codewords at $3$ and $14$:
   \begin{center}
     \begin{tikzpicture}[
         x=0.8cm, y=0.6cm,
         cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
         dom/.style={cell, fill=oc-gray-1},
-        lab/.style={font=\footnotesize},
-    ]
-        \foreach \x/\v [count=\i from 0] in {3/8, 10/1, 5/15, 11/5, 14/13, 7/7, 12/11, 6/0} {
-            \node[dom] at (\i, 0) {\x};
-            \node[cell, fill=oc-teal-1] at (\i, -1) {\v};
-        }
-        \node[lab, left=6pt] at (-0.5, 0) {$x \in D$};
-        \node[lab, left=6pt] at (-0.5, -1) {$g(x)$};
-    \end{tikzpicture}
-  \end{center}
-\end{example}
-
-\subsection{The STARK Protocol}\label{subsec:stark-protocol}
-
-We can now put everything together. The prover commits to the boundary quotients, combines all quotients into a single polynomial $g$, and proves with FRI that $g$ has low degree. At every point queried by FRI, the verifier checks that the value of $g$ is consistent with the committed boundary quotients.
-
-\begin{definition}[STARK protocol]\label{def:stark}
-  The AIR $\big(\tau, w, \{p_\ell\}_{\ell \in [m]}, \mathcal{B}\big)$, the domains $H$ and $D$, and the
-  degree bound $k$ are public; the prover knows a trace $W$.
-  \begin{algoen}
-    \item The prover computes the trace polynomials $t_j$ and the boundary quotients $q^{\mathcal{B}}_j$,
-    and sends the Merkle roots of the codewords of $q^{\mathcal{B}}_j$ on $D$ for all $j \in [w]$.
-    \item The verifier sends random weights $\alpha_q, \beta_q \leftarrowS \mathbb{F}_q$ for all
-    $q \in \mathcal{Q}$.
-    \item The prover computes the transition quotients $q^{\mathcal{T}}_\ell$ and the nonlinear
-    combination $g$, and runs the commit phase of FRI (\Cref{def:fri}) with $f_0 := g$.
-    \item The parties run the query phase of FRI. For every point $x \in D$ at which the verifier reads
-    $f_0$, the prover additionally opens $q^{\mathcal{B}}_j(x)$ and $q^{\mathcal{B}}_j(h \cdot x)$ for all
-    $j \in [w]$, together with their authentication paths.
-    \item For every such $x$, the verifier checks the authentication paths, recovers $t_j(x)$ and
-    $t_j(h \cdot x)$ from the boundary quotients, computes $c_\ell(x)$,
-    $q^{\mathcal{T}}_\ell(x) = c_\ell(x)/Z(x)$ and $g(x)$, and checks that $g(x) = f_0(x)$.
-  \end{algoen}
-  The verifier accepts if and only if all these checks and all checks of FRI pass.
-\end{definition}
-\begin{example}\label{ex:stark-fibsq-8}
-  We finish our running example. The prover has committed to the boundary quotients (\Cref{ex:stark-fibsq-6}) and computed the codeword of $g = 16 + 8T + 6T^2 + 5T^3$ on $D$ (\Cref{ex:stark-fibsq-7}), which becomes the first layer $f_0$ of FRI.
-  Since $k = 4$, FRI takes $r = 2$ rounds.
-  For the FRI challenge $\beta_0 = 2$, we have $f_{0,E} = 16 + 6T$ and $f_{0,O} = 8 + 5T$, so $f_1 = f_{0,E} + 2 \cdot f_{0,O} = 15 + 16T$ on $D_1 = \{9, 15, 8, 2\}$.
-  For $\beta_1 = 5$, we get the constant $f_2 = 15 + 5 \cdot 16 = 10$.
-
-  Suppose the verifier samples $x_0 = 3$, so $x_1 = 9$ and $x_2 = 13$. The opened cells are shown below.
-  \begin{center}
-    \begin{tikzpicture}[
-        x=0.8cm, y=0.6cm,
-        cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
-        dom/.style={cell, fill=oc-gray-1},
-        val/.style={cell, fill=oc-teal-1},
-        qry/.style={cell, fill=oc-orange-3, draw=oc-orange-8},
+        com/.style={cell, fill=oc-blue-1},
+        vir/.style={cell, draw=oc-teal-7, densely dashed, fill=oc-teal-1},
+        qry/.style={draw=oc-orange-8, very thick, fill=oc-orange-2},
         lab/.style={font=\footnotesize},
         arr/.style={-stealth, thick, oc-orange-8},
     ]
-        % ---------- layer 0 ----------
-        \foreach \x/\v/\s [count=\i from 0] in {3/8/qry, 10/1/val, 5/15/val, 11/5/val, 14/13/qry, 7/7/val, 12/11/val, 6/0/val} {
+        \foreach \x/\a/\b/\c/\h [count=\i from 0] in {3/2/4/8/1, 10/5/7/12/9, 5/12/4/6/13, 11/1/6/3/15, 14/13/5/6/16, 7/13/14/6/8, 12/11/3/13/4, 6/2/6/12/2} {
             \node[dom] at (\i, 0) {\x};
-            \node[\s] (a\i) at (\i, -1) {\v};
+            \node[com] (t\i) at (\i, -1) {\a};
+            \node[com] (u\i) at (\i, -2) {\b};
+            \node[com] (p\i) at (\i, -3) {\c};
+            \node[vir] (h\i) at (\i, -4) {\h};
         }
-        \node[lab, left=6pt] at (-0.5, 0) {$x \in D_0$};
-        \node[lab, left=6pt] at (-0.5, -1) {$f_0(x)$};
-        % ---------- layer 1 ----------
-        \foreach \x/\v/\s [count=\i from 0] in {9/6/qry, 15/0/val, 8/7/qry, 2/13/val} {
-            \node[dom] (d\i) at (\i+2, -2.8) {\x};
-            \node[\s] (b\i) at (\i+2, -3.8) {\v};
+        \foreach \i/\a/\b/\c/\h in {0/2/4/8/1, 4/13/5/6/16} {
+            \node[com, qry] at (t\i) {\a};
+            \node[com, qry] at (u\i) {\b};
+            \node[com, qry] at (p\i) {\c};
+            \node[vir, qry] at (h\i) {\h};
         }
-        \node[lab, left=6pt] at (1.5, -2.8) {$x \in D_1$};
-        \node[lab, left=6pt] at (1.5, -3.8) {$f_1(x)$};
-        % ---------- layer 2 ----------
-        \node[qry] (c0) at (3.5, -5.6) {10};
-        \node[lab, left=6pt] at (3, -5.6) {$f_2$};
-        % ---------- folding of the queried pairs ----------
-        \draw[arr] (a0.south) to[out=-90, in=150] (d0.north west);
-        \draw[arr] (a4.south) to[out=-90, in=30] (d0.north east);
-        \node[lab, text=oc-orange-8, right] at (4.4, -1.9) {$\beta_0 = 2$};
-        \draw[arr] (b0.south) to[out=-90, in=150] (c0.north west);
-        \draw[arr] (b2.south) to[out=-90, in=30] (c0.north east);
-        \node[lab, text=oc-orange-8, right] at (4.4, -4.75) {$\beta_1 = 5$};
+        \node[lab, left=6pt] at (-0.5, 0) {$x \in \Omega$};
+        \node[lab, left=6pt] at (-0.5, -1) {$\overline{t_0}(x)$};
+        \node[lab, left=6pt] at (-0.5, -2) {$\overline{t_1}(x)$};
+        \node[lab, left=6pt] at (-0.5, -3) {$\overline{\psi}(x)$};
+        \node[lab, left=6pt] at (-0.5, -4) {$h(x)$};
+        \node[cell, qry] (c) at (2, -6) {13};
+        \node[lab, left=6pt] at (1.5, -6) {$c$};
+        \draw[arr] (h0.south) to[out=-90, in=150] (c.north west);
+        \draw[arr] (h4.south) to[out=-90, in=30] (c.north east);
+        \node[lab, text=oc-orange-9, right] at (3.3, -5.1) {fold, $\beta_0 = 5$};
     \end{tikzpicture}
   \end{center}
-  The points $(3, 8)$, $(14, 13)$ and $(\beta_0, f_1(9)) = (2, 6)$ lie on the line $y = 2x + 2$, and the points $(9, 6)$, $(8, 7)$ and $(\beta_1, f_2) = (5, 10)$ lie on the line $y = 15 - x$, so both collinearity checks pass.
-
-  It remains to check that $f_0(3)$ is consistent with the trace. Since $h \cdot 3 = 5$, the prover opens $q^{\mathcal{B}}_0(3) = 9$, $q^{\mathcal{B}}_0(5) = 7$, $q^{\mathcal{B}}_1(3) = 9$ and $q^{\mathcal{B}}_1(5) = 8$. The verifier recovers
-  \begin{gather*}
-    t_0(3) = 9 \cdot (3 - 1) + 1 = 2, \qquad t_0(5) = 7 \cdot (5 - 1) + 1 = 12, \\
-    t_1(3) = 9 \cdot (3 - 4) + 13 = 4, \qquad t_1(5) = 8 \cdot (5 - 4) + 13 = 4.
-  \end{gather*}
-  Then 
-  \begin{gather*}
-    c_0(3) = 12 - 4 = 8 \qquad c_1(3) = 4 - 2^2 - 4^2 = 1.
-  \end{gather*} 
-  Since $Z(3) = 5$, he gets $q^{\mathcal{T}}_0(3) = 5$ and $q^{\mathcal{T}}_1(3) = 7$, and finally
+  The last row is not committed: the verifier computes it from the claimed values at $r_0 = 2$ and $\omega_\tau r_0 = 9$.
+  For instance, $\nu'(3) = (3 - 2)(3 - 9) = 11$, and the interpolant of the claimed values of $t_0$ is $\iota'_0 = 7 + 11T$, so $\mathsf{q}_0(3) = (2 - 6)/11 = 12$.
+  In the same way, $\mathsf{q}_1(3) = 12$ and $\mathsf{q}_2(3) = 8$, hence
   \begin{equation*}
-    g(3) = 16 \cdot 9 + 3 \cdot 9 + 5 \cdot 5 + 12 \cdot 7 = 8 = f_0(3),
+    h(3) = 12 + 3 \cdot 12 + 9 \cdot 8 = 1.
+  \end{equation*}
+  Together with $h(14) = 16$, the round consistency check gives
+  \begin{equation*}
+    \frac{1 + 16}{2} + 5 \cdot \frac{1 - 16}{2 \cdot 3} = 0 + 13 = 13 = c,
   \end{equation*}
   so the verifier accepts.
-  Of course, over $\mathbb{F}_{17}$ the soundness error is far from negligible, and the opened values reveal a lot about the trace. Real STARKs use large fields, many queries and randomization of the trace.
+  Of course, over $\mathbb{F}_{17}$ the soundness error is far from negligible, and the opened values reveal a lot about the trace; real STARKs use large fields, many queries and randomization of the trace.
 \end{example}
-If the trace is correct, the honest prover is always accepted. If it is not, then by
-\Cref{prop:stark-quotients} at least one quotient is not a polynomial of bounded degree, so with high
-probability the codeword of $g$ is far from $\mathsf{RS}_q[D,k]$, and FRI rejects. The prover cannot
-avoid this by running FRI on a different function that is close to a codeword: step 5 ties the values
-of $f_0$ at the queried points to the committed boundary quotients.
+
+\begin{exercise}
+  In \Cref{ex:stark-fibsq-7}, compute $h(14)$ from the opened values, as the verifier does.
+  \commentgray{Answer: $h(14) = 10 + 3 \cdot 0 + 9 \cdot 12 = 16$.}
+\end{exercise}
+
+\Cref{fig:stark-scheme} summarizes which polynomials the prover commits to and what the verifier recomputes.
+
+\begin{figure}[h!]
+    \centering
+    \scalebox{0.74}{
+    \begin{tikzpicture}[
+        arr/.style   = {-{Stealth[length=2.5mm]}, line width=0.4mm},
+        act/.style   = {draw=oc-blue-7, fill=oc-blue-1, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+        data/.style  = {draw=gray, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+        lbl/.style   = {font=\scriptsize, inner sep=2pt},
+        phase/.style = {draw=gray, dashed, rounded corners=8pt, line width=0.4mm},
+        proc/.style  = {draw=gray, fill=gray!20!white, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+        check/.style = {draw=black, rounded corners=2pt, line width=0.6mm, inner sep=4pt, font=\small},
+    ]
+        % ---------------- Prover row
+        \draw[phase] (-0.8,1.05) rectangle (13.1,-2.3);
+        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,0.95) {Prover};
+        \node[inner sep=0pt, align=center] at (-1.6,-0.6) {\includegraphics[width=1.0cm]{contents/images/common/prover.png}\\ $\mathcal{P}$};
+
+        \node[data] (W)   at (-0.15,0)   {$W$};
+        \node[act]  (tj)  at (2.3,0)     {$\overline{t_j}$};
+        \node[data] (cu)  at (2.3,-1.55) {$q^{\mathcal{T}}_u, q^{\mathcal{B}}_j$};
+        \node[act]  (psi) at (5.0,-1.55) {$\overline{\psi}$};
+        \node[data] (qj)  at (7.3,-0.78) {$\mathsf{q}_j$};
+        \node[data] (h)   at (9.2,-0.78) {$h$};
+        \node[proc] (fri) at (11.8,-0.78) {FRI (\Cref{fig:fri-protocol})};
+
+        \draw[arr] (W) -- node[lbl, above] {inverse NTT} (tj);
+        \draw[arr] (tj) -- node[lbl, right] {$p_u$, $\iota_j$} (cu);
+        \draw[arr] (cu) -- node[lbl, above] {$\gamma$} (psi);
+        \draw[arr] (tj.east) -- node[lbl, above, pos=0.6] {$r_0, \omega_\tau r_0$} (qj.north west);
+        \draw[arr] (psi.east) -- (qj.south west);
+        \draw[arr] (qj) -- node[lbl, above] {$\alpha$} (h);
+        \draw[arr] (h) -- (fri);
+
+        % ---------------- Verifier row
+        \draw[phase] (-0.8,-2.75) rectangle (13.1,-5.35);
+        \node[font=\scriptsize\scshape, text=gray, anchor=north east] at (13.0,-2.85) {Verifier};
+        \node[inner sep=0pt, align=center] at (-1.6,-4.05) {\includegraphics[width=1.0cm]{contents/images/common/verifier.png}\\ $\mathcal{V}$};
+
+        \node[check] (v0) at (2.6,-3.9) {identity of $\psi$ at $r_0$};
+        \node[data]  (v1) at (6.1,-3.9) {$\overline{t_j}(x), \overline{\psi}(x)$};
+        \node[data]  (v2) at (8.6,-3.9) {$\mathsf{q}_j(x)$, $h(x)$};
+        \node[check] (v3) at (11.5,-3.9) {FRI checks};
+
+        \draw[arr] (v1) -- (v2);
+        \draw[arr] (v2) -- (v3);
+        \node[lbl, below=1mm of v1] {at every point $x$ queried by FRI};
+    \end{tikzpicture}
+    }
+    \caption{Overview of the STARK protocol. The prover commits only to the highlighted codewords: the trace polynomials $\overline{t_j}$ and the composition polynomial $\overline{\psi}$ on $\Omega$, plus the layers of FRI. The quotients $\mathsf{q}_j$ and their batch $h$ are virtual. The verifier checks the identity defining $\psi$ at the random point $r_0$, and at every point queried by FRI it recomputes $h(x)$ from the opened values of the committed codewords.}
+    \label{fig:stark-scheme}
+\end{figure}
+
+If the trace is correct, the honest prover is always accepted.
+If it is not, then by \Cref{prop:stark-quotients} at least one quotient is not a polynomial, so the identity of $\psi$ fails at a random $r_0$; and since the values at $r_0$ are bound to the committed codewords by quotienting and FRI, the prover cannot answer with values of a different polynomial.
+
 \begin{remark}
-  The protocol described in this section is not zero-knowledge: the opened values of the boundary quotients reveal information about the trace.
+  An alternative, used in~\cite{szepieniec2021anatomy}, avoids the out-of-domain point: the prover commits to the boundary quotients instead of the trace, and FRI is run directly on a random combination of all quotients, in which every quotient $q$ with degree bound $d_q$ is also multiplied by $T^{\,k - 1 - d_q}$.
+  These factors are the \emph{degree correction} of \Cref{fig:poly-iop-third-attempt}: without them, a quotient whose degree exceeds its own bound but not $k$ would go unnoticed.
+  Without an out-of-domain point, however, the known soundness bounds are weaker, which is why deployed STARKs use the protocol above.
+\end{remark}
+
+\begin{remark}
+  The protocol described in this section is not zero-knowledge: the opened values of the trace polynomials and of $\psi$ reveal information about the trace.
   The original construction~\cite{EPRINT:BBHR18} does provide zero-knowledge, which is achieved by randomizing the trace polynomials outside of $H$ and masking the input of FRI with a random polynomial; see~\cite{EPRINT:HabKin24} for a detailed treatment.
   However, many practical applications of STARKs, such as validity rollups, only need succinct verification of computational integrity, so they do not use the zero-knowledge property at all.
 \end{remark}
+
 \begin{remark}
-  As with FRI, the whole protocol is made non-interactive using the Fiat--Shamir transformation
-  (\Cref{subsection:fiat-shamir}). Practical STARKs also can add several details that we omit.
+  As with FRI, the whole protocol is made non-interactive using the Fiat--Shamir transformation (\Cref{subsection:fiat-shamir}).
 \end{remark}
 
 \end{document}
