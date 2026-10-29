@@ -1,0 +1,807 @@
+\documentclass{zkdl-presentation-template}
+% \mathbbm{x}, \mathbbm{w}: statement and witness, as in the book (bbm font in a
+% box, so that no extra math alphabet is allocated)
+
+\title[LaBRADOR]{\textbf{LaBRADOR}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents[hideallsubsections]
+    \end{frame}
+
+    \begin{frame}{What will we learn today?}
+        \begin{itemize}
+            \item ALS20/LNP22 proofs grow \textbf{linearly} with the witness (10--20~KB for small statements). For circuits with a million gates, this is no better than sending the witness.\pause
+            \item \textbf{LaBRADOR} (\emph{Lattice-Based Recursively Amortized Demonstration Of R1CS}): an R1CS with $2^{20}$ constraints in about $58$~KB, based only on Module-SIS.\pause
+            \item Two ideas:
+            \begin{itemize}
+                \item \textbf{amortization}: fold $r$ secret vectors into one random linear combination;
+                \item \textbf{recursion} (as in Bulletproofs): the last message is a witness for a statement of the same form.
+            \end{itemize}
+        \end{itemize}
+        \pause
+
+        \begin{remarkblock}{Key idea}
+            Whenever the last message of a proof is a solution to a system of the same type as the original one, the prover can recursively prove knowledge of it instead of sending it.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Before We Start}
+        \begin{alertblock}{LaBRADOR is \emph{not} zero-knowledge}
+            This makes it noticeably simpler: no masks $\mathbf{y}$ and no rejection sampling.
+        \end{alertblock}
+        \pause
+
+        \begin{block}{Notation}
+            \begin{itemize}
+                \item $\mathcal{R}_q = \mathbb{Z}_q[T]/(T^d+1)$, where $T^d+1$ splits into two irreducible factors modulo $q$ (as in LNP22).
+                \item $f^{\ast} := f(T^{-1})$ is the conjugate, $\mathsf{ct}(f)$ the constant coefficient.
+                \item $\|\mathbf{f}\|_2$ is the $\ell^2$ norm of the coefficient vector of $\mathbf{f} \in \mathcal{R}_q^n$; $\vec{\mathbf{f}} \in \mathbb{Z}_q^{nd}$ is the coefficient vector itself.
+            \end{itemize}
+        \end{block}
+        \pause
+
+        \textbf{Plan}: define dot product constraint systems $\rightarrow$ build the main protocol (Attempts \#1--\#4) $\rightarrow$ recursion $\rightarrow$ parameters $\rightarrow$ reduction from R1CS.
+    \end{frame}
+
+    \section{Dot Product Constraint Systems}
+
+    \begin{frame}{Dot Product Functions}
+        Requirements for the relation:
+        \begin{enumerate}
+            \item expressive enough to encode R1CS;
+            \item the verifier's final checks form a statement of the \textbf{same type} (recursion).
+        \end{enumerate}
+        \pause
+
+        For $\mathbf{a}, \mathbf{b} \in \mathcal{R}_q^n$, $\langle \mathbf{a}, \mathbf{b} \rangle := \sum_{i \in [n]} a_ib_i \in \mathcal{R}_q$. A \textbf{dot product function} of $\mathbf{s}_1, \dots, \mathbf{s}_r \in \mathcal{R}_q^n$ is
+        \begin{equation*}
+            f(\mathbf{s}_1, \dots, \mathbf{s}_r) = \sum_{i,j \in [r]} a_{ij}\langle \mathbf{s}_i, \mathbf{s}_j \rangle + \sum_{i \in [r]} \langle \boldsymbol{\varphi}_i, \mathbf{s}_i \rangle + a_0,
+        \end{equation*}
+        where $a_{ij}, a_0 \in \mathcal{R}_q$ and $\boldsymbol{\varphi}_i \in \mathcal{R}_q^n$ are public; w.l.o.g. $\mathbf{A} := (a_{ij})_{i,j}$ is symmetric.
+        \pause
+
+        \begin{remark}
+            A less general version of the quadratic forms $\mathbf{s}^{\top}\mathbf{Q}\mathbf{s} + \mathbf{p}^{\top}\mathbf{s} + p_0$ from LNP22. We denote this class of functions by $\mathcal{Q}$.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{The Principal Relation}
+        \begin{definition}[Principal Relation]
+            Fix the \emph{rank} $n \geq 1$, the \emph{multiplicity} $r \geq 1$, and a norm bound $\beta > 0$. The \textbf{principal relation} of LaBRADOR is
+            \begin{equation*}
+                \mathcal{R}_{\mathsf{dot}} := \left\{
+                    \begin{aligned}
+                        & \mathbbm{x} = (\mathcal{F}, \mathcal{F}_{\mathsf{ct}}, \beta) \\
+                        & \mathbbm{w} = (\mathbf{s}_1, \dots, \mathbf{s}_r)
+                    \end{aligned}
+                \;\middle|\;
+                \begin{aligned}
+                    & f(\mathbf{s}_1, \dots, \mathbf{s}_r) = 0 \; \text{for all} \; f \in \mathcal{F}, \\
+                    & \mathsf{ct}\big(g(\mathbf{s}_1, \dots, \mathbf{s}_r)\big) = 0 \; \text{for all} \; g \in \mathcal{F}_{\mathsf{ct}}, \\
+                    & \textstyle\sum_{i \in [r]} \|\mathbf{s}_i\|_2^2 \leq \beta^2
+                \end{aligned}
+                \right\},
+            \end{equation*}
+            where $\mathcal{F}, \mathcal{F}_{\mathsf{ct}} \subseteq \mathcal{Q}$ and $\mathbf{s}_1, \dots, \mathbf{s}_r \in \mathcal{R}_q^n$.
+        \end{definition}
+        \pause
+
+        \begin{itemize}
+            \item $\mathcal{F}$: constraints that vanish as \textbf{whole polynomials}.
+            \item $\mathcal{F}_{\mathsf{ct}}$: only the \textbf{constant coefficient} must vanish; by the constant coefficient lemma, these are linear and quadratic relations over $\mathbb{Z}_q$ among the coefficients.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Examples}
+        \begin{example}
+            Statements on a single vector $\mathbf{s} \in \mathcal{R}_q^n$ ($r = 1$):
+            \begin{enumerate}
+                \item \textit{Opening of an Ajtai commitment.} $\mathbf{t} = \mathbf{A}\mathbf{s}$ for $\mathbf{A} \in \mathcal{R}_q^{\kappa \times n}$ with rows $\mathbf{a}_1^{\top}, \dots, \mathbf{a}_{\kappa}^{\top}$ is the collection of $\kappa$ linear functions $f_k(\mathbf{s}) = \langle \mathbf{a}_k, \mathbf{s} \rangle - t_k$ in $\mathcal{F}$.\pause
+                \item \textit{A single coefficient.} The $j$-th coefficient of the $i$-th entry of $\mathbf{s}$ equals $\mathsf{ct}(\langle (T^j\mathbf{e}_i)^{\ast}, \mathbf{s} \rangle)$. ``This coefficient equals $5$'' is $g(\mathbf{s}) = \langle (T^j\mathbf{e}_i)^{\ast}, \mathbf{s} \rangle - 5$ in $\mathcal{F}_{\mathsf{ct}}$.\pause
+                \item \textit{Norm.} $\|\mathbf{s}\|_2^2 = \mathsf{ct}(\langle \mathbf{s}^{\ast}, \mathbf{s} \rangle)$ is not a dot product function of $\mathbf{s}$ alone (the conjugate appears). Fix: add $\mathbf{s}^{\ast}$ to the witness (later). The bound $\beta$ is already part of the relation.
+            \end{enumerate}
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question \#1}
+            Write ``I know $(\mathbf{s}, \mathbf{e})$ with $\mathbf{b} = \mathbf{A}\mathbf{s} + \mathbf{e}$ and $\|\mathbf{s}\|_2^2 + \|\mathbf{e}\|_2^2 \leq \beta^2$'' (a Module-LWE key) as an instance of $\mathcal{R}_{\mathsf{dot}}$ with $r = 1$.
+        \end{questionblock}
+    \end{frame}
+
+    \section{The Main Protocol}
+
+    \subsection{Attempt \#1: Amortized Opening}
+
+    \begin{frame}{Attempt \#1: Amortized Opening}
+        The trivial protocol sends $\mathbf{s}_1, \dots, \mathbf{s}_r$: $rn$ ring elements. Commit $\mathbf{t}_i = \mathbf{A}\mathbf{s}_i$ for $\mathbf{A} \in \mathcal{R}_q^{\kappa \times n}$. No zero-knowledge $\Rightarrow$ drop the mask; one response for all commitments:
+        \begin{equation*}
+            \mathbf{z} := c_1\mathbf{s}_1 + \dots + c_r\mathbf{s}_r.
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        \footnotesize
+        \begin{columns}[T]
+            \begin{column}{0.47\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{P}(\mathbbm{x} = (\mathbf{t}_i)_{i \in [r]}, \mathbbm{w} = (\mathbf{s}_i)_{i \in [r]})$:}
+                \begin{algoen}
+                    \item \keyword{receive} $c_1, \dots, c_r$;
+                    \item \commentgray{amortized opening} \\ \keyword{send} $\mathbf{z} \gets \sum_{i \in [r]} c_i\mathbf{s}_i$.
+                \end{algoen}
+            \end{column}
+            \begin{column}{0.49\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{V}(\mathbbm{x} = (\mathbf{t}_i)_{i \in [r]}) \to \{0,1\}$:}
+                \begin{algoen}
+                    \item \keyword{send} $c_1, \dots, c_r \leftarrowS \mathcal{C}$;
+                    \item \keyword{receive} $\mathbf{z}$;
+                    \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \gamma$;
+                    \item \keyword{return} $\llbracket \mathbf{A}\mathbf{z} = \sum_{i \in [r]} c_i\mathbf{t}_i \rrbracket$.
+                \end{algoen}
+            \end{column}
+        \end{columns}
+        \normalsize
+        \pause
+
+        \begin{itemize}
+            \item Communication: $r\kappa + n$ instead of $rn$ ring elements ($\kappa$ is a few dozen).
+            \item Price: coefficients of $\mathbf{z}$ grow by $\approx \sqrt{r\tau}$, where $\tau := \max_{c \in \mathcal{C}}\|c\|_2^2$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{The Challenge Set}
+        The extractor gets a \emph{product} of an extracted vector with a challenge difference; bounding it needs the \textbf{operator norm}
+        \begin{equation*}
+            \|c\|_{\mathsf{op}} := \sup_{f \in \mathcal{R}\setminus\{0\}} \frac{\|cf\|_2}{\|f\|_2}.
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        LaBRADOR requires: $c - c'$ invertible in $\mathcal{R}_q$ for distinct challenges, $\|c\|_2^2 \leq \tau$, and $\|c\|_{\mathsf{op}} \leq \theta$.
+        \pause
+
+        With $N_i(c) := \#\{j: |c_j| = i\}$ and $k_0 + k_1 + k_2 = d$:
+        \begin{equation*}
+            \mathcal{C} := \big\{ c \in \mathcal{R} : N_0(c) = k_0, \; N_1(c) = k_1, \; N_2(c) = k_2, \; \|c\|_{\mathsf{op}} \leq \theta \big\},
+        \end{equation*}
+        with $d = 64$, $(k_0, k_1, k_2) = (23, 31, 10)$, $\theta = 15$ ($\approx 6$ candidates per challenge).
+        \pause
+
+        \begin{questionblock}{Question \#2}
+            Express $\tau = \|c\|_2^2$ (for $c \in \mathcal{C}$) and $\#\mathcal{C}$ in terms of $d$, $k_0$, $k_1$, $k_2$.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Soundness and Weak Openings}
+        As with the Lyubashevsky protocol, the extractor does not obtain the $\mathbf{s}_i$ themselves.
+        \begin{definition}[Weak opening]
+            Vectors $\mathbf{s}_i^{\ast}$ with $\mathbf{A}\mathbf{s}_i^{\ast} = \mathbf{t}_i$, together with a challenge difference $\bar{c} = c - c'$ such that $\bar{c}\mathbf{s}_i^{\ast}$ is short.
+        \end{definition}
+        \pause
+
+        \begin{itemize}
+            \item The commitment stays binding for weak openings under Module-SIS, with a norm bound larger by a factor proportional to $\theta$.\pause
+            \item Two weak openings $(\mathbf{s}^{\ast}, \bar{c})$, $(\mathbf{s}'^{\ast}, \bar{c}')$ of the same commitment: $\bar{c}'(\bar{c}\mathbf{s}^{\ast}) - \bar{c}(\bar{c}'\mathbf{s}'^{\ast})$ lies in the kernel of $\mathbf{A}$, and its norm is bounded using the operator norms.
+        \end{itemize}
+        \pause
+
+        That is why the operator norm of the challenges enters the parameters.
+    \end{frame}
+
+    \subsection{Attempt \#2: a Dot Product Constraint}
+
+    \begin{frame}{Attempt \#2: Garbage Polynomials}
+        Goal: show $F(\mathbf{s}_1, \dots, \mathbf{s}_r) = 0$ for a single dot product function $F$. As in ALS20, evaluate on $\mathbf{z} = \sum_i c_i\mathbf{s}_i$:
+        \begin{equation*}
+            \langle \mathbf{z}, \mathbf{z} \rangle = \sum_{i,j \in [r]} \textcolor{oc-indigo-9}{g_{ij}}\,c_ic_j, \qquad \sum_{i \in [r]} \langle \boldsymbol{\varphi}_i, \mathbf{z} \rangle c_i = \sum_{i,j \in [r]} \textcolor{oc-teal-9}{h_{ij}}\,c_ic_j,
+        \end{equation*}
+        \pause
+        where the \textbf{garbage polynomials} are
+        \begin{equation*}
+            \textcolor{oc-indigo-9}{g_{ij}} := \langle \mathbf{s}_i, \mathbf{s}_j \rangle, \qquad \textcolor{oc-teal-9}{h_{ij}} := \frac{1}{2}\big(\langle \boldsymbol{\varphi}_i, \mathbf{s}_j \rangle + \langle \boldsymbol{\varphi}_j, \mathbf{s}_i \rangle\big).
+        \end{equation*}
+        Both matrices are symmetric and \textbf{do not depend on the challenges}.
+        \pause
+
+        Moreover, the constraint is a linear function of the garbage:
+        \begin{equation*}
+            F(\mathbf{s}_1, \dots, \mathbf{s}_r) = \sum_{i,j \in [r]} a_{ij}\textcolor{oc-indigo-9}{g_{ij}} + \sum_{i \in [r]} \textcolor{oc-teal-9}{h_{ii}} + a_0.
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        So: send the garbage together with $\mathbf{z}$, and check the three equations.
+    \end{frame}
+
+    \begin{frame}{Attempt \#2: the Protocol}
+        \footnotesize
+        \setlength{\fboxsep}{1.5pt}
+        \begin{columns}[T]
+            \begin{column}{0.44\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{P}(\mathbbm{x}, \mathbbm{w} = (\mathbf{s}_i)_{i \in [r]})$:}
+                \begin{algoen}
+                    \item \colorbox{oc-orange-1}{$g_{ij} \gets \langle \mathbf{s}_i, \mathbf{s}_j \rangle$ for $i \leq j$;}
+                    \item \colorbox{oc-orange-1}{$h_{ij} \gets \frac{1}{2}(\langle \boldsymbol{\varphi}_i, \mathbf{s}_j \rangle + \langle \boldsymbol{\varphi}_j, \mathbf{s}_i \rangle)$} \\ \colorbox{oc-orange-1}{for $i \leq j$;}
+                    \item \keyword{send} \colorbox{oc-orange-1}{$(g_{ij}, h_{ij})_{i \leq j}$};
+                    \item \keyword{receive} $c_1, \dots, c_r$;
+                    \item \keyword{send} $\mathbf{z} \gets \sum_{i \in [r]} c_i\mathbf{s}_i$.
+                \end{algoen}
+            \end{column}
+            \begin{column}{0.54\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{V}(\mathbbm{x} = ((\mathbf{t}_i)_{i \in [r]}, F)) \to \{0,1\}$:}
+                \begin{algoen}
+                    \item \keyword{receive} $(g_{ij}, h_{ij})_{i \leq j}$;
+                    \item \keyword{send} $c_1, \dots, c_r \leftarrowS \mathcal{C}$;
+                    \item \keyword{receive} $\mathbf{z}$;
+                    \item \keyword{assert} $\|\mathbf{z}\|_2 \leq \gamma$;
+                    \item \keyword{assert} $\mathbf{A}\mathbf{z} = \sum_{i} c_i\mathbf{t}_i$;
+                    \item \colorbox{oc-orange-1}{\keyword{assert} $\langle \mathbf{z}, \mathbf{z} \rangle = \sum_{i,j} g_{ij}c_ic_j$;}
+                    \item \colorbox{oc-orange-1}{\keyword{assert} $\sum_{i} \langle \boldsymbol{\varphi}_i, \mathbf{z} \rangle c_i = \sum_{i,j} h_{ij}c_ic_j$;}
+                    \item \keyword{return} \colorbox{oc-orange-1}{$\llbracket \sum_{i,j} a_{ij}g_{ij} + \sum_{i} h_{ii} + a_0 = 0 \rrbracket$}.
+                \end{algoen}
+            \end{column}
+        \end{columns}
+        \normalsize
+        \pause
+
+        \vspace{5pt}
+        \textbf{Why sound?} The garbage is sent \emph{before} the challenges: a lie makes the two sides of a check different quadratic polynomials in $c_1, \dots, c_r$, agreeing on random challenges with negligible probability (Schwartz--Zippel over $\mathcal{R}_q$).
+        \pause
+
+        \textbf{Price}: $r^2 + r$ garbage polynomials, quadratic in $r$ (we return to this later).
+    \end{frame}
+
+    \subsection{Attempt \#3: Many Constraints}
+
+    \begin{frame}{Attempt \#3: Aggregating Constraints}
+        \textbf{Aggregating $\mathcal{F}$.} For $f_1,\dots,f_K \in \mathcal{F}$, the verifier sends $\alpha_1, \dots, \alpha_K \leftarrowS \mathcal{R}_q$, and the prover proves that $F := \sum_{k \in [K]} \alpha_kf_k$ vanishes (again a dot product function).
+        \pause
+
+        \textbf{Aggregating $\mathcal{F}_{\mathsf{ct}}$.} Coefficients must come from $\mathbb{Z}_q$ (multiplying by a general element of $\mathcal{R}_q$ may break $\mathsf{ct} = 0$). One combination has error $1/q$, so take $K_{\mathsf{ct}} := \lceil \lambda/\log q \rceil$ combinations with $\boldsymbol{\psi}_1, \dots, \boldsymbol{\psi}_{K_{\mathsf{ct}}} \leftarrowS \mathbb{Z}_q^L$:
+        \begin{equation*}
+            G_k := \sum_{\ell \in [L]} \psi_{k,\ell}g_{\ell}, \quad k \in [K_{\mathsf{ct}}].
+        \end{equation*}
+        For $q \approx 2^{32}$, only $K_{\mathsf{ct}} = 4$.
+    \end{frame}
+
+    \begin{frame}{Attempt \#3: Constant Coefficients without Masking}
+        \begin{block}{No masking needed}
+            Write $G_k = Q_k + b_k$. LNP22 had to mask the non-constant coefficients; LaBRADOR sends $v_k := Q_k(\mathbf{s}_1, \dots, \mathbf{s}_r)$ in the clear. The verifier checks $\mathsf{ct}(v_k) = -\mathsf{ct}(b_k)$, and
+            \begin{equation*}
+                Q_k(\mathbf{s}_1, \dots, \mathbf{s}_r) - v_k = 0
+            \end{equation*}
+            is an \emph{ordinary} constraint added to $\mathcal{F}$ before aggregating it.
+        \end{block}
+        \pause
+
+        \begin{remarkblock}{Result}
+            The whole statement collapses into a single function $F$, proven with Attempt \#2 at the cost of only $K_{\mathsf{ct}}$ additional polynomials $v_k$.
+        \end{remarkblock}
+    \end{frame}
+
+    \subsection{Attempt \#4: the Norm Bound}
+
+    \begin{frame}{Attempt \#4: Johnson--Lindenstrauss Projection}
+        $\|\mathbf{z}\|_2 \leq \gamma$ only yields weak openings (norm may exceed $\beta$ a lot); the R1CS reduction needs a small slack.
+        \pause
+
+        With $\mathcal{B}$ on $\{0, \pm 1\}$, $\Pr[0] = 1/2$, $\Pr[\pm 1] = 1/4$: the verifier sends $\boldsymbol{\Pi}_1, \dots, \boldsymbol{\Pi}_r \leftarrowS \mathcal{B}^{256 \times nd}$, the prover sends
+        \begin{equation*}
+            \mathbf{p} := \sum_{i \in [r]} \boldsymbol{\Pi}_i\vec{\mathbf{s}}_i \in \mathbb{Z}_q^{256},
+        \end{equation*}
+        and the verifier checks that $\|\mathbf{p}\|_2 \leq \sqrt{128}\beta$.
+        \pause
+
+        \begin{lemma}
+            Let $b \leq q/125$ and let $\mathbf{w} \in \mathbb{Z}_q^m$ be any vector with $\|\mathbf{w}\|_2 \geq b$. Then,
+            \begin{equation*}
+                \Pr_{\boldsymbol{\Pi} \leftarrowS \mathcal{B}^{256 \times m}}\Big[\|\boldsymbol{\Pi}\mathbf{w} \bmod q\|_2 < \sqrt{30}\,b\Big] \lesssim 2^{-128}.
+            \end{equation*}
+        \end{lemma}
+        A projection of a long vector is long, even after the reduction modulo $q$.
+    \end{frame}
+
+    \begin{frame}{Attempt \#4: Analysis}
+        \begin{itemize}
+            \item Honest case: $\mathbb{E}\big[\|\boldsymbol{\Pi}\mathbf{w}\|_2^2\big] = 128\|\mathbf{w}\|_2^2$.\pause
+            \item For $\mathbf{w} = (\vec{\mathbf{s}}_1,\dots,\vec{\mathbf{s}}_r)$: if $\|\mathbf{p}\|_2 \leq \sqrt{128}\beta$, then $\sum_i\|\mathbf{s}_i\|_2^2 \leq \frac{128}{30}\beta^2$ except w.p. $2^{-128}$: slack $\sqrt{128/30} \approx 2.07$.\pause
+            \item The honest $\mathbf{p}$ passes only w.p. $\approx 1/2$: the prover asks for new matrices (affects only the running time).
+        \end{itemize}
+        \pause
+
+        \textbf{Correctness of $\mathbf{p}$ for free.} Let $\boldsymbol{\pi}_{i,j} \in \mathcal{R}_q^n$ have the $j$-th row of $\boldsymbol{\Pi}_i$ as coefficient vector. Then
+        \begin{equation*}
+            \mathsf{ct}\Big(\sum_{i \in [r]} \big\langle \boldsymbol{\pi}_{i,j}^{\ast}, \mathbf{s}_i \big\rangle - p_j\Big) = 0
+        \end{equation*}
+        is a constant-coefficient constraint: add these $256$ functions to $\mathcal{F}_{\mathsf{ct}}$.
+        \pause
+
+        \begin{questionblock}{Question \#3}
+            Let $\mathbf{w} \in \mathbb{Z}^m$ and $\boldsymbol{\pi} \leftarrowS \mathcal{B}^m$. Show that $\mathbb{E}\big[\langle \boldsymbol{\pi}, \mathbf{w} \rangle^2\big] = \frac{1}{2}\|\mathbf{w}\|_2^2$, and deduce the expectation above.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{The Base Protocol: Message Flow}
+        \footnotesize
+        \renewcommand{\arraystretch}{1.0}
+        \begin{tabular}{p{0.36\textwidth} c p{0.42\textwidth}}
+            \textbf{Prover} $\mathcal{P}$ & & \textbf{Verifier} $\mathcal{V}$ \\
+            \hline
+            commit: $\mathbf{t}_i \gets \mathbf{A}\mathbf{s}_i$, $i \in [r]$ & $\overset{(\mathbf{t}_i)_i}{\longrightarrow}$ & \\
+            & $\overset{(\boldsymbol{\Pi}_i)_i}{\longleftarrow}$ & $\boldsymbol{\Pi}_i \leftarrowS \mathcal{B}^{256 \times nd}$ \\
+            \pause
+            project: $\mathbf{p} \gets \sum_{i} \boldsymbol{\Pi}_i\vec{\mathbf{s}}_i$ & $\overset{\mathbf{p}}{\longrightarrow}$ & \keyword{assert} $\|\mathbf{p}\|_2 \leq \sqrt{128}\beta$ \\
+            & $\overset{(\boldsymbol{\psi}_k)_k}{\longleftarrow}$ & $\boldsymbol{\psi}_k \leftarrowS \mathbb{Z}_q^{L+256}$ \\
+            \pause
+            aggregate: $v_k \gets Q_k(\mathbf{s}_1, \dots, \mathbf{s}_r)$ & $\overset{(v_k)_k}{\longrightarrow}$ & \keyword{assert} $\mathsf{ct}(v_k) = -\mathsf{ct}(b_k)$ \\
+            & $\overset{\boldsymbol{\alpha}}{\longleftarrow}$ & $\boldsymbol{\alpha} \leftarrowS \mathcal{R}_q^{K+K_{\mathsf{ct}}}$ \\
+            \pause
+            aggregate into $F$; garbage $g_{ij}, h_{ij}$ & $\overset{(g_{ij}, h_{ij})_{i \leq j}}{\longrightarrow}$ & \\
+            & $\overset{c_1, \dots, c_r}{\longleftarrow}$ & $c_i \leftarrowS \mathcal{C}$ \\
+            \pause
+            amortize: $\mathbf{z} \gets \sum_{i} c_i\mathbf{s}_i$ & $\overset{\mathbf{z}}{\longrightarrow}$ & \keyword{assert} the checks of Attempt \#2 \\
+        \end{tabular}
+        \normalsize
+        \pause
+
+        \vspace{5pt}
+        Order matters: the projection is aggregated, so it comes before $\boldsymbol{\psi}_k$; $h_{ij}$ depend on the aggregated $\boldsymbol{\varphi}_i$, so they come after $\boldsymbol{\alpha}$.
+    \end{frame}
+
+    \section{Recursion}
+
+    \begin{frame}{The Base Protocol Is Not Succinct}
+        Its proof contains $r\kappa$ commitments, $r^2 + r$ garbage polynomials, and $\mathbf{z}$ of rank $n$.
+        \pause
+
+        \begin{alertblock}{Observation}
+            All checks on the last message are \textbf{dot product constraints}:
+            \begin{itemize}
+                \item $\mathbf{A}\mathbf{z} = \sum_i c_i\mathbf{t}_i$ is linear in $\mathbf{z}$ and $\mathbf{t}_i$;
+                \item $\langle \mathbf{z}, \mathbf{z} \rangle = \sum_{i,j} g_{ij}c_ic_j$ is quadratic in $\mathbf{z}$ and linear in $g_{ij}$;
+                \item the remaining two equations are linear in $\mathbf{z}$, $g_{ij}$, $h_{ij}$.
+            \end{itemize}
+            All coefficients ($c_i$, $\mathbf{A}$, $a_{ij}$, $\boldsymbol{\varphi}_i$, $a_0$) are known to the verifier.
+        \end{alertblock}
+        \pause
+
+        The last message is a witness for a \emph{new} instance of $\mathcal{R}_{\mathsf{dot}}$: prove knowledge of it by running the protocol again!
+    \end{frame}
+
+    \subsection{Warm-up: Proving Knowledge of a Proof}
+
+    \begin{frame}{Warm-up: Proof Compression}
+        Fast prover with large proofs (STARK, $\approx 100$~KB) + slow prover with tiny proofs (Groth16). Prove ``I know an accepting inner proof'':
+        \begin{equation*}
+            \mathcal{R}_{\mathsf{out}} := \big\{ (\mathbbm{x}_{\mathsf{out}} := (\mathsf{vp}, \mathbbm{x}_{\mathsf{in}}), \mathbbm{w}_{\mathsf{out}} := \pi_{\mathsf{in}}) : \mathcal{V}_{\mathsf{in}}(\mathsf{vp}, \mathbbm{x}_{\mathsf{in}}, \pi_{\mathsf{in}}) = 1 \big\}.
+        \end{equation*}
+        \pause
+
+        \begin{center}
+        \begin{tikzpicture}[
+            scale=0.85, every node/.style={transform shape},
+            box/.style={draw=oc-indigo-7, thick, fill=oc-indigo-1, rounded corners, align=center, inner sep=4pt, font=\footnotesize},
+            dat/.style={font=\footnotesize, align=center},
+            arr/.style={-stealth, very thick, oc-gray-7},
+        ]
+            \node[dat] (in) at (0, 0) {public: $\mathbbm{x}_{\mathsf{in}}$ \\ witness: $\mathbbm{w}_{\mathsf{in}}$};
+            \node[box] (p1) at (3.0, 0) {prover $\mathcal{P}_{\mathsf{in}}$ \\ (e.g., STARK)};
+            \node[dat] (mid) at (7.2, 0) {public: $(\mathsf{vp}, \mathbbm{x}_{\mathsf{in}})$ \\ witness: $\pi_{\mathsf{in}}$};
+            \draw[arr] (in) -- (p1);
+            \draw[arr] (p1) -- node[above, font=\scriptsize] {$\pi_{\mathsf{in}}$} node[below, font=\scriptsize] {$\approx 100$~KB} (mid);
+            \node[font=\scriptsize, oc-gray-7] at (3.0, -0.75) {proves $\mathtt{C}(\mathbbm{x}_{\mathsf{in}}, \mathbbm{w}_{\mathsf{in}}) = 0$};
+            \pause
+            \node[box] (p2) at (7.2, -2.0) {prover $\mathcal{P}_{\mathsf{out}}$ \\ (e.g., Groth16)};
+            \node[box, draw=oc-orange-8, fill=oc-orange-1] (v) at (0, -2.0) {verifier $\mathcal{V}_{\mathsf{out}}$};
+            \draw[arr] (mid) -- (p2);
+            \draw[arr] (p2) -- node[above, font=\scriptsize] {$\pi_{\mathsf{out}}$, a few hundred bytes} (v);
+            \node[font=\scriptsize, oc-gray-7] at (7.2, -2.75) {proves $\mathcal{V}_{\mathsf{in}}(\mathsf{vp}, \mathbbm{x}_{\mathsf{in}}, \pi_{\mathsf{in}}) = 1$};
+        \end{tikzpicture}
+        \end{center}
+        \pause
+
+        The slow prover handles only the (small) verification circuit of $\mathcal{V}_{\mathsf{in}}$. Used in practice to post STARK proofs on-chain.
+    \end{frame}
+
+    \begin{frame}{Knowledge Soundness of the Composition}
+        \begin{proposition}
+            Let $\kappa_{\mathsf{in}}$ and $\kappa_{\mathsf{out}}$ be the knowledge errors of inner and outer systems. The resultant proving system has a knowledge error of $\kappa_{\mathsf{in}} + \kappa_{\mathsf{out}}$.
+        \end{proposition}
+        \pause
+
+        \textbf{Proof idea.} Let $\mathcal{A}$ convince $\mathcal{V}_{\mathsf{out}}$ with probability $\epsilon$.
+        \begin{algoen}
+            \item $\mathcal{E}_{\mathsf{out}}$ obtains an accepting $\pi_{\mathsf{in}}$ w.p. $\geq \epsilon - \kappa_{\mathsf{out}}$;\pause
+            \item so $\mathcal{E}_{\mathsf{out}}$ (run on $\mathcal{A}$) is a successful inner prover;\pause
+            \item $\mathcal{E}_{\mathsf{in}}$, run on $\mathcal{E}_{\mathsf{out}}$, obtains $\mathbbm{w}$ w.p. $\geq \epsilon - (\kappa_{\mathsf{out}} + \kappa_{\mathsf{in}})$. \hfill $\blacksquare$
+        \end{algoen}
+        \pause
+
+        \begin{alertblock}{Caveats}
+            \begin{enumerate}
+                \item Extractors are \emph{nested}: $k$ levels may cost $2^k$ times longer, so only a few levels (at most logarithmic in $\lambda$).
+                \item With Fiat-Shamir inside, the circuit contains a concrete hash function: a heuristic assumption.
+            \end{enumerate}
+        \end{alertblock}
+    \end{frame}
+
+    \subsection{Reductions of Knowledge}
+
+    \begin{frame}{Reductions of Knowledge}
+        An interactive protocol may not decide whether to accept, but \emph{reduce} a claim about one relation to a claim about another. A relation $\mathcal{R}$ consists of triples $(\mathsf{pp}, \mathbbm{x}, \mathbbm{w})$.
+        \begin{definition}[Reduction of Knowledge]
+            A \textbf{reduction of knowledge} $\Pi$ from $\mathcal{R}_1$ to $\mathcal{R}_2$ consists of
+            \begin{itemize}
+                \item $\mathsf{Setup}(1^{\lambda}) \to \mathsf{pp}$;
+                \item $\langle \mathcal{P}(\mathsf{pp}, \mathbbm{x}_1, \mathbbm{w}_1), \mathcal{V}(\mathsf{pp}, \mathbbm{x}_1) \rangle \to (\mathbbm{x}_2, \mathbbm{w}_2)$: the verifier outputs a new statement $\mathbbm{x}_2$ (or $\bot$), the prover a new witness $\mathbbm{w}_2$.
+            \end{itemize}
+        \end{definition}
+        \pause
+
+        \begin{itemize}
+            \item \textbf{Completeness}: honest $(\mathsf{pp}, \mathbbm{x}_1, \mathbbm{w}_1) \in \mathcal{R}_1$ gives $(\mathsf{pp}, \mathbbm{x}_2, \mathbbm{w}_2) \in \mathcal{R}_2$.\pause
+            \item \textbf{Knowledge soundness} (error $\kappa$): if $\mathcal{P}^{\ast}$ ends in $\mathcal{R}_2$ w.p. $\epsilon > \kappa$, an expected poly-time extractor outputs $\mathbbm{w}_1$ with $(\mathsf{pp}, \mathbbm{x}_1, \mathbbm{w}_1) \in \mathcal{R}_1$ w.p. $\geq \epsilon - \kappa$.\pause
+            \item \textbf{Public reducibility}: $\mathbbm{x}_2 = \mathsf{f}(\mathsf{pp}, \mathbbm{x}_1, \mathsf{tr})$ for a deterministic poly-time $\mathsf{f}$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Knowledge Soundness, Formally}
+        There exists an expected polynomial-time $\mathcal{E}$ such that for every expected polynomial-time $(\mathcal{A}, \mathcal{P}^{\ast})$, if
+        \begin{equation*}
+            \Pr\left[(\mathsf{pp}, \mathbbm{x}_2, \mathbbm{w}_2) \in \mathcal{R}_2 \;\middle|\;
+            \begin{aligned}
+                & \mathsf{pp} \gets \mathsf{Setup}(1^{\lambda}), \\
+                & (\mathbbm{x}_1, \mathsf{st}) \gets \mathcal{A}(\mathsf{pp}), \\
+                & (\mathbbm{x}_2, \mathbbm{w}_2) \gets \langle \mathcal{P}^{\ast}(\mathsf{st}), \mathcal{V}(\mathsf{pp}, \mathbbm{x}_1) \rangle
+            \end{aligned}
+            \right] = \epsilon > \kappa,
+        \end{equation*}
+        then $\mathcal{E}^{\mathcal{A}, \mathcal{P}^{\ast}}(\mathsf{pp}, \mathbbm{x}_1)$ outputs $\mathbbm{w}_1$ with $(\mathsf{pp}, \mathbbm{x}_1, \mathbbm{w}_1) \in \mathcal{R}_1$ with probability at least $\epsilon - \kappa$.
+        \pause
+
+        \begin{remarkblock}{In words}
+            Whoever can produce a witness for the new statement $\mathbbm{x}_2$ must have known a witness for the original statement $\mathbbm{x}_1$.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Examples and Composition}
+        \begin{example}
+            \begin{enumerate}
+                \item An argument of knowledge for $\mathcal{R}$ = a reduction to $\mathcal{R}_{\top} := \{(\mathsf{pp}, \top, \bot)\}$ ($\top$ means ``accept'').
+                \item Proof compression: $\mathcal{R}_{\mathsf{in}} \to \mathcal{R}_{\mathsf{out}} \to \mathcal{R}_{\top}$.
+                \item $\Pi_{\mathsf{send}}$: send $\mathbbm{w}$, output $\top$ iff $(\mathsf{pp}, \mathbbm{x}, \mathbbm{w}) \in \mathcal{R}$. Knowledge error $0$, not succinct.
+            \end{enumerate}
+        \end{example}
+        \pause
+
+        \begin{theorem}[Composition]
+            Let $\Pi$ be a reduction of knowledge from $\mathcal{R}$ to $\mathcal{R}'$ with knowledge error $\kappa$.
+            \begin{enumerate}
+                \item[\textit{(i)}] \textbf{Sequential.} If $\Pi'$ reduces $\mathcal{R}'$ to $\mathcal{R}''$ with error $\kappa'$, then $\Pi' \circ \Pi$ reduces $\mathcal{R}$ to $\mathcal{R}''$ with error $\kappa + \kappa'$.
+                \item[\textit{(ii)}] \textbf{Parallel.} If $\widetilde{\Pi}$ reduces $\widetilde{\mathcal{R}}$ to $\widetilde{\mathcal{R}}'$, then $\Pi \times \widetilde{\Pi}$ reduces $\mathcal{R} \times \widetilde{\mathcal{R}}$ to $\mathcal{R}' \times \widetilde{\mathcal{R}}'$.
+            \end{enumerate}
+        \end{theorem}
+        \pause
+        {\small Proof of \textit{(i)}: exactly the nested extraction of the warm-up.}
+    \end{frame}
+
+    \begin{frame}{LaBRADOR as a Chain of Reductions}
+        \begin{remarkblock}{Relaxed relations}
+            Lattice reductions are complete for one relation but knowledge sound only for a \emph{relaxed} one: e.g., complete for norm $\leq \beta$, extraction only guarantees $\leq \sqrt{128/30}\,\beta$. LaBRADOR chooses the Module-SIS parameters of each iteration with the slack of the next ones in mind.
+        \end{remarkblock}
+        \pause
+
+        Each iteration is $\Pi_{\mathsf{main}}: \mathcal{R}_{\mathsf{dot}} \to \mathcal{R}_{\mathsf{dot}}'$ (new parameters), and $\Pi_{\mathsf{R1CS}}: \mathcal{R}_{\mathsf{R1CS}} \to \mathcal{R}_{\mathsf{dot}}$. The complete protocol is
+        \begin{equation*}
+            \Pi_{\mathsf{LaBRADOR}} := \Pi_{\mathsf{send}} \circ \underbrace{\Pi_{\mathsf{main}} \circ \dots \circ \Pi_{\mathsf{main}}}_{\ell \; \text{times}} \circ \Pi_{\mathsf{R1CS}},
+        \end{equation*}
+        with knowledge error $\kappa_{\mathsf{R1CS}} + \ell \cdot \kappa_{\mathsf{main}}$.
+        \pause
+
+        \begin{itemize}
+            \item Same idea as folding schemes (Nova, LatticeFold).
+            \item Both caveats disappear: $O(\log\log N)$ iterations, and Fiat-Shamir is applied once to the whole public-coin protocol.
+        \end{itemize}
+    \end{frame}
+
+    \subsection{Making the Main Protocol Recursive}
+
+    \begin{frame}{Three Issues}
+        To turn the base protocol into a reduction from $\mathcal{R}_{\mathsf{dot}}$ to itself:
+        \begin{itemize}
+            \item \textit{Issue \#1:} the commitments $\mathbf{t}_i$ and the garbage are sent in the clear, and their size grows with $r$;\pause
+            \item \textit{Issue \#2:} the coefficients of $\mathbf{z}$ are larger by $\approx \sqrt{r\tau}$: they would blow up after a few iterations;\pause
+            \item \textit{Issue \#3:} the new witness is one long $\mathbf{z}$ and several short vectors, while the protocol prefers many vectors of the same rank.
+        \end{itemize}
+        \pause
+
+        \begin{block}{Outer commitments (Issue \#1)}
+            Move commitments and garbage into the new witness: the verifier need not \emph{see} them, they just must be fixed before the challenges. Send a single Ajtai commitment to all \textbf{inner commitments} $\mathbf{t}_i$: an \textbf{outer commitment}.
+        \end{block}
+    \end{frame}
+
+    \begin{frame}{Outer Commitments}
+        Ajtai needs short messages, but $\mathbf{t}_i$ has arbitrary coefficients. Decompose in a small base $\delta$:
+        \begin{equation*}
+            \mathbf{t}_i = \sum_{k \in [t]} \mathbf{t}_{i,k}\delta^k, \quad \|\mathbf{t}_{i,k}\|_{\infty} \leq \frac{1}{2}\delta, \quad t = \lceil \log q/\log \delta \rceil;
+        \end{equation*}
+        similarly $h_{ij}$ in base $\delta$ and the (shorter) $g_{ij}$ in base $\delta'$. Collect the parts into $\mathbf{t}$, $\mathbf{g}$, $\mathbf{h}$.
+        \pause
+
+        The prover sends two outer commitments
+        \begin{equation*}
+            \mathbf{u}' := \mathbf{B}\mathbf{t} + \mathbf{C}\mathbf{g} \in \mathcal{R}_q^{\kappa'}, \qquad \mathbf{u}'' := \mathbf{D}\mathbf{h} \in \mathcal{R}_q^{\kappa''}.
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        \begin{itemize}
+            \item Two of them, as they are sent at different times: $\mathbf{t}_i$ and $g_{ij}$ depend only on the witness (first message); $h_{ij}$ depend on $\boldsymbol{\varphi}_i$ (after aggregation).
+            \item Both equations are linear: $\kappa' + \kappa''$ additional constraints of the next instance.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Decomposing and Reshaping}
+        \textbf{Issue \#2.} Decompose $\mathbf{z} = \mathbf{z}_{\mathsf{low}} + \delta''\mathbf{z}_{\mathsf{high}}$ with $\|\mathbf{z}_{\mathsf{low}}\|_{\infty} \leq \frac{1}{2}\delta''$; the quadratic check becomes
+        \begin{equation*}
+            \langle \mathbf{z}_{\mathsf{low}}, \mathbf{z}_{\mathsf{low}} \rangle + 2\delta''\langle \mathbf{z}_{\mathsf{low}}, \mathbf{z}_{\mathsf{high}} \rangle + \delta''^2\langle \mathbf{z}_{\mathsf{high}}, \mathbf{z}_{\mathsf{high}} \rangle = \sum_{i,j} g_{ij}c_ic_j,
+        \end{equation*}
+        still a dot product constraint. Choose $\delta \approx \delta' \approx \delta''$: all parts about equally wide.
+        \pause
+
+        \textbf{Issue \#3.} Let $\mathbf{o} := \mathbf{t}\,\|\,\mathbf{g}\,\|\,\mathbf{h} \in \mathcal{R}_q^m$. Split $\mathbf{z}_{\mathsf{low}}$, $\mathbf{z}_{\mathsf{high}}$ into $\nu$ pieces and $\mathbf{o}$ into $\mu$ pieces, pad to rank $n' := \max\{\lceil n/\nu \rceil, \lceil m/\mu \rceil\}$: a witness of multiplicity $r' = 2\nu + \mu$ ($n/\nu \approx m/\mu$).
+        \pause
+
+        The norm checks combine into one:
+        \begin{equation*}
+            \sum_{i \in [r']} \|\mathbf{s}_i'\|_2^2 = \|\mathbf{z}_{\mathsf{low}}\|_2^2 + \|\mathbf{z}_{\mathsf{high}}\|_2^2 + \|\mathbf{o}\|_2^2 \leq \beta'^2.
+        \end{equation*}
+        New instance: $\kappa + \kappa' + \kappa'' + 3$ constraints in $\mathcal{F}$, empty $\mathcal{F}_{\mathsf{ct}}$, bound $\beta'$.
+    \end{frame}
+
+    \begin{frame}{One Iteration of the Main Protocol}
+        \begin{center}
+        \begin{tikzpicture}[
+            scale=1.05, every node/.style={transform shape},
+            wit/.style={draw=oc-indigo-7, thick, fill=oc-indigo-1, minimum height=0.45cm, inner sep=0pt},
+            aux/.style={draw=oc-teal-7, thick, fill=oc-teal-1, minimum height=0.45cm, inner sep=0pt},
+            prf/.style={draw=oc-orange-8, thick, fill=oc-orange-1, rounded corners, inner sep=3pt, font=\footnotesize},
+            lab/.style={font=\footnotesize, anchor=east},
+            arr/.style={-stealth, very thick, oc-gray-7},
+        ]
+            \node[lab] at (-0.2, 0) {$(\mathbf{s}_i)_{i \in [r]}$};
+            \foreach \i in {0,...,5} {
+                \node[wit, minimum width=0.9cm] at (0.45+0.95*\i, 0) {};
+            }
+            \node[font=\scriptsize, oc-gray-7] at (2.85, 0.45) {$r$ vectors of rank $n$};
+            \pause
+            \draw[arr] (2.85,-0.35) -- node[right, font=\footnotesize, black] {fold and commit} (2.85,-1.05);
+            \node[lab] at (-0.2, -1.4) {$\mathbf{z}, \mathbf{o}$};
+            \node[wit, minimum width=0.9cm] (z) at (0.45, -1.4) {$\scriptstyle\mathbf{z}$};
+            \node[aux, minimum width=1.6cm] (o) at (2.0, -1.4) {$\scriptstyle\mathbf{t}\,\|\,\mathbf{g}\,\|\,\mathbf{h}$};
+            \node[prf] (pi) at (5.3, -1.4) {$\pi = (\mathbf{u}', \mathbf{p}, (v_k)_k, \mathbf{u}'')$};
+            \draw[-stealth, thick, oc-orange-8] (pi.east) -- ++(0.6,0) node[right, font=\footnotesize, black] {$\mathcal{V}$};
+            \pause
+            \draw[arr] (2.85,-1.75) -- node[right, font=\footnotesize, black] {decompose and reshape} (2.85,-2.45);
+            \node[lab] at (-0.2, -2.8) {$(\mathbf{s}_i')_{i \in [r']}$};
+            \foreach \i in {0,...,3} {
+                \node[wit, minimum width=0.4cm] at (0.2+0.45*\i, -2.8) {};
+            }
+            \foreach \i in {0,...,3} {
+                \node[aux, minimum width=0.4cm] at (2.05+0.45*\i, -2.8) {};
+            }
+            \node[font=\scriptsize, oc-gray-7] at (1.9, -3.25) {$r' = 2\nu + \mu$ vectors of rank $n' \approx n/\nu$};
+        \end{tikzpicture}
+        \end{center}
+        \pause
+
+        {\small Instead of sending its last message, the prover outputs the new witness $(\mathbf{s}_i')_{i \in [r']}$; the verifier outputs the new statement $(\mathcal{F}', \varnothing, \beta')$: $\mathbf{A}\mathbf{z} = \sum_i c_i\mathbf{t}_i$, $\mathbf{u}' = \mathbf{B}\mathbf{t} + \mathbf{C}\mathbf{g}$, $\mathbf{u}'' = \mathbf{D}\mathbf{h}$, and the three garbage equations, rewritten in terms of the new witness.}
+    \end{frame}
+
+    \begin{frame}{How Fast Does the Witness Shrink?}
+        Count ring elements, ignoring small constants:
+        \begin{itemize}
+            \item before: $N = rn$;
+            \item after: $\approx 2n$ (for $\mathbf{z}_{\mathsf{low}}$, $\mathbf{z}_{\mathsf{high}}$) $+ \approx r^2$ (for $\mathbf{o}$, dominated by garbage).
+        \end{itemize}
+        \pause
+        Minimizing $2N/r + r^2$ gives $r \approx N^{1/3}$ and a new witness of size $\approx N^{2/3}$.
+        \pause
+
+        \begin{equation*}
+            N \to N^{2/3} \to N^{4/9} \to \dots \quad \Rightarrow \quad O(\log \log N) \text{ iterations}
+        \end{equation*}
+        In practice, six or seven iterations; then the prover sends the remaining witness in the clear.
+        \pause
+
+        \begin{itemize}
+            \item Each iteration contributes only $\pi$: $\mathbf{u}', \mathbf{u}''$ ($\kappa' + \kappa''$ ring elements), $\mathbf{p}$ ($256$ small integers), $K_{\mathsf{ct}}$ polynomials $v_k$: a few kilobytes, independently of the witness size.
+        \end{itemize}
+
+    \end{frame}
+
+    \begin{frame}{The Recursive Protocol}
+        \small
+        \begin{columns}[T]
+            \begin{column}{0.48\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{P}(\mathbbm{x}_0, \mathbbm{w}_0)$:}
+                \begin{algoen}
+                    \item \keyword{for} $i \in [\ell]$:
+                    \item \hspace{5px} run one iteration on $(\mathbbm{x}_{i}, \mathbbm{w}_{i})$;
+                    \item \hspace{5px} $\mathbbm{w}_{i+1} \gets$ its output;
+                    \item \hspace{5px} compute $\mathbbm{x}_{i+1}$ as the verifier does;
+                    \item \commentgray{last iteration} \\ \keyword{send} $\mathbbm{w}_{\ell}$.
+                \end{algoen}
+            \end{column}
+            \begin{column}{0.48\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{V}(\mathbbm{x}_0) \to \{0,1\}$:}
+                \begin{algoen}
+                    \item \keyword{for} $i \in [\ell]$:
+                    \item \hspace{5px} run one iteration on $\mathbbm{x}_{i}$;
+                    \item \hspace{5px} $\mathbbm{x}_{i+1} \gets$ its output;
+                    \item \keyword{receive} $\mathbbm{w}_{\ell}$;
+                    \item \keyword{return} $\llbracket (\mathbbm{x}_{\ell}, \mathbbm{w}_{\ell}) \in \mathcal{R}_{\mathsf{dot}} \rrbracket$.
+                \end{algoen}
+            \end{column}
+        \end{columns}
+        \normalsize
+        \pause
+
+        \vspace{10pt}
+        If any check inside an iteration fails, the verifier rejects. The proof consists of the short messages $\pi$ of all iterations and the final witness $\mathbbm{w}_{\ell}$.        \pause
+
+        \begin{questionblock}{Question \#4}
+            Suppose the witness has $N = 2^{21}$ ring elements. Show that $r \approx N^{1/3}$ minimizes $2N/r + r^2$, and compute the size of the new witness.
+        \end{questionblock}
+    \end{frame}
+
+    \section{Parameters and Security}
+
+    \begin{frame}{Norm Bounds}
+        The honest prover must pass $\sum_i \|\mathbf{s}_i'\|_2^2 \leq \beta'^2$. LaBRADOR models all coefficients as independent Gaussians (matches experiments).
+        \pause
+        \begin{itemize}
+            \item Coefficients of $\mathbf{s}_i$: standard deviation $\sigma = \beta/\sqrt{rnd}$. Each coefficient of $\mathbf{z}$: $\approx \sigma\sqrt{r\tau}$, so
+            \begin{equation*}
+                \|\mathbf{z}\|_2 \approx \sigma\sqrt{r\tau}\cdot\sqrt{nd} = \beta\sqrt{\tau} =: \gamma.
+            \end{equation*}\pause
+            \vspace{-15pt}
+            \item $\mathbf{z}_{\mathsf{low}}$ is essentially uniform modulo $\delta''$ (std.\ dev.\ $\delta''/\sqrt{12}$), $\mathbf{z}_{\mathsf{high}}$ has $\sigma\sqrt{r\tau}/\delta''$. Equal for
+            \begin{equation*}
+                \delta'' \approx \sqrt{\sqrt{12r\tau}\cdot \sigma}.
+            \end{equation*}\pause
+            \vspace{-15pt}
+            \item New bound: $\beta'^2 = \frac{2}{\delta''^2}\gamma^2 + \gamma'^2 + \gamma''^2$ ($\gamma'$, $\gamma''$ bound the openings of $\mathbf{u}'$, $\mathbf{u}''$).
+        \end{itemize}
+        \pause
+        Longer-than-predicted honest vectors $\Rightarrow$ restart (running time, not soundness).
+    \end{frame}
+
+    \begin{frame}{Concrete Parameters}
+        \begin{itemize}
+            \item $\mathcal{R}_q = \mathbb{Z}_q[T]/(T^{64}+1)$ ($d = 64$), $q \approx 2^{32}$ with $T^{64}+1$ splitting into two irreducible factors.\pause
+            \item Challenge set with $\tau = 71$ and $\theta = 15$.\pause
+            \item Commitment ranks $\kappa$, $\kappa'$, $\kappa''$ chosen per iteration for $128$ bits of Module-SIS security.\pause
+            \item Non-interactive via Fiat-Shamir; all challenges (including the projection matrices) are expanded from short seeds.
+        \end{itemize}
+    \end{frame}
+
+    \section{Reduction From R1CS}
+
+    \begin{frame}{R1CS}
+        Recall: $\mathbf{w}$ satisfies $(\mathbf{L}, \mathbf{R}, \mathbf{O})$ if
+        \begin{equation*}
+            \mathbf{L}\mathbf{w} \odot \mathbf{R}\mathbf{w} = \mathbf{O}\mathbf{w}, \quad \mathbf{L}, \mathbf{R}, \mathbf{O} \in \mathbb{Z}_N^{k \times \ell} \quad (k \text{ constraints}, \ell \text{ variables}).
+        \end{equation*}
+        LaBRADOR supports $N = 2$ (\emph{binary}: hash functions, bit manipulations) and $N = 2^d + 1$ (integer arithmetic). We discuss the binary case.
+        \pause
+
+        \textbf{Binary R1CS.} For $\mathbf{w} \in \{0,1\}^{\ell}$, the prover computes
+        \begin{equation*}
+            \mathbf{a} := \mathbf{L}\mathbf{w} \bmod 2, \quad \mathbf{b} := \mathbf{R}\mathbf{w} \bmod 2, \quad \mathbf{c} := \mathbf{O}\mathbf{w} \bmod 2,
+        \end{equation*}
+        packs all bits into polynomial coefficients and commits: $\mathbf{t} = \mathbf{A}_{\mathsf{R1CS}}(\mathbf{a}\,\|\,\mathbf{b}\,\|\,\mathbf{c}\,\|\,\mathbf{w})$.
+        \pause
+
+        It remains to show:
+        \begin{algoen}
+            \item all committed coefficients are bits;
+            \item $\mathbf{a} \odot \mathbf{b} = \mathbf{c}$;
+            \item $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$ are computed correctly from $\mathbf{w}$ modulo $2$.
+        \end{algoen}
+    \end{frame}
+
+    \begin{frame}{Binarity and Products}
+        \textbf{Binarity.} With $\mathbf{1}$ the all-ones vector of polynomials:
+        \begin{equation*}
+            \mathsf{ct}\big(\langle \mathbf{a}^{\ast}, \mathbf{a} - \mathbf{1} \rangle\big) = \sum_{i} a_i(a_i - 1) \bmod q.
+        \end{equation*}
+        \vspace{-15pt}
+        \begin{itemize}
+            \item $\mathbf{a}^{\ast}$ is not a dot product function of $\mathbf{a}$: add $\widetilde{\mathbf{a}} := \mathbf{a}^{\ast}$ to the witness; $\widetilde{\mathbf{a}} = \mathbf{a}^{\ast}$ is $\mathbb{Z}_q$-linear (permute, flip signs): constraints in $\mathcal{F}_{\mathsf{ct}}$.\pause
+            \item The constraint holds mod $q$, but we need it over $\mathbb{Z}$: every $a_i(a_i - 1) \geq 0$ and $\sum_i a_i(a_i - 1) \leq 2\|\mathbf{a}\|_2^2$. If the certified squared norm is below $q$, no wraparound: all $a_i$ are bits.
+        \end{itemize}
+        \pause
+
+        \textbf{Products.} For bits, $ab = c$ iff $a + b - 2c \in \{0, 1\}$: show
+        \begin{equation*}
+            \mathsf{ct}(\langle \widetilde{\mathbf{a}} + \widetilde{\mathbf{b}} - 2\widetilde{\mathbf{c}}, \mathbf{a} + \mathbf{b} - 2\mathbf{c} - \mathbf{1} \rangle) = 0.
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Linear Relations Modulo 2}
+        $3k$ relations modulo $2$, but the main protocol works modulo $q$. Compress them into $\lambda$ random combinations: $\boldsymbol{\alpha}_{i,L}, \boldsymbol{\alpha}_{i,R}, \boldsymbol{\alpha}_{i,O} \leftarrowS \{0,1\}^k$ for $i \in [\lambda]$, and
+        \begin{equation*}
+            \boldsymbol{\delta}_i := \boldsymbol{\alpha}_{i,L}^{\top}\mathbf{L} + \boldsymbol{\alpha}_{i,R}^{\top}\mathbf{R} + \boldsymbol{\alpha}_{i,O}^{\top}\mathbf{O} \bmod 2 \in \{0,1\}^{\ell}.
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        The prover sends the integers (dot products over $\mathbb{Z}$ on the bits)
+        \begin{equation*}
+            e_i := \langle \boldsymbol{\alpha}_{i,L}, \mathbf{a} \rangle + \langle \boldsymbol{\alpha}_{i,R}, \mathbf{b} \rangle + \langle \boldsymbol{\alpha}_{i,O}, \mathbf{c} \rangle - \langle \boldsymbol{\delta}_i, \mathbf{w} \rangle, \quad i \in [\lambda].
+        \end{equation*}
+        \pause
+        \vspace{-10pt}
+
+        \begin{itemize}
+            \item All relations hold $\Rightarrow$ every $e_i$ is even (the verifier checks).\pause
+            \item Some relation fails $\Rightarrow$ each $e_i$ is odd w.p. $1/2$: soundness error $2^{-\lambda}$.\pause
+            \item Correctness of $e_i$: a constraint in $\mathcal{F}_{\mathsf{ct}}$, valid over $\mathbb{Z}$ as long as $\ell + 3k < q$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{The Binary R1CS Reduction}
+        \footnotesize
+        \begin{columns}[T]
+            \begin{column}{0.5\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{P}(\mathbbm{x} = (\mathbf{L}, \mathbf{R}, \mathbf{O}), \mathbbm{w} = \mathbf{w})$:}
+                \begin{algoen}
+                    \item $\mathbf{a}, \mathbf{b}, \mathbf{c} \gets \mathbf{L}\mathbf{w}, \mathbf{R}\mathbf{w}, \mathbf{O}\mathbf{w} \bmod 2$;
+                    \item \keyword{send} $\mathbf{t} \gets \mathbf{A}_{\mathsf{R1CS}}(\mathbf{a}\,\|\,\mathbf{b}\,\|\,\mathbf{c}\,\|\,\mathbf{w})$;
+                    \item \keyword{receive} $(\boldsymbol{\alpha}_{i,L}, \boldsymbol{\alpha}_{i,R}, \boldsymbol{\alpha}_{i,O})_{i \in [\lambda]}$;
+                    \item compute $\boldsymbol{\delta}_i$ and $e_i$ for $i \in [\lambda]$;
+                    \item \keyword{send} $(e_i)_{i \in [\lambda]}$;
+                    \item \commentgray{target witness} \\ \keyword{return} $(\mathbf{a}, \mathbf{b}, \mathbf{c}, \mathbf{w}, \mathbf{a}^{\ast}, \mathbf{b}^{\ast}, \mathbf{c}^{\ast}, \mathbf{w}^{\ast})$.
+                \end{algoen}
+            \end{column}
+            \begin{column}{0.47\textwidth}
+                \colorbox{oc-blue-1}{$\mathcal{V}(\mathbbm{x} = (\mathbf{L}, \mathbf{R}, \mathbf{O}))$:}
+                \begin{algoen}
+                    \item \keyword{receive} $\mathbf{t}$;
+                    \item \keyword{send} $\boldsymbol{\alpha}_{i,L}, \boldsymbol{\alpha}_{i,R}, \boldsymbol{\alpha}_{i,O} \leftarrowS \{0,1\}^k$, $i \in [\lambda]$;
+                    \item \keyword{receive} $(e_i)_{i \in [\lambda]}$;
+                    \item \keyword{assert} $e_i$ is even for all $i \in [\lambda]$;
+                    \item \commentgray{target statement} \\ \keyword{return} $(\mathcal{F}, \mathcal{F}_{\mathsf{ct}}, \sqrt{2(3k+\ell)})$.
+                \end{algoen}
+            \end{column}
+        \end{columns}
+        \normalsize
+        \pause
+
+        \vspace{5pt}
+        \begin{itemize}
+            \item $\mathcal{F}$: the opening of $\mathbf{t}$; $\mathcal{F}_{\mathsf{ct}}$: conjugation relations, binarity of $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$, $\mathbf{w}$, $\mathbf{a} + \mathbf{b} - 2\mathbf{c}$, and correctness of the $e_i$.\pause
+            \item Squared norm of the target witness $\leq 2(3k + \ell)$; $2(3k + \ell)\cdot\frac{128}{30} < q$ holds for all practical sizes with $q \approx 2^{32}$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Summary}
+        \begin{itemize}
+            \item LaBRADOR proves \textbf{dot product constraint systems} $\mathcal{R}_{\mathsf{dot}}$: quadratic constraints over $\mathcal{R}_q$, constant-coefficient constraints, and a norm bound.\pause
+            \item Main protocol: \textbf{amortized opening} $\mathbf{z} = \sum_i c_i\mathbf{s}_i$, \textbf{garbage polynomials}, \textbf{aggregation} of all constraints into one, and a \textbf{JL projection} for the norm (slack $\approx 2.07$).\pause
+            \item No zero-knowledge: no masks, no rejection sampling.\pause
+            \item The verifier's checks are again dot product constraints: \textbf{recursion} via outer commitments, decomposition and reshaping; the witness shrinks $N \to N^{2/3}$, so $O(\log\log N)$ iterations.\pause
+            \item Formally: a chain of \textbf{reductions of knowledge} that compose sequentially and in parallel.\pause
+            \item Binary R1CS reduces to $\mathcal{R}_{\mathsf{dot}}$; $2^{20}$ constraints $\to$ $\approx 58$~KB, from Module-SIS only.
+        \end{itemize}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

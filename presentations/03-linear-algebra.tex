@@ -1,0 +1,655 @@
+\documentclass{zkdl-presentation-template}
+
+\title[Linear Algebra]{\textbf{Mathematics for Cryptography III: Linear Algebra}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents[hideallsubsections]
+    \end{frame}
+
+
+    \section{Motivation}
+
+    \begin{frame}{Why Linear Algebra?}
+        In cryptography we commonly need to work with a large set of \textit{linear} relations, e.g. $\alpha_1x_1 + \alpha_2x_2 + \dots + \alpha_nx_n = 0$ over a field $\mathbb{F}$.
+        \pause
+
+        We collect variables into \textbf{vectors} (in bold): $\mathbf{x}=(x_1,\dots,x_n)$, and relations into \textbf{matrices}:
+        \begin{equation*}
+            \begin{cases}
+                \alpha x_1 + \beta x_2 = 0 \\
+                \gamma x_1 + \delta x_3 = 0 \\
+                \varepsilon x_2 + \zeta x_3 = 0
+            \end{cases}
+            \quad \Longleftrightarrow \quad
+            A\mathbf{x} = \mathbf{0}, \quad A = \begin{bmatrix}
+                \alpha & \beta & 0 \\
+                \gamma & 0 & \delta \\
+                0 & \varepsilon & \zeta
+            \end{bmatrix}.
+        \end{equation*}
+        \pause
+
+        \begin{remarkblock}{Where we use it}
+            Linear PCPs and R1CS (Hadamard products of large vectors), inner-product arguments (Bulletproofs), and lattices (short solutions of $A\mathbf{x} = \mathbf{0}$).
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Geometric View}
+        \begin{columns}[c]
+            \begin{column}{0.33\textwidth}
+                \centering
+                \includegraphics[width=\textwidth]{../contents/images/linear-algebra/3d-system-1.png}\\
+                \small\textcolor{oc-indigo-7}{\textit{(a)}} vectors span $\mathbb{R}^3$: a solution always exists.
+            \end{column}
+            \pause
+            \begin{column}{0.33\textwidth}
+                \centering
+                \includegraphics[width=\textwidth]{../contents/images/linear-algebra/3d-system-2.png}\\
+                \small\textcolor{oc-indigo-7}{\textit{(b)}} vectors on a plane: infinitely many or no solutions.
+            \end{column}
+            \pause
+            \begin{column}{0.33\textwidth}
+                \centering
+                \includegraphics[width=\textwidth]{../contents/images/linear-algebra/3d-system-3.png}\\
+                \small\textcolor{oc-indigo-7}{\textit{(c)}} vectors on a line: a solution exists only on this line.
+            \end{column}
+        \end{columns}
+
+        \vspace{8pt}
+        \centering
+        Solutions of $\mathbf{v}_1x_1 + \mathbf{v}_2x_2 + \mathbf{v}_3x_3 = \mathbf{t}$ depend on how $\mathbf{v}_1,\mathbf{v}_2,\mathbf{v}_3$ are related.
+    \end{frame}
+
+    \begin{frame}{Determinant: the Volume Spanned by Columns}
+        For $A = (\mathbf{v}_1,\mathbf{v}_2,\mathbf{v}_3)$, $\det A$ is the (signed) volume of the parallelepiped spanned by the columns.
+        \begin{figure}
+            \centering
+            \resizebox{\textwidth}{!}{%
+            \begin{tikzpicture}[scale=0.75, >=Stealth]
+\begin{axis}[
+    at={(0,0)},
+    width=5.2cm,
+    height=5.2cm,
+    view={120}{25},
+    axis lines=center,
+    axis line style={thick, oc-gray-5},
+    xmin=0, xmax=4.2,
+    ymin=0, ymax=3.8,
+    zmin=0, zmax=3.5,
+    ticks=none,
+    xlabel style={
+        at={(axis description cs:1.02,0.03)},
+        anchor=west
+    },
+    ylabel style={
+        at={(axis description cs:0.02,1.03)},
+        anchor=south
+    },
+    zlabel style={
+        at={(axis description cs:0.05,0.98)},
+        anchor=south
+    },
+]
+\addplot3[
+    fill=oc-blue-1,
+    draw=oc-blue-5,
+    opacity=0.75
+] coordinates {
+    (0,0,0) (3,0,0) (3,2,0) (0,2,0) (0,0,0)
+};
+
+\addplot3[
+    fill=oc-blue-1,
+    draw=oc-blue-5,
+    opacity=0.75
+] coordinates {
+    (0,0,2) (3,0,2) (3,2,2) (0,2,2) (0,0,2)
+};
+
+\addplot3[oc-blue-5, opacity=0.75] coordinates {(0,0,0) (0,0,2)};
+\addplot3[oc-blue-5, opacity=0.75] coordinates {(3,0,0) (3,0,2)};
+\addplot3[oc-blue-5, opacity=0.75] coordinates {(3,2,0) (3,2,2)};
+\addplot3[oc-blue-5, opacity=0.75] coordinates {(0,2,0) (0,2,2)};
+\addplot3[
+    ->,
+    ultra thick,
+    oc-red-7
+] coordinates {(0,0,0) (3,0,0)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-blue-7
+] coordinates {(0,0,0) (0,2,0)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-green-7
+] coordinates {(0,0,0) (0,0,2)};
+
+\node[
+    oc-red-7,
+    font=\small
+] at (axis cs:1.5,-0.35,0.2) {$\mathbf{v}_1$};
+
+\node[
+    oc-blue-7,
+    font=\small
+] at (axis cs:-0.7,1,0.2) {$\mathbf{v}_2$};
+
+\node[
+    oc-green-7,
+    font=\small
+] at (axis cs:-0.25,0.3,1.15) {$\mathbf{v}_3$};
+
+\node[
+    font=\large\bfseries,
+    anchor=south
+] at (axis description cs:0.5,1.08)
+{$\det(A)\neq0$};
+
+\node[
+    font=\small,
+    anchor=north
+] at (axis description cs:0.5,-0.15)
+{3-dimensional span};
+
+\end{axis}
+\begin{axis}[
+    at={(6cm,0)},
+    width=5.2cm,
+    height=5.2cm,
+    view={120}{25},
+    axis lines=center,
+    axis line style={thick, oc-gray-5},
+    xmin=0, xmax=4.2,
+    ymin=0, ymax=3.8,
+    zmin=0, zmax=3.5,
+    ticks=none,
+    xlabel style={
+        at={(axis description cs:1.02,0.03)},
+        anchor=west
+    },
+    ylabel style={
+        at={(axis description cs:0.02,1.03)},
+        anchor=south
+    },
+    zlabel style={
+        at={(axis description cs:0.05,0.98)},
+        anchor=south
+    },
+]
+
+\addplot3[
+    surf,
+    domain=0:5,
+    y domain=0:5,
+    samples=8,
+    samples y=8,
+    shader=flat,
+    draw=oc-gray-5,
+    fill=oc-gray-1,
+    opacity=0.45,
+    line join=round
+]
+({x},{y},{0});
+\addplot3[
+    ->,
+    ultra thick,
+    oc-red-7
+] coordinates {(0,0,0) (2,0,0)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-blue-7
+] coordinates {(0,0,0) (0,2,0)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-green-7
+] coordinates {(0,0,0) (3,2,0)};
+
+\node[
+    oc-red-7,
+    font=\small
+] at (axis cs:1.5,-0.15,0.5) {$\mathbf{v}_1$};
+
+\node[
+    oc-blue-7,
+    font=\small
+] at (axis cs:-0.3,2,0.35) {$\mathbf{v}_2$};
+
+\node[
+    oc-green-7,
+    font=\small
+] at (axis cs:2,2,0) {$\mathbf{v}_3$};
+
+\node[
+    font=\large\bfseries,
+    anchor=south
+] at (axis description cs:0.5,1.08)
+{$\det(A)=0$};
+
+\node[
+    font=\small,
+    anchor=north
+] at (axis description cs:0.5,-0.15)
+{2-dimensional span (plane)};
+
+\end{axis}
+\begin{axis}[
+    at={(12cm,0)},
+    width=5.2cm,
+    height=5.2cm,
+    view={120}{25},
+    axis lines=center,
+    axis line style={thick, oc-gray-5},
+    xmin=0, xmax=5.2,
+    ymin=0, ymax=3.8,
+    zmin=0, zmax=4.2,
+    ticks=none,
+    xlabel style={
+        at={(axis description cs:1.02,0.03)},
+        anchor=west
+    },
+    ylabel style={
+        at={(axis description cs:0.02,1.03)},
+        anchor=south
+    },
+    zlabel style={
+        at={(axis description cs:0.05,0.98)},
+        anchor=south
+    },
+]
+
+\addplot3[
+    very thick,
+    dashed,
+    gray
+] coordinates {
+    (0,0,0)
+    (3,3,0)
+};
+
+\addplot3[
+    very thick,
+    dashed,
+    gray
+] coordinates {
+    (3,3,3)
+    (3,3,0)
+};
+\addplot3[
+    ->,
+    ultra thick,
+    oc-green-7
+] coordinates {(0,0,0) (4,4,4)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-blue-7
+] coordinates {(0,0,0) (2.75,2.75,2.75)};
+
+\addplot3[
+    ->,
+    ultra thick,
+    oc-red-7
+] coordinates {(0,0,0) (1.5,1.5,1.5)};
+
+\node[
+    oc-green-7,
+    font=\small
+] at (axis cs:4,3.75,4.4) {$\mathbf{v}_3$};
+
+\node[
+    oc-blue-7,
+    font=\small
+] at (axis cs:2.75,2.5,3.25) {$\mathbf{v}_2$};
+
+\node[
+    oc-red-7,
+    font=\small
+] at (axis cs:1.5,1.25,2) {$\mathbf{v}_1$};
+
+\end{axis}
+
+\end{tikzpicture}%
+            }
+        \end{figure}
+        \pause
+        \begin{remarkblock}{Takeaway}
+            A plane or a line has no volume ($\det A = 0$): the equation $A\mathbf{x} = \mathbf{t}$ has either no or infinitely many solutions. If $\det A \neq 0$, there is always exactly one.
+        \end{remarkblock}
+    \end{frame}
+
+    \section{Vector Spaces}
+
+    \begin{frame}{Vector Space}
+        \begin{definition}
+            A \textbf{vector space} $V$ over the field $\mathbb{F}$ is an abelian group for addition $+$ together with a scalar multiplication $\mathbb{F} \times V \to V$, $(\lambda,\mathbf{x}) \mapsto \lambda \mathbf{x}$, such that for any $\mathbf{v},\mathbf{u} \in V$ and $\lambda,\mu \in \mathbb{F}$:
+            \begin{columns}
+                \begin{column}{0.45\textwidth}
+                    \begin{itemize}
+                        \item $\lambda(\mathbf{u}+\mathbf{v}) = \lambda \mathbf{u} + \lambda \mathbf{v}$
+                        \item $(\lambda + \mu)\mathbf{v} = \lambda \mathbf{v} + \mu \mathbf{v}$
+                    \end{itemize}
+                \end{column}
+                \begin{column}{0.45\textwidth}
+                    \begin{itemize}
+                        \item $(\lambda \mu)\mathbf{v} = \lambda(\mu \mathbf{v})$
+                        \item $1\cdot \mathbf{v} = \mathbf{v}$
+                    \end{itemize}
+                \end{column}
+            \end{columns}
+        \end{definition}
+        \pause
+
+        \begin{example}
+            $\mathbb{F}^n$ with coordinate-wise operations is a vector space. So is $V_3 := \{\mathbf{x} \in \mathbb{F}^n: x_1+x_2+\dots+x_n = 0\}$: it is closed under addition and scalar multiplication.
+        \end{example}
+        \pause
+
+        \begin{remark}
+            Polynomials $\mathbb{R}[T]^{\leq n}$ also form a vector space over $\mathbb{R}$.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Linear Subspace and Span}
+        \begin{definition}
+            Let $V$ be a vector space over $\mathbb{F}$ and $W \subseteq V$. $W$ is a \textbf{linear subspace} of $V$ if for any $\mathbf{w}_1,\mathbf{w}_2 \in W$ and $\alpha,\beta \in \mathbb{F}$ one has $\alpha\mathbf{w}_1 + \beta\mathbf{w}_2 \in W$.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            For vectors $\mathbf{v}_1,\dots,\mathbf{v}_n \in V$, the \textbf{span}
+            \begin{equation*}
+                \text{span}(\mathbf{v}_1,\dots,\mathbf{v}_n) := \{\lambda_1\mathbf{v}_1 + \dots + \lambda_n\mathbf{v}_n: \lambda_1,\dots,\lambda_n \in \mathbb{F}\}
+            \end{equation*}
+            is a linear subspace of $V$.
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question}
+            Show that the set of solutions $\mathbf{x} \in \mathbb{F}^n$ of $\mathbf{u}_1x_1 + \dots + \mathbf{u}_nx_n = \mathbf{0}$ is a linear subspace of $\mathbb{F}^n$.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Subspaces: Examples}
+        \begin{example}
+            Let $n \geq 2$ and
+            \begin{equation*}
+                U := \{\mathbf{x} \in \mathbb{F}^n: x_1 = x_2 = 0\}, \quad W := \{\mathbf{x} \in \mathbb{F}^n: x_1 + x_2 = 0\}.
+            \end{equation*}
+            Both $U$ and $W$ are linear subspaces of $\mathbb{F}^n$, and $U$ is a subspace of $W$.
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question}
+            Let $V := \{\mathbf{z} \in \mathbb{F}^n: \mathbf{z} \odot (\mathbf{1}_n - \mathbf{z}) = \mathbf{0}\}$ (bit-vectors, see the Hadamard product below). When is $V$ a linear subspace of $\mathbb{F}^n$?
+        \end{questionblock}
+    \end{frame}
+
+    \section{Basis and Dimension}
+
+    \begin{frame}{Linear Independence}
+        \begin{definition}
+            Vectors $\mathbf{v}_1, \dots, \mathbf{v}_n \in V$ are \textbf{linearly independent} if the only scalars $\lambda_1, \dots, \lambda_n \in \mathbb{F}$ with
+            \begin{equation*}
+                \lambda_1 \mathbf{v}_1 + \lambda_2 \mathbf{v}_2 + \cdots + \lambda_n \mathbf{v}_n = \mathbf{0}
+            \end{equation*}
+            are $\lambda_1 = \cdots = \lambda_n = 0$. Otherwise, they are \textbf{linearly dependent}.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            $\mathbf{v}_1 = (1, 0, 0)$, $\mathbf{v}_2 = (0, 1, 0)$, $\mathbf{v}_3 = (0, 0, 1)$ are linearly independent in $\mathbb{R}^3$.
+        \end{example}
+        \pause
+
+        \begin{example}
+            $\mathbf{u}_1 = (1, 2, 3)$ and $\mathbf{u}_2 = (2, 4, 6)$ are linearly dependent: $2\mathbf{u}_1 - \mathbf{u}_2 = \mathbf{0}$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Basis and Dimension}
+        \begin{definition}
+            Vectors $\mathbf{e}_1,\dots,\mathbf{e}_n$ are a \textbf{basis} of $V$ if $\text{span}(\mathbf{e}_1,\dots,\mathbf{e}_n) = V$ and $\mathbf{e}_1,\dots,\mathbf{e}_n$ are linearly independent.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            $\mathbf{e}_1=(1,0)$, $\mathbf{e}_2=(0,1)$ is the \textit{canonical} basis of $\mathbb{F}^2$, but $\mathbf{u}_1=(1,2)$, $\mathbf{u}_2=(2,1)$ is a basis of $\mathbb{R}^2$ as well. For $\mathbb{F}[T]^{\leq n}$, the canonical basis is $1, T, \dots, T^n$.
+        \end{example}
+        \pause
+
+        \begin{lemma}
+            Any two bases of a vector space have the same length.
+        \end{lemma}
+        \pause
+
+        \begin{definition}
+            The \textbf{dimension} $\dim V$ is the length of any basis of $V$. For example, $\dim \mathbb{F}^n = \dim \mathbb{F}[T]^{\leq n-1} = n$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Dimension: Questions}
+        \begin{questionblock}{Question \#1}
+            Let $V := \{(x,y,z) \in \mathbb{R}^3: x+y+z=0\}$. Compute $\dim V$.
+        \end{questionblock}
+        \pause
+
+        \begin{questionblock}{Question \#2}
+            Is $3,\; T+2,\; T^2+4$ a basis of $\mathbb{F}_5[T]^{\leq 2}$?
+        \end{questionblock}
+        \pause
+
+        \begin{questionblock}{Question \#3}
+            How many distinct $1$-dimensional linear subspaces (lines through the origin) exist in $\mathbb{F}_3^3$?
+        \end{questionblock}
+    \end{frame}
+
+    \section{Matrices}
+
+    \begin{frame}{Matrix Operations}
+        A matrix $A \in \mathbb{F}^{m \times n}$ has $m$ rows and $n$ columns; we write $A = (a_{i,j})$.
+        \begin{definition}[Matrix operations]
+            \begin{itemize}
+                \item \textbf{Addition} and \textbf{scalar multiplication} are element-wise.
+                \item For $A \in \mathbb{F}^{m \times n}$ and $B \in \mathbb{F}^{n \times p}$, the \textbf{product} $C := AB \in \mathbb{F}^{m \times p}$ has elements $c_{i,j} := \sum_{\ell=1}^{n} a_{i,\ell}b_{\ell,j}$.
+                \item The \textbf{transpose} $A^{\top} \in \mathbb{F}^{n \times m}$ has elements $A^{\top}_{i,j} = A_{j,i}$.
+            \end{itemize}
+        \end{definition}
+        \pause
+
+        \begin{example}
+            \begin{equation*}
+                A = \begin{bmatrix}
+                    1 & 1 & 2 \\
+                    2 & 2 & 1
+                \end{bmatrix}, \; B = \begin{bmatrix}
+                    2 & 1 \\
+                    1 & 3 \\
+                    1 & 1
+                \end{bmatrix} \; \Longrightarrow \; AB = \begin{bmatrix}
+                    5 & 6 \\ 7 & 9
+                \end{bmatrix}, \; BA = \begin{bmatrix}
+                    4 & 4 & 5 \\
+                    7 & 7 & 5 \\
+                    3 & 3 & 3
+                \end{bmatrix}.
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Matrix-Vector Product}
+        Vectors are written in columns. For $A \in \mathbb{F}^{m \times n}$ and $\mathbf{x} \in \mathbb{F}^n$:
+        \begin{equation*}
+            A\mathbf{x} = \begin{bmatrix}
+                a_{1,1} & \dots & a_{1,n} \\
+                \vdots & \ddots & \vdots \\
+                a_{m,1} & \dots & a_{m,n}
+            \end{bmatrix}\begin{bmatrix}
+                x_1 \\ \vdots \\ x_n
+            \end{bmatrix} = \begin{bmatrix}
+                a_{1,1}x_1 + \dots + a_{1,n}x_n \\
+                \vdots \\
+                a_{m,1}x_1 + \dots + a_{m,n}x_n
+            \end{bmatrix}.
+        \end{equation*}
+        \pause
+
+        \begin{remark}
+            Why is the matrix product so odd? We study maps $\mathbf{x} \mapsto A\mathbf{x}$. Composing $\mathbf{x} \mapsto B\mathbf{x}$ and then $\mathbf{y} \mapsto A\mathbf{y}$ must again be such a map, $\mathbf{x} \mapsto C\mathbf{x}$, and $C = AB$ is the only way to get it.
+        \end{remark}
+        \pause
+
+        \begin{questionblock}{Question}
+            Let $\mathbf{x} = (1,2,1)$. Compute $\mathbf{x}^{\top}\mathbf{x}$ and $\mathbf{x}\mathbf{x}^{\top}$. For $A = \begin{bmatrix} 1 & 2 \\ 0 & 1 \end{bmatrix}$, compute $A^n$.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Linear Systems and Rank}
+        A system of linear equations is just $A\mathbf{x} = \mathbf{t}$:
+        \begin{equation*}
+            \begin{cases}
+                x_1 + 2x_2 + 3x_3 = 2 \\
+                2x_1 + x_2 + 3x_3 = 1 \\
+                -x_1 + x_2 + x_3 = 0
+            \end{cases}
+            \Longleftrightarrow \;
+            \begin{bmatrix}
+                1 & 2 & 3 \\
+                2 & 1 & 3 \\
+                -1 & 1 & 1
+            \end{bmatrix}\begin{bmatrix}
+                x_1 \\ x_2 \\ x_3
+            \end{bmatrix} = \begin{bmatrix}
+                2 \\ 1 \\ 0
+            \end{bmatrix}.
+        \end{equation*}
+        \pause
+
+        \begin{definition}
+            The \textbf{rank} of $A = (\mathbf{v}_1,\dots,\mathbf{v}_n)$ is $\text{rank}(A) := \dim \text{span}(\mathbf{v}_1,\dots,\mathbf{v}_n)$. Row rank and column rank are always equal.
+        \end{definition}
+        \pause
+
+        \begin{proposition}
+            For $A \in \mathbb{R}^{n \times n}$ and $\mathbf{t} \in \mathbb{R}^n$:
+            \begin{enumerate}
+                \item $A\mathbf{x} = \mathbf{t}$ always has a single solution iff $\det A \neq 0$;
+                \item \textit{(Rouché-Capelli)} a solution exists iff $\text{rank}(A \,\|\, \mathbf{t}) = \text{rank}(A)$.
+            \end{enumerate}
+        \end{proposition}
+    \end{frame}
+
+    \section{Inner Product}
+
+    \begin{frame}{Inner Product Spaces}
+        \begin{definition}
+            An \textbf{inner product} on $V$ is a function $\langle \cdot, \cdot \rangle: V \times V \to \mathbb{F}$ that is \textbf{positive} ($\langle \mathbf{v}, \mathbf{v} \rangle \geq 0$), \textbf{definite} ($\langle \mathbf{v}, \mathbf{v} \rangle = 0$ iff $\mathbf{v}=\mathbf{0}$), \textbf{additive}, \textbf{homogeneous} and \textbf{symmetric}.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            The \textbf{dot product} on $\mathbb{F}^n$: $\langle \mathbf{u}, \mathbf{v} \rangle := \mathbf{u}^{\top}\mathbf{v} = \sum_{i=1}^{n} u_i v_i$. For $\mathbf{u}=(1, 2, 3)$, $\mathbf{v} = (2, 4, 3)$, we get $\langle \mathbf{u}, \mathbf{v}\rangle = 2 + 8 + 9 = 19$.
+        \end{example}
+        \pause
+
+        \begin{definition}
+            The \textbf{norm} of $\mathbf{v}$ is $\|\mathbf{v}\| := \sqrt{\langle \mathbf{v}, \mathbf{v} \rangle}$. Vectors $\mathbf{v},\mathbf{u}$ are \textbf{orthogonal} if $\langle \mathbf{v}, \mathbf{u} \rangle = 0$.
+        \end{definition}
+
+        \begin{remark}
+            Over finite fields or $\mathbb{Z}_N$, ``$\geq 0$'' is meaningless, so we only require additivity, homogeneity and symmetry.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Inner Products: More Examples}
+        \begin{example}
+            A symmetric matrix $Q \in \mathbb{R}^{n \times n}$ is \textit{positive-definite} if $\mathbf{x}^{\top}Q\mathbf{x} > 0$ for any non-zero $\mathbf{x}$. Then $\langle \mathbf{x}, \mathbf{y} \rangle_Q := \mathbf{x}^{\top}Q\mathbf{y}$ is an inner product.
+        \end{example}
+        \pause
+
+        \begin{example}
+            Polynomials have ``lengths'' too: on $V := \mathbb{R}[T]^{\leq 2}$, define $\langle p,q \rangle := \int_0^1 p(\tau)q(\tau)\,d\tau$.
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question}
+            Compute the norm $\|T\|$ in $V$ with the inner product above. Find any $q \in V$ orthogonal to $T^2$.
+        \end{questionblock}
+    \end{frame}
+
+    \section{Hadamard and Outer Products}
+
+    \begin{frame}{Hadamard Product}
+        \begin{definition}
+            For $A,B \in \mathbb{F}^{m \times n}$, the \textbf{Hadamard product} $A \odot B$ is the matrix $C$ with $C_{i,j} = A_{i,j}B_{i,j}$: we multiply element-wise.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            \begin{equation*}
+                \begin{bmatrix}
+                    1 & 1 & 2 \\
+                    3 & 0 & 3
+                \end{bmatrix} \odot \begin{bmatrix}
+                    3 & 2 & 1 \\ 0 & 2 & 1
+                \end{bmatrix} = \begin{bmatrix}
+                    3 & 2 & 2 \\
+                    0 & 0 & 3
+                \end{bmatrix}.
+            \end{equation*}
+        \end{example}
+        \pause
+
+        \begin{remarkblock}{Why it matters}
+            To say that $\mathbf{z} \in \mathbb{F}^n$ is a bit-vector (every $z_i \in \{0,1\}$), write $\mathbf{z} \odot (\mathbf{1}_n - \mathbf{z}) = \mathbf{0}$. R1CS is also a Hadamard-product relation.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Outer Product}
+        \begin{definition}
+            For $\mathbf{u} \in \mathbb{F}^n$, $\mathbf{v} \in \mathbb{F}^m$, the \textbf{outer product} is $\mathbf{u} \otimes \mathbf{v} := \mathbf{u}\mathbf{v}^{\top} \in \mathbb{F}^{n \times m}$, with entries $u_iv_j$.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            \begin{equation*}
+                \begin{bmatrix}
+                    1 \\ 2 \\ 3
+                \end{bmatrix} \otimes \begin{bmatrix}
+                    2 \\ 4 \\ 3
+                \end{bmatrix} = \begin{bmatrix}
+                    1 \\ 2 \\ 3
+                \end{bmatrix}\begin{bmatrix}
+                    2 & 4 & 3
+                \end{bmatrix} = \begin{bmatrix}
+                    2 & 4 & 3 \\
+                    4 & 8 & 6 \\
+                    6 & 12 & 9
+                \end{bmatrix}.
+            \end{equation*}
+        \end{example}
+        \pause
+
+        \begin{lemma}
+            The outer product is distributive, commutes with scalars, $\mathbf{u} \otimes \mathbf{v} = (\mathbf{v} \otimes \mathbf{u})^{\top}$, and for non-zero $\mathbf{u}, \mathbf{v}$ it is a rank-1 matrix.
+        \end{lemma}
+    \end{frame}
+
+
+    \makeclosingframe
+\end{document}

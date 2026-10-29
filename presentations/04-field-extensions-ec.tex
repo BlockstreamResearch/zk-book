@@ -1,0 +1,560 @@
+\documentclass{zkdl-presentation-template}
+
+\title[Field Extensions and Elliptic Curves]{\textbf{Field Extensions and Elliptic Curves}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents
+    \end{frame}
+
+    \section{Field Extensions}
+
+    \subsection{A bit of intuition}
+
+    \begin{frame}{$\mathbb{Q}$ vs $\mathbb{R}$}
+        \begin{questionblock}{Question \#1}
+            What is the difference between rational numbers $\mathbb{Q}$ and real numbers $\mathbb{R}$?\pause
+        \end{questionblock}
+
+        \begin{definition}
+            \textbf{Rational numbers} $\mathbb{Q}$ are defined as the set $\{\frac{n}{m}: n \in \mathbb{Z}, m \in \mathbb{N}\}$.\pause
+        \end{definition}
+
+        \begin{questionblock}{Question \#2}
+            Why cannot we say $m \in \mathbb{Z}$, similarly to $n$?\pause
+        \end{questionblock}
+
+        \begin{theorem}
+            $\sqrt{2}$ is not a rational number. Neither is $\pi$ and $e$. But they are reals.\pause
+        \end{theorem}
+
+        \begin{remarkblock}{Conclusion}
+            $\mathbb{R}$ is sort of ``an extended version of $\mathbb{Q}$''.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{What about $\mathbb{R}$?}
+        \begin{questionblock}{Rhetorical Question}
+           Can we extend $\mathbb{R}$?\pause
+        \end{questionblock}
+
+        Yes --- just use complex numbers $\mathbb{C}$!\pause
+
+        \begin{definition}
+            Complex numbers $\mathbb{C}$ is defined as the set of $x+iy$ where $i^2=-1$.\pause
+        \end{definition}
+
+        \begin{definition}
+            Complex numbers $\mathbb{C}$ are defined as the set of pairs $(x,y) \in \mathbb{R}^2$ where addition is defined as $(x_1,y_1)+(x_2,y_2)=(x_1+x_2,y_1+y_2)$, and the multiplication is:
+            \begin{equation*}
+                (x_1,y_1) \cdot (x_2,y_2) = (x_1x_2-y_1y_2,x_1y_2+x_2y_1).
+            \end{equation*}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{A bit about complex numbers}
+        \begin{theorem}
+            $(\mathbb{C},+,\times)$ is a field.\pause
+        \end{theorem}
+
+        \begin{example}
+            Let us see how arithmetic is performed in $\mathbb{C}$.
+            \begin{itemize}
+                \item \textbf{Addition:} $(2+3i)+(4+5i)=6+8i$.\pause
+                \item \textbf{Multiplication:} $(1+i)(2+i)=2+3i+i^2=1+3i$.\pause
+                \item \textbf{Division:}
+                \begin{equation*}
+                    \frac{2+i}{1+i} =\pause \frac{(2+i)(1-i)}{(1+i)(1-i)} =\pause \frac{2-i-i^2}{1-i^2} =\pause \frac{3-i}{2} = \frac{3}{2} - \frac{1}{2}i
+                \end{equation*}
+            \end{itemize}
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question}
+            What is $(1+i)+(2+i)$? \pause $\;i(1+i)$? \pause $\;1/i$?
+        \end{questionblock}
+    \end{frame}
+
+    \subsection{General Definition}
+    \begin{frame}{Field Extension}
+        \begin{remarkblock}{Conclusion + Question}
+            $\mathbb{C}$ is sort of ``an extended version of $\mathbb{R}$''. Thus, we have
+            \begin{equation*}
+                \mathbb{Q} \subset \mathbb{R} \subset \mathbb{C}, \; \text{where $\mathbb{Q},\mathbb{R},\mathbb{C}$ are fields}
+            \end{equation*}
+            So we have two questions in mind:
+            \begin{itemize}
+                \item Is there any mathematical term for this?
+                \item Can we go further?\pause
+            \end{itemize}
+        \end{remarkblock}
+
+        \begin{definition}
+            Let $\mathbb{F}$ be a field. A field $\mathbb{K}$ is called an \textbf{extension} of $\mathbb{F}$ if $\mathbb{F} \subset \mathbb{K}$ which we denote as $\mathbb{K}/\mathbb{F}$.\pause
+        \end{definition}
+
+        \begin{example}
+            $\mathbb{C}/\mathbb{R}$ is a field extension. So is $\mathbb{R}/\mathbb{Q}$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{$\mathbb{Q}(\sqrt{2})$ and $\mathbb{Q}(i)$}
+        \begin{example}
+            Define $\mathbb{Q}(\sqrt{2}) := \{p+q\sqrt{2}: p,q \in \mathbb{Q}\}$. This is a field extension of $\mathbb{Q}$.\pause{} Arithmetic over $\mathbb{Q}(\sqrt{2})$ looks like:
+            \begin{itemize}
+                \item \textbf{Addition:} $(1+2\sqrt{2})+(3+4\sqrt{2})=4+6\sqrt{2}$.\pause
+                \item \textbf{Multiplication:} $(1+2\sqrt{2})(1+\sqrt{2}) = 1+3\sqrt{2}+2\sqrt{2}^2 = 5+3\sqrt{2}$.\pause
+                \item \textbf{Division:}
+                \begin{equation*}
+                    \frac{1+2\sqrt{2}}{1+\sqrt{2}}=\pause\frac{(1+2\sqrt{2})(-1+\sqrt{2})}{(1+\sqrt{2})(-1+\sqrt{2})}\pause = 3-\sqrt{2}
+                \end{equation*}
+            \end{itemize}
+        \end{example}
+        \pause
+
+        \begin{example}
+            Similarly, $\mathbb{Q}(i) := \{p+qi: p,q \in \mathbb{Q}\}$ is a field extension of $\mathbb{Q}$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{$\mathbb{Q}(\sqrt{2}, i)$}
+        \begin{example}
+            Define $\mathbb{Q}(\sqrt{2}, i) = \{\alpha+\beta\sqrt{2}: \alpha,\beta \in \mathbb{Q}(i)\}$. Typical element of $\mathbb{Q}(\sqrt{2}, i)$ can be written as:\pause
+            \begin{equation*}
+                (a+bi) + (c+di)\sqrt{2} = a+c\sqrt{2} + bi + d\sqrt{2}i
+            \end{equation*}
+        \end{example}
+        \pause
+
+        \begin{remarkblock}{Notice}
+            Each element of $\mathbb{Q}(\sqrt{2}, i)$ is a linear combination of $\{1,\sqrt{2},i,\sqrt{2}i\}$. This is usually called a \textbf{basis}. Moreover, to denote the dimensionality of $\mathbb{Q}(\sqrt{2}, i)$ over $\mathbb{Q}$, we write $[\mathbb{Q}(\sqrt{2}, i):\mathbb{Q}]=4$.
+        \end{remarkblock}
+    \end{frame}
+
+    \subsection{Polynomial Quotient Ring}
+    \begin{frame}{Real Polynomials modulo $T^2+1$}
+        \begin{block}{Definition\ldots ``Kinda''}
+            Consider the set $\mathcal{P}$ --- a set of polynomials $\mathbb{R}[T]$ modulo $p(T) := T^2+1$.\pause
+        \end{block}
+
+        \begin{example}
+            For example, $1,\;5+T,\;3T,\;1+2T \in \mathcal{P}$. \pause
+            \vspace{7.5px}
+
+            But what about $T^2+2T+4$? We can divide by $T^2+1$!
+            \begin{equation*}
+                T^2+2T+4 = \pause (T^2+1)\cdot 1 + (2T+3)
+            \end{equation*}
+            So in $\mathcal{P}$, we have $T^2+2T+4=2T+3$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Real Polynomials modulo $T^2+1$}
+        \begin{block}{Arithmetic}
+            Over this field, we can do arithmetic as usual.
+            \begin{itemize}
+                \item \textbf{Addition:} $(1+T)+(2+3T)=3+4T$.\pause
+                \item \textbf{Multiplication:} $(1+T)(2+T)=T^2+3T+2=3T+1$.\pause
+                \item \textbf{Inverse}:
+                \begin{equation*}
+                    \left(\frac{1+T}{2}\right)^{-1} = 1-T
+                \end{equation*}
+                \pause Indeed,
+                \begin{equation*}
+                    \frac{1+T}{2} \cdot (1-T) = \frac{1}{2}\cdot (1-T^2) = \frac{1}{2}\left(-(T^2+1) + 2\right) = 1 \; (\text{in $\mathcal{P}$})
+                \end{equation*}
+            \end{itemize}
+        \end{block}
+    \end{frame}
+
+    \begin{frame}{Hold on a minute\ldots}
+        \begin{block}{Results}
+            \begin{itemize}
+                \item $(1+T)+(2+3T)=3+4T$
+                \item $(1+T)(2+T)=1+3T$
+                \item $\left(\frac{1+T}{2}\right)^{-1} = 1-T$
+            \end{itemize}
+        \end{block}
+        \pause
+
+        \begin{block}{Same, but over $\mathbb{C}$}
+            Let us do the same, but instead of $T$, use $i$.\pause
+            \begin{itemize}
+                \item $(1+i)+(2+3i)=3+4i$.\pause
+                \item $(1+i)(2+i)=2+3i+i^2=1+3i$.\pause
+                \item $\frac{1}{\frac{1+i}{2}} = \frac{2}{1+i} = \pause\frac{2(1-i)}{(1+i)(1-i)} = 1-i$.
+            \end{itemize}
+        \end{block}
+    \end{frame}
+
+    \begin{frame}{Hold on a minute\dots}
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.25\textwidth]{images/lecture_3/hold_up.jpg}
+        \end{figure}
+
+        So, basically, $\mathcal{P}$ and $\mathbb{C}$ have the same structure! Formally, they are isomorphic: $\mathcal{P} \cong \mathbb{C}$.\pause
+
+        \begin{questionblock}{Question}
+            Could we have used $T^2+3$ instead of $T^2+1$? What about $T^2+T+1$?\pause
+        \end{questionblock}
+
+        Yes, any \textbf{irreducible} 2nd-degree polynomial $p(T)$ over $\mathbb{R}$ can be used. Typically, this is denoted as $\boxed{\mathbb{R}[T]/(p)}$.
+    \end{frame}
+
+    \begin{frame}{Isomorphisms}
+        \begin{remarkblock}{Reminder}
+            For two groups $(\mathbb{G},+)$ and $(\mathbb{H},\times)$ we defined homomorphism to be a function $\phi: \mathbb{G} \to \mathbb{H}$ such that
+            \begin{equation*}
+                \phi(a+b) = \phi(a) \times \phi(b)
+            \end{equation*}
+            \pause However, we claim that $\mathbb{R}[T]/(T^2+1) \cong \mathbb{C}$, which are fields, not groups.\pause
+        \end{remarkblock}
+
+        \begin{definition}
+            A \textbf{field isomorphism} is a bijective function $\phi: (\mathbb{F},+,\times) \to (\mathbb{K},\oplus,\otimes)$ such that
+            \begin{itemize}
+                \item $\phi(a+b) = \phi(a) \oplus \phi(b)$
+                \item $\phi(a \times b) = \phi(a) \otimes \phi(b)$
+                \item $\phi(1_{\mathbb{F}}) = 1_{\mathbb{K}}$
+            \end{itemize}
+
+            \pause But for now, $\cong$ means ``exhibit the same structure''.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Key Theorems}
+        \begin{theorem}
+            Let $\mathbb{F}$ be a field and $\mu(T)$ --- irreducible polynomial over $\mathbb{F}$ (\textbf{reduction polynomial}). Consider a set of polynomials over $\mathbb{F}[T]$ modulo $\mu$, formally denoted as $\mathbb{F}[T]/(\mu)$. Then, $\mathbb{F}[T]/(\mu)$ is a field.\pause
+        \end{theorem}
+
+        \begin{theorem}
+            Let $\mathbb{F}$ be a field and $\mu \in \mathbb{F}[T]$ is an irreducible polynomial of degree $n$ and let $\mathbb{K} := \mathbb{F}[T]/(\mu)$. Let $\theta \in \mathbb{K}$ be the root of $\mu$ over $\mathbb{K}$. Then,
+            \begin{equation*}
+                \mathbb{K} = \{c_0+c_1\theta+\cdots+c_{n-1}\theta^{n-1}: c_0,\dots,c_{n-1} \in \mathbb{F}\}
+            \end{equation*}
+        \end{theorem}
+    \end{frame}
+
+    \begin{frame}{Coming back to previous examples}
+        \begin{example}
+            Again, consider $\mathbb{Q}(\sqrt{2}) = \{p+q\sqrt{2}: p,q \in \mathbb{Q}\}$. Then,
+            \begin{equation*}
+                \mathbb{Q}(\sqrt{2}) \cong \mathbb{Q}[T]/(T^2-2)
+            \end{equation*}
+        \end{example}\pause
+
+        \begin{example}
+            Similarly, $\mathbb{Q}(i) \cong \mathbb{Q}[T]/(T^2+1)$.
+        \end{example}\pause
+
+        \begin{example}
+            And $\mathbb{Q}(\sqrt{2}, i)$ is just a little bit more tricky. We cannot take $(T^2-2)(T^2+1)$ since it is reducible. Instead, notice that $\theta := \sqrt{2}+i$ is a root of the irreducible polynomial
+            \begin{equation*}
+                p(T) := T^4-2T^2+9
+            \end{equation*}
+            So $\mathbb{Q}(\sqrt{2}, i) \cong \mathbb{Q}[T]/(T^4-2T^2+9)$.
+        \end{example}
+    \end{frame}
+
+    \subsection{Finite Field Extensions}
+
+    \begin{frame}{Finite Field Extension}
+        \begin{definition}
+            Recall that $\mathbb{F}_p$ (\textbf{prime field}) is a set $\{0,1,\dots,p-1\}$ with arithmetic modulo $p$.\pause
+        \end{definition}
+
+        In many cases, we need to extend $\mathbb{F}_p$ $2,4,8,12,24$ times. For this, we use the so-called \textbf{finite field extension}.\pause
+
+        \begin{definition}
+            Suppose $p$ is prime and $m \geq 2$. Let $\mu \in \mathbb{F}_p[T]$ be an irreducible polynomial of degree $m$. Then, elements of $\mathbb{F}_{p^m}$ are polynomials in $\mathbb{F}_p[T]^{<m}$. In other words,
+            \begin{equation*}
+                \mathbb{F}_{p^m} = \{c_0+c_1T+\cdots+c_{m-1}T^{m-1}: c_0,\dots,c_{m-1} \in \mathbb{F}_p\},
+            \end{equation*}
+            where all operations are performed modulo $\mu$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Examples}
+        It would be convenient to build $\mathbb{F}_{p^2}$ as $\mathbb{F}_p[i]/(i^2+1)$, but is it always possible? In other words, when $T^2=-1$ has a solution in $\mathbb{F}_p$?\pause
+        \begin{proposition}
+            Let $p$ be an odd prime. Then $T^2+1$ is irreducible in $\mathbb{F}_p[T]$ if and only if $p \equiv 3 \pmod{4}$.\pause
+        \end{proposition}
+
+        \begin{example}
+            Pick $p=19$. Then $\mathbb{F}_{361} := \mathbb{F}_{19}[i]/(i^2+1)$. So typical elements are:\pause
+
+            $1+3i, \; 10+15i, \; 18+18i, \; 5, \; 7i, \; \dots$
+
+            \begin{itemize}
+                \item \textbf{Addition:} $(1+10i)+(18+15i)= 19 + 25i = 6i$.\pause
+                \item \textbf{Multiplication:} $(5+6i)(6+7i)=30+71i+42i^2=-12+71i=7+14i$.
+            \end{itemize}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{More Examples: Binary Extension Fields}
+        \begin{example}
+            Consider the $\mathbb{F}_{2^4}$. Then, there are $16$ elements in this set:\pause
+            \begin{equation*}
+                \begin{aligned}
+                    &0, 1, T, T+1, T^2, T^2+1, T^2+T, T^2+T+1,\\
+                    &T^3, T^3+1, T^3+T, T^3+T+1,\\ &T^3+T^2, T^3+T^2+1, T^3+T^2+T, T^3+T^2+T+1.
+                \end{aligned}
+            \end{equation*}
+
+            Set $\mu(T):=T^4+T+1$. Then, operations are performed in the following manner:\pause
+            \begin{itemize}
+                \item \textbf{Addition:} $(T^3+T^2+1)+(T^2+T+1) = T^3+T$.\pause
+                \item \textbf{Multiplication:} $(T^3+T^2+1)\cdot(T^2+T+1)=T^2+1$ since the product is $T^5+T+1$ and $T^5+T+1 \; \text{mod} \; (T^4+T+1) = T^2+1$.\pause
+                \item \textbf{Inversion:} $(T^3+T^2+1)^{-1}=T^2$ since $(T^3+T^2+1)\cdot T^2 \; \text{mod} \; (T^4+T+1) = 1$.
+            \end{itemize}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{More Examples: BN254}
+        \begin{example}
+            Consider the \textbf{BN254 base field}, used in SNARKs:
+            \begin{equation*}
+                p = \mathsf{0x30644e72e131a029\cdots a8d3c208c16d87cfd47}
+            \end{equation*}
+            \begin{itemize}
+                \item Then, $\mathbb{F}_{p^2} := \mathbb{F}_p[u]/(u^2+1)$ since $p \equiv 3 \pmod{4}$.\pause
+                \item Define $\xi := 9+u \in \mathbb{F}_{p^2}$. Then, set $\mathbb{F}_{p^6}:=\mathbb{F}_{p^2}[v]/(v^3-\xi)$.\pause
+                \item Finally, set $\mathbb{F}_{p^{12}} := \mathbb{F}_{p^6}[w]/(w^2-v)$.\pause
+            \end{itemize}
+
+            Equivalently, we can write:
+            \begin{equation*}
+                \mathbb{F}_{p^{12}} := \mathbb{F}_p[w]/(w^{12}-18w^6+82)
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \section{Algebraic Closure}
+    \subsection{Definition}
+
+    \begin{frame}{Definition}
+        \begin{definition}
+            A field $\mathbb{F}$ is called \textbf{algebraically closed} if every non-constant polynomial $p \in \mathbb{F}[T]$ has a root in $\mathbb{F}$.\pause
+        \end{definition}
+
+        \begin{example}
+            $\mathbb{R}$ is not algebraically closed since $T^2+1$ has no roots in $\mathbb{R}$. However, $\mathbb{C}$ is algebraically closed, which follows from the fundamental theorem of algebra. Since $\mathbb{C}$ is a field extension of $\mathbb{R}$, it is also an algebraic closure of $\mathbb{R}$. This is commonly denoted as $\overline{\mathbb{R}} = \mathbb{C}$.\pause
+        \end{example}
+
+        \begin{definition}
+            A field $\mathbb{K}$ is called an \textbf{algebraic closure} of $\mathbb{F}$ if $\mathbb{K}/\mathbb{F}$ is algebraically closed. This is denoted as $\overline{\mathbb{F}} = \mathbb{K}$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Algebraic Closure for Finite Fields}
+        Recall that we are cryptographers, not mathematicians. So we are interested in $\overline{\mathbb{F}}_p$. So I have two news to you:\pause
+        \begin{itemize}
+            \item \textcolor{oc-green-7}{\textbf{Good news:}} $\overline{\mathbb{F}}_p$ exists.\pause
+            \item \textcolor{oc-red-7}{\textbf{Bad news:}} $\overline{\mathbb{F}}_p$ is infinite.\pause
+        \end{itemize}
+
+        \begin{theorem}
+            No finite field $\mathbb{F}$ is algebraically closed.\pause
+        \end{theorem}
+
+        \textbf{Proof.} Suppose $f_1,f_2,\dots,f_n \in \mathbb{F}$ are all elements of $\mathbb{F}$. Consider the following polynomial:
+        \begin{equation*}
+            p(T) := \prod_{i=1}^n (T-f_i)+1 = (T-f_1)(T-f_2)\cdots(T-f_n)+1.
+        \end{equation*}
+        \pause Clearly, $p(T)$ is a non-constant polynomial and has no roots in $\mathbb{F}$, since for any $f \in \mathbb{F}$, one has $p(f)=1$. $\blacksquare$
+    \end{frame}
+
+    \begin{frame}{So what?}
+        But what form does the $\overline{\mathbb{F}}_{p}$ have? Well, it is a union of all $\mathbb{F}_{p^k}$ for $k \geq 1$. This is formally written as:
+        \begin{equation*}
+            \boxed{\overline{\mathbb{F}}_{p} = \bigcup_{k \in \mathbb{N}} \mathbb{F}_{p^k}}
+        \end{equation*}
+        \pause
+
+        \begin{remark}
+            But this definition is super counter-intuitive! So here how we usually interpret it. Suppose I tell you that polynomial $q(T)$ has a root in $\overline{\mathbb{F}}_p$. What that means is that there exists some extension $\mathbb{F}_{p^m}$ such that for some $\alpha \in \mathbb{F}_{p^m}$, $q(\alpha)=0$. We do not know how large this $m$ is, but we know that it exists. For that reason, $\overline{\mathbb{F}}_p$ is defined as an infinite union of all possible field extensions.
+        \end{remark}
+    \end{frame}
+
+    \section{Elliptic Curve}
+
+    \subsection{Definition}
+    \begin{frame}{Definition}
+        \begin{definition}
+            Suppose that $\mathbb{K}$ is a field. An \textbf{elliptic curve} $E$ over $\mathbb{K}$ is defined as a set of points $(x,y) \in \mathbb{K}^2$:
+            \begin{equation*}
+                y^2 = x^3+ax+b,
+            \end{equation*}
+            called a \textbf{Short Weierstrass equation}, where $a,b \in \mathbb{K}$ and $4a^3+27b^2 \neq 0$. We denote $E/\mathbb{K}$ to denote the elliptic curve over field $\mathbb{K}$.\pause
+        \end{definition}
+
+        \begin{definition}
+            We say that $P=(x_P,y_P) \in \mathbb{A}^2(\mathbb{K})$ is the \textbf{affine representation} of the point on the elliptic curve $E/\mathbb{K}$ if it satisfies the equation $y_P^2=x_P^3+ax_P+b$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Examples}
+        \begin{example}
+            Consider $E/\mathbb{Q}: y^2=x^3-x+9$. Valid affine points on $E/\mathbb{Q}$ are, for example, $P=(0,3), Q=(-1,-3) \in \mathbb{A}^2(\mathbb{Q})$.
+
+            \begin{figure}
+                \centering
+                \includegraphics[width=0.4\textwidth]{images/lecture_3/ec_illustration_1.pdf}
+            \end{figure}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{More Examples}
+        Some more examples\footnote{Figure taken from ``Pairings for Beginners''}:
+        \begin{figure}
+            \centering
+            \includegraphics[width=\textwidth]{images/lecture_3/ec_illustration_2.png}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Real Elliptic Curves}
+        But real elliptic curves are not that simple. Here how they look like\footnote{Figure taken from ``Moonmath''}:
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.6\textwidth]{images/lecture_3/ec_illustration_3.png}
+            \caption{Curve $E/\mathbb{F}_{9973}: y^2 = x^3-2x+1$ over the finite field}
+        \end{figure}
+    \end{frame}
+
+    \subsection{Group Structure}
+
+    \begin{frame}{Defining a Group Structure: A Few Words}
+        \begin{definition}
+            The set of points on the curve, denoted as $E_{a,b}(\mathbb{K})$, is defined as:
+            \begin{equation*}
+                E_{a,b}(\mathbb{K}) = \{(x,y) \in \mathbb{A}^2(\mathbb{K}): y^2=x^3+ax+b\} \cup \{\mathcal{O}\},
+            \end{equation*}
+            where $\mathcal{O}$ is the so-called \textbf{point at infinity}.\pause
+        \end{definition}
+
+        \begin{remarkblock}{Remark \#1}
+            If $(x_P,y_P) \in E(\mathbb{K})$ then $(x_P,-y_P) \in E(\mathbb{K})$.\pause
+        \end{remarkblock}
+
+        \begin{remarkblock}{Remark \#2}
+            Typically, $\mathbb{K} = \overline{\mathbb{F}}_p$: we do not concretize over which finite field we define the elliptic curve.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Defining a Group Structure: Chord Method}
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.525\textwidth]{images/lecture_3/ec_illustration_4.png}
+            \caption{Chord method for adding two points}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Defining a Group Structure: Tangent Method}
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.525\textwidth]{images/lecture_3/ec_illustration_5.png}
+            \caption{Tangent method for the point doubling}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Idea of Derivation}
+        Line equation through $P=(x_P,y_P),Q=(x_Q,y_Q)$:
+        \begin{equation*}
+            \ell: y = \lambda (x-x_P) + y_P, \; \lambda = \frac{y_Q-y_P}{x_Q-x_P}
+        \end{equation*}
+
+        \pause So all we need is to solve the system of equations:
+        \begin{equation*}
+            \begin{cases}
+                y^2 = x^3+ax+b\\
+                y = \lambda (x-x_P) + y_P
+            \end{cases}
+        \end{equation*}
+
+        \pause Substituting $y$ from the second equation to the first one, we get a cubic equation. Using Vieta's formula, one can derive
+        \begin{equation*}
+            x_P + x_Q + x_R = \lambda^2
+        \end{equation*}
+
+        The rest is easy to finish.
+    \end{frame}
+
+    \begin{frame}{Group Law}
+        \begin{definition}
+            \begin{enumerate}
+                \item Point at infinity $\mathcal{O}$ is an identity element. \pause
+                \item If $x_P\neq x_Q$, use the \textbf{chord method}. Define $\lambda := \frac{y_P-y_Q}{x_P-x_Q}$ --- the slope between $P$ and $Q$. Set the resultant coordinates as:
+                \begin{equation*}
+                    x_R := \lambda^2 - x_P - x_Q, \quad y_R := \lambda(x_P-x_R)-y_P.
+                \end{equation*} \pause
+                \item If $x_P=x_Q$ and $y_P=y_Q$ (that is, $P=Q$), use the \textbf{tangent method}. Define the slope of the tangent at $P$ as $\lambda := \frac{3x_P^2+a}{2y_P}$ and set
+                \begin{equation*}
+                    x_R := \lambda^2 - 2x_P, \quad y_R := \lambda(x_P-x_R)-y_P.
+                \end{equation*} \pause
+                \item Otherwise, define $P \oplus Q := \mathcal{O}$.
+            \end{enumerate}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{One more Illustration}
+        \begin{figure}
+            \centering
+            \includegraphics[width=\textwidth]{images/lecture_3/group_law.png}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Example}
+        \begin{example}
+        Consider $E/\mathbb{R}: y^2=x^3-2x$.
+        \begin{itemize}
+            \item \textbf{Addition:} $(-1,-1) \oplus (0,0) = (2,-2), \; (2,2) \oplus (-1,-1) = (0,0)$.\pause
+            \item \textbf{Doubling:} $[2](-1,-1) = \left(\frac{9}{4},\frac{21}{8}\right)$.
+        \end{itemize}
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.35\textwidth]{images/lecture_3/ec_illustration_6.pdf}
+        \end{figure}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Hasse's Theorem}
+        \begin{theorem}
+            $(E(\mathbb{K}),\oplus)$ forms an abelian group. \pause
+        \end{theorem}
+        \vspace{10px}
+
+        Now, let us consider the group order $r := \#E(\mathbb{F}_{p^m})$. \pause
+
+        \begin{theorem}[Hasse's Theorem]
+            $r = p^m + 1 - t$ for some integer $|t| \leq 2\sqrt{p^m}$. A bit more intuitive explanation: the number of points on the curve is close to $p^m+1$. The value $t$ is called the \textbf{trace of Frobenius}.\pause
+        \end{theorem}
+
+        \begin{remark}
+            In fact, $r=\#E(\mathbb{F}_{p^m})$ can be computed in polylogarithmic time $O(\log^{\gamma}(p^m))$ for some $\gamma > 1$, so the number of points can be computed efficiently even for fairly large primes $p$.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Discrete Logarithm}
+        \begin{definition}
+            Let $P \in E(\overline{\mathbb{F}}_p)$ and $\alpha \in \mathbb{Z}_r$. Define the scalar multiplication $[\alpha]P$ as adding $P$ to itself $\alpha-1$ times (also set $[0]P := \mathcal{O}$).\pause
+        \end{definition}
+
+        \begin{definition}
+            Suppose $E$ is cyclic, meaning, $\langle G \rangle = E$ for some $G \in E$. The \textbf{discrete logarithm problem} on $E$ consists in the following: suppose $P = [\alpha]G$ for some $\alpha \in \mathbb{Z}_r$. Find $\alpha$ based on $P$.\pause
+        \end{definition}
+
+        \begin{remark}
+            If $r$ is a product of primes $p_1,p_2,\dots,p_k$ such that $p_1<p_2<\dots< p_k$, then the discrete logarithm problem can be solved in roughly $O(\sqrt{p_k})$: only the largest prime factor matters. For this reason, typically $r$ is prime.
+        \end{remark}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

@@ -1,0 +1,2 @@
+# Deprecated lectures use the class, theme and images from the parent folder.
+ensure_path('TEXINPUTS', '../');

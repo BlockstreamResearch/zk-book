@@ -1,0 +1,329 @@
+\documentclass{zkdl-presentation-template}
+
+\title[Commitment Schemes]{\textbf{Commitment Schemes}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+        \tableofcontents
+    \end{frame}
+
+    \section{Commitments Overview}
+
+    \begin{frame}{Commitment Definition}
+        \begin{definition}
+            A cryptographic commitment scheme allows one party to commit to a chosen statement without revealing the statement itself.
+            The commitment can be revealed in full or in part at a later time, ensuring the integrity and secrecy of the original statement until
+            the moment of disclosure.
+        \end{definition}
+        \pause
+
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.5\textwidth]{images/lecture_5/CommitmentExample.png}
+            \caption{Overview of a commitment scheme}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Commitment Definition}
+        \begin{definition}
+            Commitment Scheme $\Pi$ is a tuple of three algorithms: $\Pi = (\mathsf{Setup}, \mathsf{Com}, \mathsf{Open})$.
+            \begin{enumerate}
+                \item $\mathsf{Setup} (1^{\lambda})$: returns public parameter $\mathsf{pp}$ for both committer and verifier;\pause
+                \item $\mathsf{Com} (\mathsf{pp}, m)$: returns a commitment $c$ to the message $m$ using public parameters $\mathsf{pp}$ and, optionally, a secret opening hint $r$;\pause
+                \item $\mathsf{Open} (\mathsf{pp}, c, m, r)$: verifies the opening of the commitment $c$ to the message $m$ with an opening hint $r$.
+            \end{enumerate}
+        \end{definition}
+        \pause
+
+        \begin{remark}
+            In many applications, the random component $r$ is passed together with a message, which we write as $\mathsf{Com}(m;r)$. Then, $\mathsf{Open}$ is trivial: it checks whether $\mathsf{Com}(m;r) = c$.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Commitment Scheme Properties}
+        \begin{definition}
+            \begin{enumerate}
+                \item \textit{Hiding: } verifier should not learn any additional information about the message given only the commitment $c$.
+                \begin{enumerate}
+                    \item \textit{Perfect hiding}: adversary with any computation capability tries even forever cannot understand what you have hidden.
+                    \item \textit{Computationally hiding}: we assume that the adversary has limited computational resources and cannot try forever to recover hidden value.
+                \end{enumerate}
+                \pause
+                \item \textit{Binding: } prover could not find another message $m_1$ and open the commitment $c$ without revealing the committed message $m$.
+                \begin{enumerate}
+                    \item \textit{Perfect binding}: adversary with any computation capability tries even forever cannot find another $m_1$ that would result to the same $c$.
+                    \item \textit{Computationally binding}: we assume that the adversary has limited computational resources and cannot try forever.
+                \end{enumerate}
+            \end{enumerate}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Hiding and Binding, Formally}
+        \begin{definition}
+            $\Pi$ is \textbf{hiding} if for any efficient adversary $\mathcal{A}$:
+            \begin{equation*}
+                \left|\Pr\left[\, b=\widehat{b} \;\middle|\;
+                \begin{aligned}
+                    &\mathsf{pp} \gets \mathsf{Setup}(1^{\lambda}), \; m_0, m_1 \gets \mathcal{A}(\mathsf{pp}) \\
+                    &b \leftarrowS \{0,1\}, \; c \gets \mathsf{Com}(\mathsf{pp}, m_b), \; \widehat{b} \gets \mathcal{A}(c)
+                \end{aligned}\,\right] - \frac{1}{2}\right| = \negl(\lambda).
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        \begin{definition}
+            $\Pi$ is \textbf{binding} if for any efficient adversary $\mathcal{A}$:
+            \begin{equation*}
+                \Pr\left[
+                \begin{aligned}
+                    &\mathsf{Com}(m_0;r_0) = \mathsf{Com}(m_1;r_1) \\
+                    &\text{and} \; m_0 \neq m_1
+                \end{aligned}
+                \;\middle|\;
+                \begin{aligned}
+                    &\mathsf{pp} \gets \mathsf{Setup}(1^{\lambda}) \\
+                    &(m_0,m_1,r_0,r_1) \gets \mathcal{A}(\mathsf{pp})
+                \end{aligned}\right] = \negl(\lambda).
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        \begin{remark}
+            The scheme is \textbf{perfectly} hiding/binding if the left-hand sides above are exactly zero for any (not necessarily efficient) adversary. Perfect hiding and perfect binding cannot be achieved simultaneously.
+        \end{remark}
+    \end{frame}
+
+    \section{Hash-based Commitments}
+
+    \begin{frame}{Hash-based Commitments}
+        As the name implies, we are using a cryptographic hash function $\mathsf{H}$ in such scheme.
+
+        \begin{definition}
+            \begin{algoen}
+                \item Prover selects a message $m$ from a message space $\mathcal{M}$ which he wants to commit to:
+                    $m \in \mathcal{M}$.\pause
+                \item Prover samples random value $r$ (usually called blinding factor) from a challenge space $\mathcal{C} \subset \mathbb{Z}$:
+                    $r \leftarrowS \mathcal{C}$.\pause
+                \item Both values will be concatenated and hashed with the hash function $\mathsf{H}$ to produce the commitment:
+                    $c \gets \mathsf{H}(m \parallel r)$.
+            \end{algoen}
+        \end{definition}
+        \pause
+
+        \begin{lemma}
+            Given a collision-resistant hash function $\mathsf{H}$, the hash-based commitment is computationally binding. Moreover, it is hiding in the random oracle model for $\mathsf{H}$.
+        \end{lemma}
+    \end{frame}
+
+    \section{Pedersen Commitments}
+
+    \begin{frame}{Pedersen Commitment}
+        Pedersen commitments allow us to represent arbitrarily large vectors with a single elliptic curve point.
+        Pedersen commitment uses a public group $\mathbb{G}$ of order $q$ (written multiplicatively) and two random public generators
+        $g$ and $h$: $h = g^{\rho}$. Secret parameter $\rho$ should be unknown to anyone, otherwise the \textit{binding}
+        property of the commitment scheme will be violated.
+        \pause
+
+        \begin{remarkblock}{Note: Transparent random points generation}
+            User can pick the publicly known number (like $x$ coordinate of group generator $g$), calculate $x_i = \mathsf{H}(x \parallel i)$
+            and corresponding $y_i$. Check whether $(x_i, y_i)$ is in the elliptic curve group. Repeat the process for sequential $i = 1, 2, \ldots$
+            until point $(x_i, y_i)$ is in the elliptic curve group.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Pedersen Commitment}
+        \begin{definition}
+            Pedersen commitment scheme algorithm:
+            \begin{algoen}
+                \item Prover and Verifier agree on points $g$ and $h$ in an elliptic curve point group $\mathbb{G}$, $q := \#\mathbb{G}$ is the order of the group.\pause
+                \item Prover selects a value $m \in \mathbb{Z}_q$ to commit and a blinder factor $r \leftarrowS \mathbb{Z}_q$.\pause
+                \item Prover generates a commitment and sends it to the Verifier:
+                        $c \gets g^mh^r$.
+            \end{algoen}
+        \end{definition}
+        \pause
+
+        During the opening stage, prover reveals $(m, r)$ to the verifier.
+
+        To check the commitment, verifier computes: $c' \gets g^mh^r$.
+
+        If $c' = c$, prover has revealed the correct pair $(m, r)$.
+    \end{frame}
+
+    \begin{frame}{Pedersen Commitment: Security}
+        \begin{lemma}
+            The Pedersen commitment scheme is \emph{perfectly} hiding and \emph{computationally} binding under the discrete logarithm assumption.
+        \end{lemma}
+        \pause
+
+        In case the discrete logarithm $\rho$ of $h$ is leaked, the \textit{binding} property can be violated by the \textit{prover}:
+        \begin{equation*}
+            c = g^mh^r = g^m g^{r\rho} = g^{m + r\rho}
+        \end{equation*}
+        \pause
+
+        For example, $(m + \rho, r - 1)$ will have the same commitment value:
+        \begin{equation*}
+            g^{m+\rho + (r-1)\rho} = g^{m + \rho - \rho + r\rho} = g^{m + r\rho}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Pedersen Commitment Aggregation}
+        Pedersen commitment has a significant advantage over hash-based commitments:
+        the former are additively homomorphic and thus can be accumulated. Consider two pairs $(m_0, r_0), (m_1, r_1)$.
+        \pause
+
+        \begin{equation*}
+            c_0 \gets g^{m_0}h^{r_0}, \quad c_1 \gets g^{m_1}h^{r_1}, \quad c_{\text{agg}} \gets c_0c_1 = g^{m_0 + m_1}h^{r_0 + r_1}.
+        \end{equation*}
+        \pause
+
+        This works for any number of commitments, so we can encode as many points as we like in a single one.
+
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.4\textwidth]{images/lecture_5/Balances.png}
+        \end{figure}
+    \end{frame}
+
+    \section{Vector Commitments}
+
+    \subsection{Pedersen Vector Commitment}
+
+    \begin{frame}{Pedersen Vector Commitment}
+        Suppose we have a set of random elliptic curve points $(g_0, \ldots, g_{n-1}, h)$ of cyclic group $\mathbb{G}$
+        (that nobody knows the discrete logarithm of), a vector $\mathbf{m} = (m_0, \ldots, m_{n-1}) \in \mathbb{Z}_q^n$ and a random value $r \leftarrowS \mathbb{Z}_q$. We can do the following:
+        \begin{equation*}
+            c \gets h^r\prod_{i \in [n]} g_i^{m_i} = g_0^{m_0}g_1^{m_1}\cdots g_{n-1}^{m_{n-1}}h^r.
+        \end{equation*}
+        \pause
+
+        Since the \textit{Prover} does not know the discrete logarithm of the generators, he can only reveal $\mathbf{m}$ to produce $c$ later: he cannot produce another vector.
+        \pause
+
+        Prover can later open the commitment by revealing the vector $\mathbf{m}$ and a blinding term $r$.
+    \end{frame}
+
+    \subsection{Merkle Tree based Vector Commitment}
+
+    \begin{frame}{Merkle Tree Commitments}
+        A naive approach for a vector commitment would be to hash the whole vector.
+        \pause More sophisticated scheme uses divide-and-conquer approach by building a binary tree out of vector elements.
+
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.75\textwidth]{images/lecture_5/MerkleTree.png}
+            \caption{Merkle Tree structure}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Merkle Tree Proof (MTP)}
+        To prove the inclusion of element into the tree, a corresponding Merkle Branch is used. It allows to perform selective
+        disclosure of the elements without revealing all of them at once.
+        \pause
+
+        \begin{figure}
+            \centering
+            \includegraphics[width=0.7\textwidth]{images/lecture_5/MerkleTreeProof.png}
+            \caption{Merkle Tree inclusion proof branch for $M_1$: $(M_2, \mathsf{H}(M_3 \parallel M_4), \mathsf{H}(\mathsf{H}(M_5 \parallel M_6) \parallel \mathsf{H}(M_7 \parallel M_8)))$.}
+        \end{figure}
+    \end{frame}
+
+    \section{Polynomial Commitments}
+
+    \begin{frame}{Polynomial Commitment}
+        \begin{definition}
+            Polynomial commitment can be used to prove that the committed polynomial satisfies certain properties
+            (passes through a certain point $(\rho,y)$), without revealing what the polynomial is.
+            The commitment is generally succinct, which means that it is much smaller than the polynomial it represents.
+        \end{definition}
+        \pause
+
+        \begin{remark}
+            Typically, polynomial commitment scheme is a heart of any complex \textit{zero-knowledge} proof system.
+        \end{remark}
+    \end{frame}
+
+    \subsection{Kate-Zaverucha-Goldberg (KZG)}
+
+    \begin{frame}{KZG Commitment. Simplified example}
+        Given the polynomial: $f(T) = T^3 - 15T^2 + 71T - 103$
+        \vspace{0.5cm}
+
+        Prove that $f(3) = 2$
+        \pause
+        \vspace{0.5cm}
+
+        $f(3) = 2 \Longrightarrow 3$ is a root of polynomial $f(T) - 2$
+        \pause
+        \vspace{0.5cm}
+
+        Proof: $g(T) = \dfrac{f(T) - 2}{T-3} = \dfrac{(T^3 - 15T^2 + 71T - 103) - 2}{T-3} = T^2 - 12T+ 35$
+        \pause
+        \vspace{0.5cm}
+
+        Verify: $g(T) \cdot (T-3) = f(T) - 2$
+    \end{frame}
+
+    \begin{frame}{KZG Commitment}
+        The KZG (Kate-Zaverucha-Goldberg) is a polynomial commitment scheme:
+        \pause
+
+        \textit{One-time ``Powers-of-tau'' trusted setup stage}. During trusted setup a set of elliptic curve points is generated. Let $g_1$ be a generator of some pairing-friendly
+        elliptic curve group $\mathbb{G}_1$ of order $q$, $\tau \leftarrowS \mathbb{Z}_q$ some random value and $d$ be such that we want to commit to polynomials $f \in \mathbb{F}_q[T]^{<d}$.
+        \begin{equation*}
+            \mathsf{pp} := \{g_1^{\tau^i}\}_{i \in [d]} = (g_1, g_1^{\tau}, g_1^{\tau^2}, \ldots, g_1^{\tau^{d-1}})
+        \end{equation*}
+        \pause
+
+        \begin{alertblock}{Toxic Waste}
+            Parameter $\tau$ should be deleted after the ceremony. If it is revealed, the commitment scheme can be broken. This parameter is usually called the \textit{toxic waste}.
+        \end{alertblock}
+    \end{frame}
+
+    \begin{frame}{KZG Commitment}
+        \textit{Commit to polynomial}. Given the polynomial $f(T) = \sum_{i \in [d]} f_i T^i$, compute the commitment $\mathsf{com}(f) \gets g_1^{f(\tau)}$
+        using the trusted setup.
+        \pause
+
+        Although the committer cannot compute $g_1^{f(\tau)}$ directly since the value of $\tau$ is unknown, he can
+        compute it using values $\mathsf{pp} = (g_1, g_1^{\tau}, \ldots, g_1^{\tau^{d-1}})$:
+        \begin{equation*}
+            g_1^{f(\tau)} = g_1^{\sum_{i \in [d]}f_i\tau^i} = \prod_{i \in [d]}g_1^{f_i\tau^i} = \prod_{i \in [d]}(g_1^{\tau^i})^{f_i}.
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{KZG Commitment}
+        \textit{Prove an evaluation}. Given evaluation $f(\rho) = y$, compute the proof $\mathsf{com}(g) \gets g_1^{g(\tau)}$, where
+        \begin{equation*}
+            g(T) = \frac{f(T) - y}{T - \rho}.
+        \end{equation*}
+        \pause
+
+        Polynomial $g$ is called ``quotient polynomial'' and exists if and only if $f(\rho) = y$. The existence of this quotient polynomial serves
+        as a proof of the evaluation.
+    \end{frame}
+
+    \begin{frame}{KZG Commitment}
+        \textit{Verify the proof}. Given a commitment $\mathsf{com}(f) = g_1^{f(\tau)}$, an evaluation $f(\rho) = y$ and a proof $\mathsf{com}(g) = g_1^{g(\tau)}$, we need to
+        ensure that $g(\tau) \cdot (\tau - \rho) = f(\tau) - y$.
+        \pause
+
+        This can be done without knowledge of $\tau$ using the pairing $e: \mathbb{G}_1 \times \mathbb{G}_2 \to \mathbb{G}_T$ (the trusted setup additionally publishes $g_2^{\tau} \in \mathbb{G}_2$):
+        \begin{equation*}
+            e(\mathsf{com}(f)/g_1^y, g_2) = e(\mathsf{com}(g), g_2^{\tau}/g_2^{\rho})
+        \end{equation*}
+        \pause
+
+        Polynomial commitment schemes such as KZG are used in zero knowledge proof system to encode circuit constraints as a polynomial,
+        so that verifier could check random points to ensure that the constraints are met.
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

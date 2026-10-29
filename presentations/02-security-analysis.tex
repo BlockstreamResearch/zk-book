@@ -1,0 +1,679 @@
+\documentclass{zkdl-presentation-template}
+
+\title[Mathematics II]{\textbf{Mathematics for Cryptography II: Security Analysis and Polynomials}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents[hideallsubsections]
+    \end{frame}
+
+    \begin{frame}{What will we learn today?}
+        \begin{itemize}
+            \item How to define the security formally.\pause
+            \item How to prove that a construction is secure: security reductions.\pause
+            \item How to read\ldots This\ldots
+        \end{itemize}
+        \begin{figure}
+            \includegraphics[width=0.85\textwidth]{images/lecture_2/bulletproof.png}
+            \caption{This is not that hard as it seems. Figure from ``\textit{Bulletproofs: Short Proofs for Confidential Transactions and More}''}
+        \end{figure}
+    \end{frame}
+
+    \section{Quick Recap}
+
+    \begin{frame}{Quick Recap}
+        \begin{enumerate}
+            \item We know how to read formal statements, like
+            \begin{equation*}
+                (\forall n \in \mathbb{N}) \, (\exists k \in \mathbb{Z}): \{n=2k+1 \vee n = 2k\}
+            \end{equation*}
+            \pause
+            \item Group $\mathbb{G}$ is a set with a binary operation that satisfies certain rules. In this lecture, we will use the \textbf{multiplicative} notation: for example, $g^{\alpha}$ means $g$ multiplied by itself $\alpha$ times.\pause
+            \item Probability of event $E$ is denoted by $\Pr[E]$, and $x \leftarrowS S$ means that $x$ is sampled uniformly at random from $S$.\pause
+            \item $\#S$ is the number of elements in the finite set $S$.
+        \end{enumerate}
+    \end{frame}
+
+    \section{Security Analysis}
+
+    \subsection{Defining Security}
+
+    \begin{frame}{Introducing the Cipher: a bit of Formalism}
+        We will consider an example of a cipher to demonstrate the notion of security.
+
+        Let us introduce three sets:
+        \begin{itemize}
+            \item $\mathcal{K}$ --- a set of all possible keys.
+            \item $\mathcal{M}$ --- a set of all possible messages. For example, $\mathcal{M} = \{0,1\}^n$ --- all binary strings of length $n$.
+            \item $\mathcal{C}$ --- a set of all possible ciphertexts.
+        \end{itemize}
+
+        The cipher is defined over a tuple $(\mathcal{K}, \mathcal{M}, \mathcal{C})$.
+        \pause
+
+        \begin{remarkblock}{Tiny Note}
+            Cryptography is a very formalized field, but everything considered is well-known to you.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Introducing the Cipher}
+        \begin{definition}
+            Cipher $\mathcal{E} = (E,D)$ over the space $(\mathcal{K}, \mathcal{M}, \mathcal{C})$ consists of two efficiently computable methods:
+            \begin{itemize}
+                \item $E: \mathcal{K} \times \mathcal{M} \to \mathcal{C}$ --- encryption method, that based on the provided message $m \in \mathcal{M}$ and key $k \in \mathcal{K}$ outputs the cipher $c = E(k,m) \in \mathcal{C}$.
+                \item $D: \mathcal{K} \times \mathcal{C} \to \mathcal{M}$ --- decryption method, that based on the provided cipher $c \in \mathcal{C}$ and key $k \in \mathcal{K}$ outputs the message $m = D(k,c) \in \mathcal{M}$.
+            \end{itemize}
+        \end{definition}
+        \pause
+
+        \vspace{-10pt}
+        We require the \textbf{correctness}:
+        \begin{equation*}
+            D(k,E(k,m)) = m \quad \commentgray{for all messages $m \in \mathcal{M}$ and all keys $k \in \mathcal{K}$.}
+        \end{equation*}
+        \pause
+
+        \vspace{-10pt}
+        \begin{questionblock}{Question}
+            What else cipher must have to be practical?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Defining Security}
+        Typically, the security is defined as a \textbf{game} between the adversary ($\mathcal{A}$) and the challenger ($\mathcal{C}h$).
+
+        \begin{figure}
+            \includegraphics[width=0.38\textwidth]{images/lecture_2/interaction.pdf}
+            \caption{Challenger $\mathcal{C}h$ follows a straightforward protocol, while the adversary $\mathcal{A}$ might take any (efficient) strategy to win the game.}
+        \end{figure}
+
+        \vspace{-5pt}
+        \begin{remarkblock}{Efficient}
+            Efficient means that an algorithm requires polynomial time and memory with respect to the security parameter (defined in a moment).
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Semantic Security: Bit Guessing Game}
+        Let us play the following game between adversary $\mathcal{A}$ and challenger $\mathcal{C}h$:
+        \begin{algoen}
+            \item $\mathcal{A}$ picks two messages $m_0,m_1 \in \mathcal{M}$ of the same length on his choice.\pause
+            \item $\mathcal{C}h$ picks a random key $k \leftarrowS \mathcal{K}$ and random bit $b \leftarrowS \{0,1\}$ and sends the cipher $c = E(k,m_b)$ to $\mathcal{A}$.\pause
+            \item $\mathcal{A}$ is trying to guess the bit $b$ by using the cipher $c$.\pause
+            \item $\mathcal{A}$ outputs the guess $\widehat{b}$.
+        \end{algoen}
+    \end{frame}
+
+    \begin{frame}{Semantic Security: Bit Guessing Game}
+        \begin{figure}
+            \centering
+            \begin{tikzpicture}[thick,scale=0.8, every node/.style={scale=0.8}]
+                \node[inner sep=0pt, align=center] (challenger) {\includegraphics[width=0.75cm]{../contents/images/lecture_2/challenger.png}\\Challenger $\mathcal{C}h$};
+                \node[inner sep=0pt, align=center, right=5cm of challenger] (adversary) {\includegraphics[width=0.75cm]{../contents/images/lecture_2/demon.png}\\Adversary $\mathcal{A}$};
+
+                \draw [dashed,line width=0.3mm] ([yshift=-0.5cm]challenger.south) -- ([yshift=-7cm]challenger.south);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.5cm]adversary.south) -- ([yshift=-7cm]adversary.south);
+
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] ([yshift=-1.5cm]adversary.south) coordinate (l2)--(l2-|challenger) node[midway, above=2mm]{Send $m_0, m_1 \in \mathcal{M}, |m_0| = |m_1|$};
+
+                \node[align=center,fill=oc-gray-0,thick,below=2.5cm of challenger](challenger-actions){
+                \noindent\rule{3.5cm}{0.8pt}\\
+                $b \leftarrowS \{0,1\}$ \\
+                $k \leftarrowS \mathcal{K}$ \\
+                $c \gets E(k,m_b)$ \\
+                \noindent\rule{3.5cm}{0.8pt}};
+
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] ([yshift=-6cm]challenger.south) coordinate (l2)--(l2-|adversary) node[midway, above=2mm]{Send cipher $c$};
+
+                \node[align=center,fill=oc-gray-0,thick,below=5cm of adversary](adversary-guess){
+                \noindent\rule{3.5cm}{0.8pt}\\
+                Guess bit $\widehat{b} \in \{0,1\}$\\
+                \noindent\rule{3.5cm}{0.8pt}};
+            \end{tikzpicture}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Semantic Security: Advantage}
+        \begin{questionblock}{Question \#1}
+            Suppose our cipher is perfect. What is the probability that the adversary guesses the bit $b$ correctly? (that is, $b = \widehat{b}$)
+        \end{questionblock}
+        \pause
+
+        \begin{definition}
+            The \textbf{advantage} of the adversary $\mathcal{A}$ in the bit guessing game against the cipher $\mathcal{E}$ is
+            \begin{equation*}
+                \textsf{Adv}^{\textsf{SS}}_{\mathcal{A},\mathcal{E}} := \left| \Pr[\widehat{b} = b] - \frac{1}{2} \right|.
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        \begin{definition}
+            The cipher $\mathcal{E}$ is called \textbf{semantically secure} if for any efficient adversary $\mathcal{A}$ the advantage $\textsf{Adv}^{\textsf{SS}}_{\mathcal{A},\mathcal{E}}$ is \textbf{negligible}.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Advantage}
+        \begin{questionblock}{Question \#2}
+            If adversary can guess the bit with probability $0.000000001$, is the cipher semantically secure?
+        \end{questionblock}
+        \pause
+
+        \begin{questionblock}{Question \#3}
+            If adversary has the advantage $0.0001$, is the cipher semantically secure?
+        \end{questionblock}
+        \pause
+
+        \begin{remarkblock}{Note}
+            Advantage is just a measure of how much information is leaked to the adversary. The smaller the advantage, the better the cryptographic system. Formally, we want advantage to be \textbf{negligible}.
+        \end{remarkblock}
+
+        But what does it mean to be \textbf{negligible}?
+    \end{frame}
+
+    \subsection{Negligibility}
+
+    \begin{frame}{Negligibility}
+        \textbf{In practice}, negligible means below $2^{-128}$ (called $128$ bits of security).
+
+        In theory, however\ldots
+        \pause
+
+        \begin{definition}
+            \textbf{Security parameter}, denoted by $\lambda \in \mathbb{N}$, is the ``logarithmic size'' of the scheme. We then treat the advantage as a function $\textsf{Adv}^{\textsf{SS}}_{\mathcal{A},\mathcal{E}}(\lambda): \mathbb{N} \to \mathbb{R}_{\geq 0}$.
+        \end{definition}
+        \pause
+
+        \begin{example}
+            $\lambda$ might correspond to the logarithm of the order of the underlying finite field or, for a cipher, we might set $\lambda := \text{``ciphertext size in bits''}$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Negligible Functions}
+        Now, the probability of adversary winning the game depends on $\lambda$ and we want this dependence to decrease rapidly.
+
+        \begin{definition}
+            A function $f: \mathbb{N} \to \mathbb{R}$ is called \textbf{negligible} if for all $\gamma \in \mathbb{R}_{>0}$ there exists $n_{\gamma} \in \mathbb{N}$ such that for any $n \geq n_{\gamma}$ we have $|f(n)| < 1/n^{\gamma}$.
+        \end{definition}
+        \pause
+
+        Less formally: $f$ decays faster than any polynomial. The alternative definition, which is probably easier to interpret, is the following.
+
+        \begin{theorem}
+            A function $f: \mathbb{N} \to \mathbb{R}$ is \textbf{negligible} if and only if for any $\gamma \in \mathbb{R}_{>0}$, we have
+            \begin{equation*}
+                \lim_{\lambda \to \infty} f(\lambda)\lambda^{\gamma} = 0.
+            \end{equation*}
+        \end{theorem}
+    \end{frame}
+
+    \begin{frame}{Negligible Functions Examples}
+        \begin{example}
+            The function $f(\lambda) = 2^{-\lambda}$ is negligible since for any $\gamma \in \mathbb{R}_{>0}$ we have $\lim_{\lambda \to \infty} 2^{-\lambda}\lambda^{\gamma} = 0$.
+
+            The function $g(\lambda) = \frac{1}{\lambda!}$ is also negligible for similar reasons.
+        \end{example}
+        \pause
+
+        \begin{example}
+            The function $h(\lambda) = \frac{1}{\lambda}$ is not negligible since for $\gamma = 1$ we have
+            \begin{equation*}
+                \lim_{\lambda \to \infty} \frac{1}{\lambda} \times \lambda = 1 \neq 0.
+            \end{equation*}
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question}
+            Is the function $u(\lambda) = \lambda^{-10000}$ negligible?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Semantic Security in One Line}
+        Many cryptographic papers avoid drawing the game explicitly. Here is another way to write the same security definition.
+        \pause
+
+        \begin{definition}
+            The encryption scheme $\mathcal{E}$ with a security parameter $\lambda \in \mathbb{N}$ is \textbf{semantically secure} if for any efficient adversary $\mathcal{A}$ we have:
+            \begin{equation*}
+                \left|\Pr\left[
+                    b = \widehat{b}
+                    \;\middle|\;
+                \begin{aligned}
+                    &m_0, m_1 \gets \mathcal{A}(\cdot) \\
+                    &k \leftarrowS \mathcal{K} \\
+                    &c_i \gets E(k,m_i), i \in \{0,1\}\\
+                    &b \leftarrowS \{0,1\}, \widehat{b} \gets \mathcal{A}(c_b) \\
+                \end{aligned}\right] - \frac{1}{2}\right| = \negl(\lambda).
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        \begin{remarkblock}{How to read it}
+            $\Pr[A \mid B]$ is ``the probability of $A$, given that $B$ occurred''. On the right, we list the steps of the game; on the left, the event we are interested in.
+        \end{remarkblock}
+    \end{frame}
+
+    \subsection{Security Reductions}
+
+    \begin{frame}{Message Recovery Game}
+        Any reasonable notion of security should rule out recovering the message from the ciphertext with probability better than random guessing, which is $1/\#\mathcal{M}$.
+        \pause
+
+        \begin{algoen}
+            \item $\mathcal{C}h$ computes $m \leftarrowS \mathcal{M}$, $k \leftarrowS \mathcal{K}$, $c \gets E(k, m)$ and sends $c$ to $\mathcal{A}$.
+            \item $\mathcal{A}$ outputs a message $\widehat{m} \in \mathcal{M}$.
+        \end{algoen}
+        \pause
+
+        \begin{definition}[Security against message recovery]
+            Define $\textsf{Adv}^{\textsf{MR}}_{\mathcal{A},\mathcal{E}}(\lambda) := \left|\Pr[\widehat{m} = m] - \frac{1}{\#\mathcal{M}}\right|$. A cipher $\mathcal{E}$ is \textbf{secure against message recovery} if for all efficient adversaries $\mathcal{A}$, $\textsf{Adv}^{\textsf{MR}}_{\mathcal{A},\mathcal{E}}(\lambda) = \negl(\lambda)$.
+        \end{definition}
+        \pause
+
+        \begin{theorem}
+            If $\mathcal{E}$ is semantically secure, then $\mathcal{E}$ is secure against message recovery.
+        \end{theorem}
+    \end{frame}
+
+    \begin{frame}{The Key Idea of a Reduction}
+        Let $\mathsf{A} :=$ ``$\mathcal{E}$ is semantically secure'' and $\mathsf{B} :=$ ``$\mathcal{E}$ is secure against message recovery''. We want $\mathsf{A} \Rightarrow \mathsf{B}$.
+        \pause
+
+        \begin{itemize}
+            \item Both statements are about \textit{all} efficient adversaries: hard to prove directly.
+            \item Their negations need just \textit{one} adversary with a non-negligible advantage.
+        \end{itemize}
+        \pause
+
+        \begin{equation*}
+            (\mathsf{A} \Rightarrow \mathsf{B}) \iff (\textcolor{oc-blue-7}{\neg\mathsf{B} \Rightarrow \neg\mathsf{A}}).
+        \end{equation*}
+        \pause
+
+        So: given an efficient adversary $\mathcal{A}$ breaking message recovery, we build an adversary $\mathcal{B}$ breaking semantic security. $\mathcal{B}$ uses $\mathcal{A}$ as a black box (\textit{oracle}), written $\mathcal{B}^{\mathcal{A}}$.
+    \end{frame}
+
+    \begin{frame}{Constructing the Reduction}
+        \begin{algoen}
+            \item $\mathcal{B}$ generates $m_0, m_1 \in \mathcal{M}$ and sends them to the semantic security challenger.\pause
+            \item The challenger sends a ciphertext $c$ to $\mathcal{B}$. Since $\mathcal{B}$ can use the message recovery oracle, it sends $c$ to $\mathcal{A}$.\pause
+            \item $\mathcal{A}$ returns $\widehat{m}$. If $\widehat{m} = m_0$, then $\mathcal{B}$ sets $\widehat{b} := 0$; otherwise, $\widehat{b} := 1$.\pause
+            \item $\mathcal{B}$ sends $\widehat{b}$ to the semantic security challenger.
+        \end{algoen}
+        \pause
+
+        One can show that $\textsf{Adv}^{\textsf{SS}}_{\mathcal{B},\mathcal{E}} = \textsf{Adv}^{\textsf{MR}}_{\mathcal{A},\mathcal{E}}$, so $\mathcal{B}$ breaks the semantic security with a non-negligible probability.
+    \end{frame}
+
+    \begin{frame}{Security Reduction: the Recipe}
+        \begin{proposition}[Security Reduction]
+            Suppose we have a cryptosystem $\mathcal{E}$ and we believe the problem $\mathcal{X}$ is computationally hard. To prove that $\mathcal{E}$ is secure based on $\mathcal{X}$:
+            \begin{algoen}
+                \item Assume there exists an efficient adversary $\mathcal{A}$ who breaks $\mathcal{E}$ with a non-negligible probability $\varepsilon(\lambda)$.\pause
+                \item Construct an efficient algorithm $\mathcal{B}$ (the \textbf{reduction}) that solves $\mathcal{X}$ using oracle access to $\mathcal{A}$: on input $x$ of the problem $\mathcal{X}$, $\mathcal{B}$ generates the input to the security game of $\mathcal{E}$, runs $\mathcal{A}$ and uses its output to solve $\mathcal{X}$.\pause
+                \item If $\mathcal{B}$ is constructed properly, it solves $\mathcal{X}$ with probability at least $\varepsilon(\lambda)/\lambda^{\gamma}$ for some $\gamma$, which is non-negligible.\pause
+                \item Hence assumption $\mathcal{X}$ implies security of $\mathcal{E}$.
+            \end{algoen}
+        \end{proposition}
+    \end{frame}
+
+    \subsection{Group-based Assumptions}
+    \begin{frame}{Discrete Logarithm Assumption (DL)}
+        \begin{definition}
+            Assume that $\mathbb{G}$ is a cyclic group of prime order $r = \Theta(2^{\lambda})$ generated by $g \in \mathbb{G}$. Define the following game:
+            \begin{algoen}
+                \item Both $\mathcal{C}h$ and $\mathcal{A}$ take a description $\mathbb{G}$ as an input: order $r$ and generator $g \in \mathbb{G}$.
+                \item $\mathcal{C}h$ computes $\alpha \leftarrowS \mathbb{Z}_r, u \gets g^{\alpha}$ and sends $u \in \mathbb{G}$ to $\mathcal{A}$.
+                \item The adversary $\mathcal{A}$ outputs $\widehat{\alpha} \in \mathbb{Z}_r$.
+            \end{algoen}
+            We define $\mathcal{A}$'s \textbf{advantage in solving the discrete logarithm problem in $\mathbb{G}$}, denoted as $\textsf{Adv}^{\textsf{DL}}_{\mathcal{A},\mathbb{G}}$, as the probability that $\widehat{\alpha} = \alpha$.
+        \end{definition}
+        \pause
+
+        \begin{definition}
+            The \textbf{Discrete Logarithm Assumption} holds in the group $\mathbb{G}$ if for any efficient adversary $\mathcal{A}$ the advantage $\textsf{Adv}^{\textsf{DL}}_{\mathcal{A},\mathbb{G}}(\lambda)$ is negligible in $\lambda$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Computational Diffie-Hellman Assumption (CDH)}
+        \begin{definition}
+            Let $\mathbb{G}$ be a cyclic group of prime order $r = \Theta(2^{\lambda})$ generated by $g \in \mathbb{G}$. Define the following game:
+            \begin{algoen}
+                \item $\mathcal{C}h$ computes $\alpha, \beta \leftarrowS \mathbb{Z}_r$, $u \gets g^{\alpha}, v \gets g^{\beta}, w \gets g^{\alpha\beta}$ and sends $u,v \in \mathbb{G}$ to $\mathcal{A}$.
+                \item The adversary $\mathcal{A}$ outputs $\widehat{w} \in \mathbb{G}$.
+            \end{algoen}
+            We define $\mathcal{A}$'s \textbf{advantage in solving the computational Diffie-Hellman problem in $\mathbb{G}$} as $\textsf{Adv}^{\textsf{CDH}}_{\mathcal{A},\mathbb{G}}(\lambda) := \Pr[\widehat{w} = w]$.
+        \end{definition}
+        \pause
+
+        \begin{definition}
+            The \textbf{Computational Diffie-Hellman Assumption} holds in the group $\mathbb{G}$ if for any efficient adversary $\mathcal{A}$, $\textsf{Adv}^{\textsf{CDH}}_{\mathcal{A},\mathbb{G}}(\lambda) = \negl(\lambda)$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Decisional Diffie-Hellman Assumption (DDH)}
+        \begin{definition}
+            Let $\mathbb{G}$ be a cyclic group of prime order $r = \Theta(2^{\lambda})$ generated by $g \in \mathbb{G}$. Define the following game:
+            \begin{algoen}
+                \item $\mathcal{C}h$ computes $\alpha, \beta,\gamma \leftarrowS \mathbb{Z}_r$, $u \gets g^{\alpha}, v \gets g^{\beta}, w_0 \gets g^{\alpha\beta}, w_1 \gets g^{\gamma}$. Then, $\mathcal{C}h$ flips a coin $b \leftarrowS \{0,1\}$ and sends $(u,v,w_b)$ to $\mathcal{A}$.
+                \item The adversary $\mathcal{A}$ outputs the predicted bit $\widehat{b} \in \{0,1\}$.
+            \end{algoen}
+            We define $\mathcal{A}$'s \textbf{advantage in solving the Decisional Diffie-Hellman problem in $\mathbb{G}$} as
+            \begin{equation*}
+                \textsf{Adv}^{\textsf{DDH}}_{\mathcal{A},\mathbb{G}}(\lambda) := \left| \Pr[b = \widehat{b}] - \frac{1}{2} \right|.
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        DDH is considerably stronger (and more fragile) than CDH. Let us show when DDH does not hold!
+    \end{frame}
+
+    \begin{frame}{Even-ordered Cyclic Group}
+        \begin{theorem}
+            Suppose that $\mathbb{G}$ is a cyclic group of an even order. Then, the Decisional Diffie-Hellman Assumption does not hold in $\mathbb{G}$. In fact, there is an efficient adversary $\mathcal{A}$ with an advantage $1/4$.
+        \end{theorem}
+        \pause
+
+        \textbf{Idea of proof.} Let $\#\mathbb{G} = 2n$. We first prove the following statement:
+
+        \begin{lemma}
+            Suppose $u = g^{\alpha}$. Then, $\alpha$ is even if and only if $u^n = 1$.
+        \end{lemma}
+        \pause
+
+        \textbf{Lemma proof.} If $\alpha=2\alpha'$, then
+        \begin{equation*}
+            u^n = g^{\alpha n} = g^{2\alpha' n} = (g^{2n})^{\alpha'} = 1^{\alpha'} = 1.
+        \end{equation*}
+        \vspace{-20pt}
+        \pause
+
+        Therefore, if $u = g^{\alpha}, v = g^{\beta}, w = g^{\gamma}$, the adversary knows the parity of $\alpha, \beta, \gamma$. He then checks if parity of $\alpha\beta$ equals parity of $\gamma$.
+    \end{frame}
+
+    \section{Polynomials}
+
+    \subsection{Basic Theory}
+
+    \begin{frame}{Definition}
+      \begin{definition}
+        A \textbf{polynomial} $p(T)$ is a function of the form
+        \begin{equation*}
+            p(T) = c_0 + c_1 T + c_2 T^2 + \cdots + c_n T^n = \sum_{k=0}^{n} c_k T^k,
+        \end{equation*}
+        where $c_0, c_1, \dots, c_n$ are coefficients of the polynomial.
+      \end{definition}
+      \pause
+
+      \begin{definition}
+        A set of polynomials depending on $T$ with coefficients in a field $\mathbb{F}$ is denoted as $\mathbb{F}[T]$, that is
+        \begin{equation*}
+            \mathbb{F}[T] = \left\{p(T) = \sum_{k=0}^{n} c_k T^k: c_k \in \mathbb{F}, \; k = 0,\dots,n\right\}.
+        \end{equation*}
+      \end{definition}
+    \end{frame}
+
+    \begin{frame}{Examples of Polynomials}
+      \begin{example}
+        Consider the finite field $\mathbb{F}_3$. Then, some examples of polynomials from $\mathbb{F}_3[T]$ are listed below:
+        \begin{enumerate}
+            \item $p(T) = 1 + T + 2T^2$.
+            \item $q(T) = 1 + T^2 + T^3$.
+            \item $r(T) = 2T^3$.
+        \end{enumerate}
+        \pause
+
+        If we were to evaluate these polynomials at $1 \in \mathbb{F}_3$, we would get:
+        \begin{enumerate}
+            \item $p(1) = 1 + 1 + 2 \cdot 1 \; \text{mod} \; 3 = 1$.
+            \item $q(1) = 1 + 1 + 1 \; \text{mod} \; 3 = 0$.
+            \item $r(1) = 2 \cdot 1 = 2$.
+        \end{enumerate}
+      \end{example}
+    \end{frame}
+
+    \begin{frame}{More about polynomials}
+      \begin{definition}
+          The \textbf{degree} of a polynomial $p(T) = c_0+c_1T+c_2T^2+\dots$ is the largest $k \in \mathbb{Z}_{\geq 0}$ such that $c_k \neq 0$. We denote the degree of a polynomial as $\deg p$. We also denote $\mathbb{F}[T]^{\leq m} := \{p \in \mathbb{F}[T]: \deg p \leq m\}$.
+      \end{definition}
+      \pause
+
+      \begin{example}
+          The degree of the polynomial $p(T) = 1 + 2T + T^2$ is $2$, so $p \in \mathbb{F}_3[T]^{\leq 2}$.
+      \end{example}
+      \pause
+
+      \begin{theorem}
+          For any polynomials $p,q \in \mathbb{F}[T]$ and $n := \deg p$, $m := \deg q$, the following two statements are true:
+          \begin{enumerate}
+              \item $\deg (pq) = n + m$.
+              \item $\deg (p + q) = \max\{n,m\}$ if $n \neq m$, and $\deg (p+q) \leq m$ if $m=n$.
+          \end{enumerate}
+      \end{theorem}
+    \end{frame}
+
+    \begin{frame}{Roots of Polynomials}
+      \begin{definition}
+          Let $p \in \mathbb{F}[T]$ be a polynomial of degree $\deg p \geq 1$. A field element $\alpha \in \mathbb{F}$ is called a \textbf{root} of $p$ if $p(\alpha) = 0$.
+      \end{definition}
+      \pause
+
+      \begin{example}
+          Consider the polynomial $p(T) = 1 + T + T^2 \in \mathbb{F}_3[T]$. Then, $\alpha=1$ is a root of $p$ since $p(\alpha) = 1 + 1 + 1 \; \text{mod} \; 3 = 0$.
+      \end{example}
+      \pause
+
+      \begin{theorem}
+        Let $p \in \mathbb{F}[T]$, $\deg p \geq 1$. Then, $\alpha \in \mathbb{F}$ is a root of $p$ if and only if there exists a polynomial $q$ (with $\deg q = \deg p-1$) such that
+        \begin{equation*}
+            p(T) = (T-\alpha)q(T).
+        \end{equation*}
+      \end{theorem}
+    \end{frame}
+
+    \begin{frame}{Polynomial Division}
+      \begin{theorem}
+        Given $f,g \in \mathbb{F}[T]$ with $g \neq 0$, there are unique polynomials $q,r \in \mathbb{F}[T]$ such that
+        \begin{equation*}
+            f = q \cdot g + r, \; 0 \leq \deg r < \deg g.
+        \end{equation*}
+      \end{theorem}
+      \pause
+
+      \begin{example}
+        Consider $f(T) = T^3+2$ and $g(T) = T+1$ over $\mathbb{R}$. Then, we can write $f(T) = (T^2-T+1)g(T) + 1$, so the remainder of the division is $r \equiv 1$. Typically, we denote this as:
+        \begin{equation*}
+            f \, \text{div} \, g = T^2-T+1, \quad f \, \text{mod} \, g = 1.
+        \end{equation*}
+
+        The notation is pretty similar to one used in integer division.
+      \end{example}
+    \end{frame}
+
+    \begin{frame}{Polynomial Divisibility}
+      \begin{definition}
+        A polynomial $f \in \mathbb{F}[T]$ is called \textbf{divisible} by $g \in \mathbb{F}[T]$ (or, $g$ \textbf{divides} $f$, written as $g \mid f$) if there exists $h \in \mathbb{F}[T]$ such that $f=gh$.
+      \end{definition}
+      \pause
+
+      \begin{theorem}
+        If $\alpha \in \mathbb{F}$ is a root of $p \in \mathbb{F}[T]$, then $(T-\alpha) \mid p$.
+      \end{theorem}
+      \pause
+
+      \begin{definition}
+        A polynomial $f \in \mathbb{F}[T]$ is said to be \textbf{irreducible} in $\mathbb{F}$ if there are no polynomials $g,h \in \mathbb{F}[T]$ both of positive degree such that $f = gh$.
+      \end{definition}
+    \end{frame}
+
+    \begin{frame}{Polynomial Divisibility}
+      \begin{example}
+        A polynomial $f(T) = T^2+16$ is irreducible in $\mathbb{R}$. Also $f(T) = T^2-2$ is irreducible over $\mathbb{Q}$, yet it is reducible over $\mathbb{R}$: $f(T) = (T-\sqrt{2})(T+\sqrt{2})$.
+      \end{example}
+      \pause
+
+      \begin{example}
+        There are no polynomials over complex numbers $\mathbb{C}$ with degree more than $1$ that are irreducible. This follows from the \textit{fundamental theorem of algebra}. For example, $T^2+16 = (T-4i)(T+4i)$.
+      \end{example}
+    \end{frame}
+
+    \subsection{Interpolation}
+    \begin{frame}{Interpolation}
+      \begin{questionblock}{Question}
+        How can we define the polynomial?
+      \end{questionblock}
+      \pause
+
+      The most obvious way is to specify coefficients $(c_0,c_1,\dots,c_n)$. Can we do it in a different way?
+      \pause
+
+      \begin{theorem}
+        Given $n+1$ distinct points $(x_0,y_0),\dots,(x_n,y_n)$, there exists a unique polynomial $p$ of degree at most $n$ such that $p(x_i) = y_i$ for all $i=0,\dots,n$.
+      \end{theorem}
+    \end{frame}
+
+    \begin{frame}{Illustration with two points}
+      \begin{figure}
+        \includegraphics[width=0.8\textwidth]{images/lecture_1/simple_interpolation.pdf}
+        \caption{$2$ points on the plane uniquely define the polynomial of degree $1$ (linear function).}
+      \end{figure}
+    \end{frame}
+
+    \begin{frame}{Illustration with five points}
+      \begin{figure}
+        \includegraphics[width=0.8\textwidth]{images/lecture_1/interpolation.pdf}
+        \caption{$5$ points on the plane uniquely define the polynomial of degree $4$.}
+      \end{figure}
+    \end{frame}
+
+    \begin{frame}{Lagrange Interpolation}
+      One of the ways to interpolate the polynomial is to use the Lagrange interpolation.
+
+      \begin{theorem}
+        Given $n+1$ distinct points $(x_0,y_0),\dots,(x_n,y_n)$, the unique polynomial $L$ of degree at most $n$ that passes through these points is given by
+        \begin{equation*}
+            L(T) = \sum_{i=0}^{n} y_i \ell_i(T), \quad \ell_i(T) = \prod_{j=0, j \neq i}^n \frac{T-x_j}{x_i-x_j}.
+        \end{equation*}
+      \end{theorem}
+      \pause
+
+      \begin{example}
+        For points $(0,1)$ and $(1,2)$, we get
+        \begin{equation*}
+            L(T) = 1 \cdot \frac{T-1}{0-1} + 2 \cdot \frac{T-0}{1-0} = T + 1.
+        \end{equation*}
+      \end{example}
+    \end{frame}
+
+    \subsection{Shamir Secret Sharing}
+    \begin{frame}{Application: Shamir Secret Sharing}
+      \begin{alertblock}{Motivation}
+        How to share a secret $\alpha$ among $n$ people in such a way that any $t$ of them can reconstruct the secret, but any $t-1$ cannot?
+      \end{alertblock}
+      \pause
+
+      \begin{definition}
+        \textbf{Secret Sharing} scheme is a pair of efficient algorithms $(\mathsf{Gen}, \mathsf{Comb})$ which work as follows:
+        \begin{itemize}
+            \item $\mathsf{Gen}(\alpha, t, n)$: probabilistic sharing algorithm that yields $n$ shards $(\alpha_1,\dots,\alpha_n)$ for which $t$ shards are needed to reconstruct the secret $\alpha$.
+            \item $\mathsf{Comb}(\mathcal{I}, \{\alpha_i\}_{i \in \mathcal{I}})$: deterministic reconstruction algorithm that reconstructs the secret $\alpha$ from the shards $\mathcal{I} \subset \{1,\dots,n\}$ of size $t$.
+        \end{itemize}
+      \end{definition}
+    \end{frame}
+
+    \begin{frame}{Shamir's Protocol}
+      \begin{remarkblock}{Correctness}
+        For every $\alpha \in F$, for every possible output $(\alpha_1,\dots,\alpha_n) \gets \mathsf{Gen}(\alpha, t, n)$, and any $t$-size subset $\mathcal{I}$ of $\{1,\dots,n\}$ we require
+        \begin{equation*}
+            \mathsf{Comb}(\mathcal{I}, \{\alpha_i\}_{i \in \mathcal{I}}) = \alpha.
+        \end{equation*}
+      \end{remarkblock}
+      \pause
+
+      \begin{definition}
+        \textbf{Shamir's protocol} works over $F=\mathbb{F}_q$ as follows:
+        \begin{itemize}
+            \item $\mathsf{Gen}(\alpha, t, n)$: choose random $k_1,\dots,k_{t-1} \leftarrowS \mathbb{F}_q$ and define the polynomial
+            \begin{equation*}
+                \omega(T) := \alpha + k_1T + k_2T^2 + \cdots + k_{t-1}T^{t-1} \in \mathbb{F}_q[T]^{< t},
+            \end{equation*}
+            and then compute $\alpha_i \gets \omega(i) \in \mathbb{F}_q$ for each $i \in \{1,\dots,n\}$.\pause
+            \item $\mathsf{Comb}(\mathcal{I}, \{\alpha_i\}_{i \in \mathcal{I}})$: interpolate the polynomial $\omega$ using the Lagrange interpolation and output $\omega(0) = \alpha$.
+        \end{itemize}
+      \end{definition}
+    \end{frame}
+
+    \begin{frame}{Shamir's Protocol: Intuition}
+      \begin{figure}
+        \centering
+        \includegraphics[width=0.6\textwidth]{images/lecture_1/shamir_demo.pdf}
+        \caption{There are infinitely many quadratic polynomials passing through two \textcolor{blue}{blue} points (\textcolor{gray}{gray dashed} lines). However, knowing the \textcolor{red}{red} point allows us to uniquely determine the polynomial and thus get its value at $0$.}
+      \end{figure}
+    \end{frame}
+
+    \begin{frame}{Reed-Solomon Codes}
+        \begin{remarkblock}{Reed-Solomon codes}
+            Reed-Solomon codes are an error-correcting algorithm based on polynomials. They allow restoring lost or corrupted data, implementing threshold secret sharing, and they are used in some ZK protocols (we will come back to them when building STARKs).
+        \end{remarkblock}
+
+        \begin{figure}
+          \centering
+          \includegraphics[width=0.5\textwidth]{images/lecture_2/reed-solomon-1.png}
+          \caption{Polynomial of degree $n$ is uniquely defined by $n+1$ points. Defining more points on the same polynomial adds a redundancy, which can be used to restore the polynomial even if some points are missing.}
+        \end{figure}
+    \end{frame}
+
+    \subsection{Schwartz-Zippel Lemma}
+
+    \begin{frame}{Schwartz-Zippel Lemma}
+        \begin{lemma}[Single Variable Schwartz-Zippel Lemma]
+            Let $\mathbb{F}$ be a finite field and let $f \in \mathbb{F}[T]$ be a non-zero polynomial. Then,
+            \begin{equation*}
+                \Pr_{\alpha \leftarrowS \mathbb{F}}[f(\alpha) = 0] \leq \frac{\deg f}{\#\mathbb{F}}.
+            \end{equation*}
+        \end{lemma}
+        \pause
+
+        \textbf{Proof Idea.} The polynomial of degree $n := \deg f$ has at most $n$ roots. Therefore, when we pick $\alpha$ uniformly at random from $\mathbb{F}$, there is at most $n/\#\mathbb{F}$ chance to pick a root.
+        \pause
+
+        \begin{lemma}[Multivariable Schwartz-Zippel]
+            Let $S \subseteq \mathbb{F}^n$ be finite and $f$ be a non-zero polynomial in $n$ variables. Then,
+            \begin{equation*}
+                \Pr_{\boldsymbol{\alpha} \leftarrowS S}[f(\boldsymbol{\alpha}) = 0] \leq \frac{\deg f}{\#S}.
+            \end{equation*}
+        \end{lemma}
+    \end{frame}
+
+    \begin{frame}{Schwartz-Zippel Lemma: Example}
+        \begin{example}
+            Suppose we are working over the Mersenne prime field of order $p=2^{31}-1$ with a polynomial $f(T,W) = T^{50} + 3TW + W^5$. If we pick $(\alpha,\beta)$ at random from $\mathbb{F}_p^2$, the probability of $f(\alpha,\beta) = 0$ is at most $50/(2^{31}-1)$, providing approximately $25$ bits of security.
+        \end{example}
+
+        \begin{figure}
+          \centering
+          \includegraphics[width=0.35\textwidth]{images/lecture_2/Schwartz-Zippel-2.png}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Polynomial Equality Test}
+        \begin{corollary}[Polynomial Equality Test]
+            Suppose $P$ and $Q$ are two distinct polynomials with a maximum degree $d$ over the finite field $\mathbb{F}$. Then,
+            \begin{equation*}
+                \Pr_{r \leftarrowS \mathbb{F}}[P(r) = Q(r)] \le \frac{d}{\#\mathbb{F}}.
+            \end{equation*}
+            As a consequence, for large fields, the probability of two distinct polynomials being equal at a random point is negligible.
+        \end{corollary}
+        \pause
+
+        \begin{proof}
+            Let $Z(T) := P(T) - Q(T)$. Of course, $\deg Z$ is at most $d$. Also note that $Z(r) = 0$ iff $P(r) = Q(r)$. Applying Schwartz-Zippel lemma, the probability of $Z(r) = 0$ for $r \leftarrowS \mathbb{F}$ is bounded above by $d/\#\mathbb{F}$.
+        \end{proof}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

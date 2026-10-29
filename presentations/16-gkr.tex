@@ -1,37 +1,23 @@
 \documentclass{zkdl-presentation-template}
 
-\usepackage[T1]{fontenc}
-\usepackage{kerkis}
-\usepackage{kmath}
-%\usepackage{concmath}
-\usepackage{centernot}
-
-\newcommand\leftarrowS{\leftarrow\joinrel\smalldollar}
-\newcommand\rightarrowS{\smalldollar\joinrel\rightarrow}
-
-\makeatletter
-\newcommand{\smalldollar}{\mathrel{\mathpalette\small@dollar\relax}}
-\newcommand{\small@dollar}[2]{%
-  \vcenter{\hbox{%
-    $#1\textnormal{\fontsize{0.7\dimexpr\f@size pt}{0}\selectfont\$}$%
-  }}%
-}
-\makeatother
-
+% Overlay-aware TikZ keys
 \tikzset{
-    grid_cell/.style={
-        rectangle, 
-        draw=black, 
-        very thick,
-        minimum size=0.75cm, 
-        font=\large\bfseries
-    },
-    grid_label/.style={
-        font=\small
-    },
-    hypercube_highlight/.style={
-        fill=gray!40
-    }
+    invisible/.style={opacity=0, text opacity=0},
+    alt/.code args={<#1>#2#3}{\alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}}},
+    visible on/.style={alt={#1{}{invisible}}},
+    onslide/.code args={<#1>#2}{\only<#1>{\pgfkeysalso{#2}}},
+}
+
+% Circuit styles (inputs gray, gates indigo, outputs orange, wires gray)
+\tikzset{
+    gkr input/.style={circle, ultra thick, draw=oc-gray-7, fill=oc-gray-2, minimum size=15pt, inner sep=0pt},
+    gkr gate/.style={circle, ultra thick, draw=oc-indigo-7, fill=oc-indigo-1, minimum size=15pt, inner sep=0pt},
+    gkr output/.style={circle, ultra thick, draw=oc-orange-7, fill=oc-orange-1, minimum size=15pt, inner sep=0pt},
+    gkr conn/.style={-stealth, draw=oc-gray-5, shorten >=1pt, line width=1.5pt},
+    gkr layer/.style={font=\bfseries, align=center, text=oc-indigo-8},
+    gkr value/.style={text=oc-red-7, font=\bfseries},
+    % Hooks used to highlight gates and to reveal the gate values
+    hlA/.style={}, hlB/.style={}, gkr values/.style={},
 }
 
 % Define values for x_1 to x_8
@@ -49,21 +35,96 @@
 \fi
 }
 
+% Wires of the example circuit (nodes l0-*, l1-*, l2-*, l3-* must exist)
+\newcommand{\gkrwires}{%
+    \foreach \i in {1,...,4} {
+        \pgfmathtruncatemacro{\j}{2 * \i - 1}
+        \pgfmathtruncatemacro{\k}{2 * \i}
+        \draw[gkr conn] (l0-\j) -- (l1-\i);
+        \draw[gkr conn] (l0-\k) -- (l1-\i);
+    }
+    \draw[gkr conn] (l1-1) -- (l2-1);
+    \draw[gkr conn] (l1-2) -- (l2-1);
+    \draw[gkr conn] (l1-3) -- (l2-2);
+    \draw[gkr conn] (l1-4) -- (l2-2);
+    \draw[gkr conn] (l1-1) -- (l2-3);
+    \draw[gkr conn] (l1-3) -- (l2-3);
+    \draw[gkr conn] (l1-2) -- (l2-4);
+    \draw[gkr conn] (l1-4) -- (l2-4);
+    \draw[gkr conn] (l2-1) -- (l3-1);
+    \draw[gkr conn] (l2-2) -- (l3-1);
+    \draw[gkr conn] (l2-3) -- (l3-2);
+    \draw[gkr conn] (l2-4) -- (l3-2);
+}
+
+% The example circuit with concrete input values.
+% Optional argument: TikZ options, e.g. hlA/hlB highlight styles.
+\newcommand{\gkrvaluecircuit}[1][]{%
+    \begin{tikzpicture}[scale=0.8, #1]
+    % --- Layer Labels ---
+    \node[gkr layer] at (0, 7.45) {Layer 3};
+    \node[gkr layer] at (2, 7.45) {Layer 2};
+    \node[gkr layer] at (4, 7.45) {Layer 1};
+    \node[gkr layer] at (6, 7.45) {Layer 0};
+
+    % --- Layer 3: Input Nodes (8) ---
+    \node[gkr input, hlA] (l0-1) at (0, 7.5 - 0.7*1) {$\xval{1}$};
+    \node[gkr input, hlA] (l0-2) at (0, 7.5 - 0.7*2) {$\xval{2}$};
+    \node[gkr input] (l0-3) at (0, 7.5 - 0.7*3) {$\xval{3}$};
+    \node[gkr input] (l0-4) at (0, 7.5 - 0.7*4) {$\xval{4}$};
+    \node[gkr input, hlB] (l0-5) at (0, 7.5 - 0.7*5) {$\xval{5}$};
+    \node[gkr input, hlB] (l0-6) at (0, 7.5 - 0.7*6) {$\xval{6}$};
+    \node[gkr input] (l0-7) at (0, 7.5 - 0.7*7) {$\xval{7}$};
+    \node[gkr input] (l0-8) at (0, 7.5 - 0.7*8) {$\xval{8}$};
+
+    % --- Layer 2: Gate Nodes (4) ---
+    \node[gkr gate, hlA] (l1-1) at (2, 5.25) {$+$};
+    \node[gkr gate] (l1-2) at (2, 4.5) {$\times$};
+    \node[gkr gate, hlB] (l1-3) at (2, 3.75) {$+$};
+    \node[gkr gate] (l1-4) at (2, 3.0) {$\times$};
+
+    % --- Layer 1: Gate Nodes (4) ---
+    \node[gkr gate] (l2-1) at (4, 5.25) {$\times$};
+    \node[gkr gate] (l2-2) at (4, 4.5) {$+$};
+    \node[gkr gate] (l2-3) at (4, 3.75) {$\times$};
+    \node[gkr gate] (l2-4) at (4, 3.0) {$+$};
+
+    % --- Layer 0: Output Nodes (2) ---
+    \node[gkr output] (l3-1) at (6, 4.5) {$+$};
+    \node[gkr output] (l3-2) at (6, 3.75) {$+$};
+
+    \gkrwires
+
+    % Values in gates, layer 2
+    \node[gkr value, gkr values] at (2.5, 5.5) {3};
+    \node[gkr value, gkr values] at (2.5, 4.75) {0};
+    \node[gkr value, gkr values] at (2.5, 4.0) {2};
+    \node[gkr value, gkr values] at (2.5, 3.25) {0};
+
+    % Values in gates, layer 1
+    \node[gkr value, gkr values] at (4.5, 5.5) {0};
+    \node[gkr value, gkr values] at (4.5, 4.75) {2};
+    \node[gkr value, gkr values] at (4.5, 4.0) {6};
+    \node[gkr value, gkr values] at (4.5, 3.25) {0};
+
+    % Values in gates, layer 0
+    \node[gkr value, gkr values] at (6.5, 4.75) {2};
+    \node[gkr value, gkr values] at (6.5, 4.0) {6};
+    \end{tikzpicture}%
+}
+
 \title[GKR \& Memory Checking]{\textbf{GKR Protocol. Offline Memory Checking}}
-\author{Distributed Lab}
-\date{July 17, 2025}
-\homepage{zkdl-camp.github.io}
-\github{ZKDL-Camp}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
 
 \begin{document}
-    \frame {
-        \tikz [remember picture,overlay]
-        \node at
-            ([yshift=1.5cm,xshift=-1.5cm]current page.south east) 
-            %or: (current page.center)
-            {\includegraphics[width=60pt]{images/logo.png}};
-        \titlepage
-    }
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents
+    \end{frame}
 
 	\section{Introduction}
 
@@ -74,26 +135,28 @@
         \end{figure}
         \begin{columns}
             \begin{column}{0.5\textwidth}
-                \textcolor{blue!70!black}{\begin{center}
+                \textcolor{oc-indigo-8}{\begin{center}
                     \textbf{Univariate World:}
                 \end{center}
-                \[p(X) = q(X)\prod_{u \in \Omega}(X-u)\]}
+                \[p(T) = q(T)\prod_{u \in \Omega}(T-u)\]}
             \end{column}
             \begin{column}{0.5\textwidth}
-                \textcolor{green!50!black}{
+                \textcolor{oc-green-8}{
                 \begin{center}
                     \textbf{Multivariate World:}
                 \end{center}
                 \[\sum_{\mathbf{b} \in \{0,1\}^{\ell}} f(b_1,\dots,b_{\ell}) = H\]}
             \end{column}
         \end{columns}
+        \pause
 
         \vspace{-10px}
-        
+
         \textbf{Goal:} build the set of constraints that boil down to \textbf{Sum-Check}:
         \begin{equation*}
-            \textcolor{green!50!black}{\sum_{(b_1,\dots,b_{\ell}) \in \{0,1\}^{\ell}} f(b_1,\dots,b_{\ell}) = H}
+            \textcolor{oc-green-8}{\sum_{(b_1,\dots,b_{\ell}) \in \{0,1\}^{\ell}} f(b_1,\dots,b_{\ell}) = H}
         \end{equation*}
+        \pause
 
         \textbf{Cost:} Quasilinear prover, logarithmic verifier and proof size.
     \end{frame}
@@ -101,35 +164,37 @@
     \section{GKR Protocol}
 
     \begin{frame}{Motivation}
-        \textcolor{blue!70!black}{\textbf{Goal:} Build sumcheck-based version of the circuit
+        \textcolor{oc-indigo-8}{\textbf{Goal:} Build sumcheck-based version of the circuit
         arithmetization.}
+        \pause
 
         Suppose we are given the \textbf{layered} fan-in two arithmetical
         circuit $\mathtt{C}: \mathbb{F}^n \to \mathbb{F}^m$ of size $S$ (number
         of gates). The \textit{layered} here means that the circuit $\mathtt{C}$
         can be decomposed into $d$ layers (note that GKR can be generalized to
-        the unstructured arithmetical circuits as well). 
+        the unstructured arithmetical circuits as well).
         \begin{figure}
             \includegraphics[width=0.5\linewidth]{images/lecture_16/structured.png}
             \caption{Layered Circuit Structure of $d=4$ layers.}
         \end{figure}
     \end{frame}
 
-    \begin{frame}{Spoilers on Performance}        
-        The GKR protocol allows 
+    \begin{frame}{Spoilers on Performance}
+        The GKR protocol allows
         to achieve the following performance:
         \begin{itemize}
-            \item The communication consists of $\mathcal{O}(d \cdot \mathsf{polylog}(S))$ field elements.
-            \item The verifier runs in $\mathcal{O}(n + d \cdot \mathsf{polylog}(S))$ time.
-            \item The prover runs in $\mathcal{O}(\mathsf{poly}(S))$ time.
-            \item The soundness error is just $\mathcal{O}(d \log(S) / |\mathbb{F}|)$.
+            \item The communication consists of $O(d \cdot \mathsf{polylog}(S))$ field elements.
+            \item The verifier runs in $O(n + d \cdot \mathsf{polylog}(S))$ time.
+            \item The prover runs in $O(\mathsf{poly}(S))$ time.
+            \item The soundness error is just $O(d \log(S) / \#\mathbb{F})$.
         \end{itemize}
+        \pause
 
         \textbf{Assumptions:}
         \begin{itemize}
             \item Assume we have $d$ rounds in total. Output layer is the
-            $0^{\text{th}}$ layer.
-            \item Each layer consists of $S_i$ gates.
+            $0^{\text{th}}$ layer.\pause
+            \item Each layer consists of $S_i$ gates.\pause
             \item Assume $S_i=2^{v_i}$ is the power of two
         \end{itemize}
     \end{frame}
@@ -137,76 +202,36 @@
     \begin{frame}{Concrete Circuit}
         \begin{figure}[H]
         \centering
-        \begin{tikzpicture}[
-            % Define styles for different parts of the circuit
-            input/.style={circle, ultra thick, draw=gray!20!black, fill=gray!20, minimum size=15pt, inner sep=0pt},
-            gate/.style={circle, ultra thick, draw=blue!80, fill=blue!20, minimum size=15pt, inner sep=0pt},
-            output/.style={circle, ultra thick, draw=red!80, fill=red!20, minimum size=15pt, inner sep=0pt},
-            conn/.style={-stealth, draw=black!70, shorten >=1pt, line width=1.5pt}
-        ]
+        \begin{tikzpicture}
 
         % --- Layer Labels ---
-        \node[font=\bfseries, align=center] at (0, 7.75) {\textcolor{blue!70!black}{Layer 3 (Inputs)} \\ $S_3=8,v_3=3$};
-        \node[font=\bfseries, align=center] at (2, 6.75) {\textcolor{blue!70!black}{Layer 2}\\ $S_2=4,v_2=2$};
-        \node[font=\bfseries, align=center] at (4, 7.75) {\textcolor{blue!70!black}{Layer 1} \\ $S_1=4,v_1=2$};
-        \node[font=\bfseries, align=center] at (6, 6.75) {\textcolor{blue!70!black}{Layer 0 (Output)} \\ $S_0=2, v_0=1$};
+        \node[gkr layer] at (0, 7.75) {Layer 3 (Inputs) \\ \textcolor{oc-gray-9}{$S_3=8,v_3=3$}};
+        \node[gkr layer] at (2, 6.75) {Layer 2\\ \textcolor{oc-gray-9}{$S_2=4,v_2=2$}};
+        \node[gkr layer] at (4, 7.75) {Layer 1 \\ \textcolor{oc-gray-9}{$S_1=4,v_1=2$}};
+        \node[gkr layer] at (6, 6.75) {Layer 0 (Output) \\ \textcolor{oc-gray-9}{$S_0=2, v_0=1$}};
 
-
-        % --- Layer 0: Input Nodes (8) ---
-        % We use a \foreach loop to create the 8 input nodes vertically
+        % --- Layer 3: Input Nodes (8) ---
         \foreach \i in {1,...,8} {
-            \node[input] (l0-\i) at (0, 7.5 - 0.7*\i) {$x_{\i}$};
+            \node[gkr input] (l0-\i) at (0, 7.5 - 0.7*\i) {$x_{\i}$};
         }
-
-        % --- Layer 1: Gate Nodes (4) ---
-        % Alternating between + and x gates
-        \node[gate] (l1-1) at (2, 5.25) {$+$};
-        \node[gate] (l1-2) at (2, 4.5) {$\times$};
-        \node[gate] (l1-3) at (2, 3.75) {$+$};
-        \node[gate] (l1-4) at (2, 3.0) {$\times$};
 
         % --- Layer 2: Gate Nodes (4) ---
-        \node[gate] (l2-1) at (4, 5.25) {$\times$};
-        \node[gate] (l2-2) at (4, 4.5) {$+$};
-        \node[gate] (l2-3) at (4, 3.75) {$\times$};
-        \node[gate] (l2-4) at (4, 3.0) {$+$};
+        \node[gkr gate] (l1-1) at (2, 5.25) {$+$};
+        \node[gkr gate] (l1-2) at (2, 4.5) {$\times$};
+        \node[gkr gate] (l1-3) at (2, 3.75) {$+$};
+        \node[gkr gate] (l1-4) at (2, 3.0) {$\times$};
 
-        % --- Layer 3: Output Nodes (2) ---
-        \node[output] (l3-1) at (6, 4.5) {$+$};
-        \node[output] (l3-2) at (6, 3.75) {$+$};
+        % --- Layer 1: Gate Nodes (4) ---
+        \node[gkr gate] (l2-1) at (4, 5.25) {$\times$};
+        \node[gkr gate] (l2-2) at (4, 4.5) {$+$};
+        \node[gkr gate] (l2-3) at (4, 3.75) {$\times$};
+        \node[gkr gate] (l2-4) at (4, 3.0) {$+$};
 
+        % --- Layer 0: Output Nodes (2) ---
+        \node[gkr output] (l3-1) at (6, 4.5) {$+$};
+        \node[gkr output] (l3-2) at (6, 3.75) {$+$};
 
-        % --- Connections ---
-
-        % Connections from Layer 0 to Layer 1
-        \foreach \i in {1,...,4} {
-            \pgfmathtruncatemacro{\j}{2 * \i - 1} % Calculate first source node index
-            \pgfmathtruncatemacro{\k}{2 * \i}     % Calculate second source node index
-            \draw[conn] (l0-\j) -- (l1-\i);
-            \draw[conn] (l0-\k) -- (l1-\i);
-        }
-
-        % Connections from Layer 1 to Layer 2
-        % This wiring pattern creates a mixing of the signals
-        \draw[conn] (l1-1) -- (l2-1);
-        \draw[conn] (l1-2) -- (l2-1);
-
-        \draw[conn] (l1-3) -- (l2-2);
-        \draw[conn] (l1-4) -- (l2-2);
-
-        \draw[conn] (l1-1) -- (l2-3);
-        \draw[conn] (l1-3) -- (l2-3);
-
-        \draw[conn] (l1-2) -- (l2-4);
-        \draw[conn] (l1-4) -- (l2-4);
-
-        % Connections from Layer 2 to Layer 3
-        \draw[conn] (l2-1) -- (l3-1);
-        \draw[conn] (l2-2) -- (l3-1);
-
-        \draw[conn] (l2-3) -- (l3-2);
-        \draw[conn] (l2-4) -- (l3-2);
-
+        \gkrwires
         \end{tikzpicture}
         \caption{Example layered arithmetical circuit $\mathtt{C}: \mathbb{F}^8 \to
         \mathbb{F}^2$ with $d=3$ layers.}
@@ -214,447 +239,77 @@
     \end{frame}
 
     \begin{frame}{Gates Encoding}
-        \textcolor{blue!70!black}{\textbf{Gates Encoding.}} Suppose $W_i: \{0,1\}^{v_i} \to \mathbb{F}$ is
+        \textcolor{oc-indigo-8}{\textbf{Gates Encoding.}} Suppose $W_i: \{0,1\}^{v_i} \to \mathbb{F}$ is
         structured so that it outputs the value of the $i$-th layer gate given the gate
         label. Assume MLE of $W_i$ is
         $\widetilde{W}_i: \mathbb{F}^{v_i} \to \mathbb{F}$.
 
         \begin{center}
-        \begin{tikzpicture}[
-            % Define styles for different parts of the circuit
-            input/.style={circle, ultra thick, draw=gray!20!black, fill=gray!20, minimum size=15pt, inner sep=0pt},
-            gate/.style={circle, ultra thick, draw=blue!80, fill=blue!20, minimum size=15pt, inner sep=0pt},
-            output/.style={circle, ultra thick, draw=red!80, fill=red!20, minimum size=15pt, inner sep=0pt},
-            conn/.style={-stealth, draw=black!70, shorten >=1pt, line width=1.5pt},
-            scale=0.8
-        ]
-
-        % --- Layer Labels ---
-        \node[font=\bfseries, align=center] at (0, 7.45) {\textcolor{blue!70!black}{Layer 3}};
-        \node[font=\bfseries, align=center] at (2, 7.45) {\textcolor{blue!70!black}{Layer 2}};
-        \node[font=\bfseries, align=center] at (4, 7.45) {\textcolor{blue!70!black}{Layer 1}};
-        \node[font=\bfseries, align=center] at (6, 7.45) {\textcolor{blue!70!black}{Layer 0}};
-
-        % --- Layer 0: Input Nodes (8) ---
-        % We use a \foreach loop to create the 8 input nodes vertically
-        \foreach \i in {1,...,8} {
-            \node[input] (l0-\i) at (0, 7.5 - 0.7*\i) {$\xval{\i}$};
-        }
-
-        % --- Layer 1: Gate Nodes (4) ---
-        % Alternating between + and x gates
-        \node[gate] (l1-1) at (2, 5.25) {$+$};
-
-        \node[gate] (l1-2) at (2, 4.5) {$\times$};
- 
-        \node[gate] (l1-3) at (2, 3.75) {$+$};
-
-        \node[gate] (l1-4) at (2, 3.0) {$\times$};
-
-        % --- Layer 2: Gate Nodes (4) ---
-        \node[gate] (l2-1) at (4, 5.25) {$\times$};
-        \node[gate] (l2-2) at (4, 4.5) {$+$};
-        \node[gate] (l2-3) at (4, 3.75) {$\times$};
-        \node[gate] (l2-4) at (4, 3.0) {$+$};
-
-        % --- Layer 3: Output Nodes (2) ---
-        \node[output] (l3-1) at (6, 4.5) {$+$};
-        \node[output] (l3-2) at (6, 3.75) {$+$};
-
-
-        % --- Connections ---
-
-        % Connections from Layer 0 to Layer 1
-        \foreach \i in {1,...,4} {
-            \pgfmathtruncatemacro{\j}{2 * \i - 1} % Calculate first source node index
-            \pgfmathtruncatemacro{\k}{2 * \i}     % Calculate second source node index
-            \draw[conn] (l0-\j) -- (l1-\i);
-            \draw[conn] (l0-\k) -- (l1-\i);
-        }
-
-        % Connections from Layer 1 to Layer 2
-        % This wiring pattern creates a mixing of the signals
-        \draw[conn] (l1-1) -- (l2-1);
-        \draw[conn] (l1-2) -- (l2-1);
-
-        \draw[conn] (l1-3) -- (l2-2);
-        \draw[conn] (l1-4) -- (l2-2);
-
-        \draw[conn] (l1-1) -- (l2-3);
-        \draw[conn] (l1-3) -- (l2-3);
-
-        \draw[conn] (l1-2) -- (l2-4);
-        \draw[conn] (l1-4) -- (l2-4);
-
-        % Connections from Layer 2 to Layer 3
-        \draw[conn] (l2-1) -- (l3-1);
-        \draw[conn] (l2-2) -- (l3-1);
-
-        \draw[conn] (l2-3) -- (l3-2);
-        \draw[conn] (l2-4) -- (l3-2);
-
-        % Values in gates, layer 2
-        \node at (2.5, 5.5) {\textcolor{red}{3}};
-        \node at (2.5, 4.75) {\textcolor{red}{0}};
-        \node at (2.5, 4.0) {\textcolor{red}{2}};
-        \node at (2.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 1
-        \node at (4.5, 5.5) {\textcolor{red}{0}};
-        \node at (4.5, 4.75) {\textcolor{red}{2}};
-        \node at (4.5, 4.0) {\textcolor{red}{6}};
-        \node at (4.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 0
-        \node at (6.5, 4.75) {\textcolor{red}{2}};
-        \node at (6.5, 4.0) {\textcolor{red}{6}};
-        \end{tikzpicture}
+            \scalebox{0.9}{\gkrvaluecircuit[gkr values/.style={visible on=<2->}]}
         \end{center}
         \vspace{-12.5px}
+        \uncover<3->{
         \begin{gather*}
             W_1(0, 0) = 0, \quad W_1(0, 1) = 2, \quad W_1(1, 0) = 6, \quad W_1(1, 1) = 0 \\
             \textbf{MLE Extension:} \quad \widetilde{W}_1(X_1,X_2) = 2(1-X_1)X_2 + 6X_1(1-X_2)
-        \end{gather*}
+        \end{gather*}}
     \end{frame}
 
     \begin{frame}{Wiring Encoding}
-        \textcolor{green!80!black}{\textbf{Wiring Predicates.}} $\mathsf{in}_{1,i}, \mathsf{in}_{2,i}:
+        \textcolor{oc-green-8}{\textbf{Wiring Predicates.}} $\mathsf{in}_{1,i}, \mathsf{in}_{2,i}:
         \{0,1\}^{v_i} \to \{0,1\}^{v_{i+1}}$ indicate which pairs of
         wiring are connected to the $i^{\text{th}}$ layer gate from the layer $i+1$.
 
         \begin{center}
-        \begin{tikzpicture}[
-            % Define styles for different parts of the circuit
-            input/.style={circle, ultra thick, draw=gray!20!black, fill=gray!20, minimum size=15pt, inner sep=0pt},
-            gate/.style={circle, ultra thick, draw=blue!80, fill=blue!20, minimum size=15pt, inner sep=0pt},
-            output/.style={circle, ultra thick, draw=red!80, fill=red!20, minimum size=15pt, inner sep=0pt},
-            conn/.style={-stealth, draw=black!70, shorten >=1pt, line width=1.5pt},
-            scale=0.8
-        ]
-
-        % --- Layer Labels ---
-        \node[font=\bfseries, align=center] at (0, 7.45) {\textcolor{blue!70!black}{Layer 3}};
-        \node[font=\bfseries, align=center] at (2, 7.45) {\textcolor{blue!70!black}{Layer 2}};
-        \node[font=\bfseries, align=center] at (4, 7.45) {\textcolor{blue!70!black}{Layer 1}};
-        \node[font=\bfseries, align=center] at (6, 7.45) {\textcolor{blue!70!black}{Layer 0}};
-
-        % --- Layer 0: Input Nodes (8) ---
-        % We use a \foreach loop to create the 8 input nodes vertically
-        \foreach \i in {1,...,8} {
-            \node[input] (l0-\i) at (0, 7.5 - 0.7*\i) {$\xval{\i}$};
-        }
-
-        % --- Layer 1: Gate Nodes (4) ---
-        % Alternating between + and x gates
-        \node[gate] (l1-1) at (2, 5.25) {$+$};
-
-        \node[gate] (l1-2) at (2, 4.5) {$\times$};
- 
-        \node[gate] (l1-3) at (2, 3.75) {$+$};
-
-        \node[gate] (l1-4) at (2, 3.0) {$\times$};
-
-        % --- Layer 2: Gate Nodes (4) ---
-        \node[gate] (l2-1) at (4, 5.25) {$\times$};
-        \node[gate] (l2-2) at (4, 4.5) {$+$};
-        \node[gate] (l2-3) at (4, 3.75) {$\times$};
-        \node[gate] (l2-4) at (4, 3.0) {$+$};
-
-        % --- Layer 3: Output Nodes (2) ---
-        \node[output] (l3-1) at (6, 4.5) {$+$};
-        \node[output] (l3-2) at (6, 3.75) {$+$};
-
-
-        % --- Connections ---
-
-        % Connections from Layer 0 to Layer 1
-        \foreach \i in {1,...,4} {
-            \pgfmathtruncatemacro{\j}{2 * \i - 1} % Calculate first source node index
-            \pgfmathtruncatemacro{\k}{2 * \i}     % Calculate second source node index
-            \draw[conn] (l0-\j) -- (l1-\i);
-            \draw[conn] (l0-\k) -- (l1-\i);
-        }
-
-        % Connections from Layer 1 to Layer 2
-        % This wiring pattern creates a mixing of the signals
-        \draw[conn] (l1-1) -- (l2-1);
-        \draw[conn] (l1-2) -- (l2-1);
-
-        \draw[conn] (l1-3) -- (l2-2);
-        \draw[conn] (l1-4) -- (l2-2);
-
-        \draw[conn] (l1-1) -- (l2-3);
-        \draw[conn] (l1-3) -- (l2-3);
-
-        \draw[conn] (l1-2) -- (l2-4);
-        \draw[conn] (l1-4) -- (l2-4);
-
-        % Connections from Layer 2 to Layer 3
-        \draw[conn] (l2-1) -- (l3-1);
-        \draw[conn] (l2-2) -- (l3-1);
-
-        \draw[conn] (l2-3) -- (l3-2);
-        \draw[conn] (l2-4) -- (l3-2);
-
-        % Values in gates, layer 2
-        \node at (2.5, 5.5) {\textcolor{red}{3}};
-        \node at (2.5, 4.75) {\textcolor{red}{0}};
-        \node at (2.5, 4.0) {\textcolor{red}{2}};
-        \node at (2.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 1
-        \node at (4.5, 5.5) {\textcolor{red}{0}};
-        \node at (4.5, 4.75) {\textcolor{red}{2}};
-        \node at (4.5, 4.0) {\textcolor{red}{6}};
-        \node at (4.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 0
-        \node at (6.5, 4.75) {\textcolor{red}{2}};
-        \node at (6.5, 4.0) {\textcolor{red}{6}};
-        \end{tikzpicture}
-        \end{center}
-    \end{frame}
-
-    \begin{frame}{Wiring Encoding}
-        \textcolor{green!80!black}{\textbf{Wiring Predicates.}} $\mathsf{in}_{1,i}, \mathsf{in}_{2,i}:
-        \{0,1\}^{v_i} \to \{0,1\}^{v_{i+1}}$ indicate which pairs of
-        wiring are connected to the $i^{\text{th}}$ layer gate from the layer $i+1$.
-
-        \begin{center}
-        \begin{tikzpicture}[
-            % Define styles for different parts of the circuit
-            input/.style={circle, ultra thick, draw=gray!20!black, fill=gray!20, minimum size=15pt, inner sep=0pt},
-            gate/.style={circle, ultra thick, draw=blue!80, fill=blue!20, minimum size=15pt, inner sep=0pt},
-            output/.style={circle, ultra thick, draw=red!80, fill=red!20, minimum size=15pt, inner sep=0pt},
-            conn/.style={-stealth, draw=black!70, shorten >=1pt, line width=1.5pt},
-            scale=0.8
-        ]
-
-        % --- Layer Labels ---
-        \node[font=\bfseries, align=center] at (0, 7.45) {\textcolor{blue!70!black}{Layer 3}};
-        \node[font=\bfseries, align=center] at (2, 7.45) {\textcolor{blue!70!black}{Layer 2}};
-        \node[font=\bfseries, align=center] at (4, 7.45) {\textcolor{blue!70!black}{Layer 1}};
-        \node[font=\bfseries, align=center] at (6, 7.45) {\textcolor{blue!70!black}{Layer 0}};
-
-        % --- Layer 0: Input Nodes (8) ---
-        % We use a \foreach loop to create the 8 input nodes vertically
-        \node[input] (l0-1) at (0, 7.5 - 0.7*1) {$\xval{1}$};
-        \node[input] (l0-2) at (0, 7.5 - 0.7*2) {$\xval{2}$};
-        \node[input] (l0-3) at (0, 7.5 - 0.7*3) {$\xval{3}$};
-        \node[input] (l0-4) at (0, 7.5 - 0.7*4) {$\xval{4}$};
-        \node[input, draw=green!80!black] (l0-5) at (0, 7.5 - 0.7*5) {$\xval{5}$};
-        \node[input, draw=green!80!black] (l0-6) at (0, 7.5 - 0.7*6) {$\xval{6}$};
-        \node[input] (l0-7) at (0, 7.5 - 0.7*7) {$\xval{7}$};
-        \node[input] (l0-8) at (0, 7.5 - 0.7*8) {$\xval{8}$};
-        % \foreach \i in {1,...,8} {
-        %     \node[input] (l0-\i) at (0, 7.5 - 0.7*\i) {$\xval{\i}$};
-        % }
-
-        % --- Layer 1: Gate Nodes (4) ---
-        % Alternating between + and x gates
-        \node[gate] (l1-1) at (2, 5.25) {$+$};
-
-        \node[gate] (l1-2) at (2, 4.5) {$\times$};
- 
-        \node[gate, draw=green!80!black] (l1-3) at (2, 3.75) {$+$};
-
-        \node[gate] (l1-4) at (2, 3.0) {$\times$};
-
-        % --- Layer 2: Gate Nodes (4) ---
-        \node[gate] (l2-1) at (4, 5.25) {$\times$};
-        \node[gate] (l2-2) at (4, 4.5) {$+$};
-        \node[gate] (l2-3) at (4, 3.75) {$\times$};
-        \node[gate] (l2-4) at (4, 3.0) {$+$};
-
-        % --- Layer 3: Output Nodes (2) ---
-        \node[output] (l3-1) at (6, 4.5) {$+$};
-        \node[output] (l3-2) at (6, 3.75) {$+$};
-
-
-        % --- Connections ---
-
-        % Connections from Layer 0 to Layer 1
-        \foreach \i in {1,...,4} {
-            \pgfmathtruncatemacro{\j}{2 * \i - 1} % Calculate first source node index
-            \pgfmathtruncatemacro{\k}{2 * \i}     % Calculate second source node index
-            \draw[conn] (l0-\j) -- (l1-\i);
-            \draw[conn] (l0-\k) -- (l1-\i);
-        }
-
-        % Connections from Layer 1 to Layer 2
-        % This wiring pattern creates a mixing of the signals
-        \draw[conn] (l1-1) -- (l2-1);
-        \draw[conn] (l1-2) -- (l2-1);
-
-        \draw[conn] (l1-3) -- (l2-2);
-        \draw[conn] (l1-4) -- (l2-2);
-
-        \draw[conn] (l1-1) -- (l2-3);
-        \draw[conn] (l1-3) -- (l2-3);
-
-        \draw[conn] (l1-2) -- (l2-4);
-        \draw[conn] (l1-4) -- (l2-4);
-
-        % Connections from Layer 2 to Layer 3
-        \draw[conn] (l2-1) -- (l3-1);
-        \draw[conn] (l2-2) -- (l3-1);
-
-        \draw[conn] (l2-3) -- (l3-2);
-        \draw[conn] (l2-4) -- (l3-2);
-
-        % Values in gates, layer 2
-        \node at (2.5, 5.5) {\textcolor{red}{3}};
-        \node at (2.5, 4.75) {\textcolor{red}{0}};
-        \node at (2.5, 4.0) {\textcolor{red}{2}};
-        \node at (2.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 1
-        \node at (4.5, 5.5) {\textcolor{red}{0}};
-        \node at (4.5, 4.75) {\textcolor{red}{2}};
-        \node at (4.5, 4.0) {\textcolor{red}{6}};
-        \node at (4.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 0
-        \node at (6.5, 4.75) {\textcolor{red}{2}};
-        \node at (6.5, 4.0) {\textcolor{red}{6}};
-        \end{tikzpicture}
+            \gkrvaluecircuit[hlB/.style={onslide=<2->{draw=oc-green-7, fill=oc-green-1}}]
         \end{center}
         \vspace{-12.5px}
+        \uncover<2->{
         \begin{gather*}
-            \mathsf{in}_{1,2}(\textcolor{green!80!black}{1,0}) = \textcolor{green!80!black}{(1,0,1)}, \quad \mathsf{in}_{2,2}(\textcolor{green!80!black}{1,0}) = \textcolor{green!80!black}{(1,1,0)}.
-        \end{gather*}
+            \mathsf{in}_{1,2}(\textcolor{oc-green-7}{1,0}) = \textcolor{oc-green-7}{(1,0,0)}, \quad \mathsf{in}_{2,2}(\textcolor{oc-green-7}{1,0}) = \textcolor{oc-green-7}{(1,0,1)}.
+        \end{gather*}}
     \end{frame}
 
     \begin{frame}{Operations Encoding}
-        \textcolor{magenta}{\textbf{Operations Encodings.}} $\mathsf{add},\mathsf{mul}:
-        \{0,1\}^{v_i+2v_{i+1}} \to \{0,1\}$: 
+        \textcolor{oc-pink-7}{\textbf{Operations Encodings.}} $\mathsf{add}_i,\mathsf{mul}_i:
+        \{0,1\}^{v_i+2v_{i+1}} \to \{0,1\}$:
         \vspace{-10px}
         \begin{equation*}
-            \mathsf{add}(a,b,c) = 1 \iff (b,c)=(\mathsf{in}_{1,i}(a),
+            \mathsf{add}_i(a,b,c) = 1 \iff (b,c)=(\mathsf{in}_{1,i}(a),
         \mathsf{in}_{2,i}(a)) \; \text{and $a$ is addition gate}
         \end{equation*}
 
+        \vspace{-5px}
         \begin{center}
-        \begin{tikzpicture}[
-            % Define styles for different parts of the circuit
-            input/.style={circle, ultra thick, draw=gray!20!black, fill=gray!20, minimum size=15pt, inner sep=0pt},
-            gate/.style={circle, ultra thick, draw=blue!80, fill=blue!20, minimum size=15pt, inner sep=0pt},
-            output/.style={circle, ultra thick, draw=red!80, fill=red!20, minimum size=15pt, inner sep=0pt},
-            conn/.style={-stealth, draw=black!70, shorten >=1pt, line width=1.5pt},
-            scale=0.8
-        ]
-
-        % --- Layer Labels ---
-        \node[font=\bfseries, align=center] at (0, 7.45) {\textcolor{blue!70!black}{Layer 3}};
-        \node[font=\bfseries, align=center] at (2, 7.45) {\textcolor{blue!70!black}{Layer 2}};
-        \node[font=\bfseries, align=center] at (4, 7.45) {\textcolor{blue!70!black}{Layer 1}};
-        \node[font=\bfseries, align=center] at (6, 7.45) {\textcolor{blue!70!black}{Layer 0}};
-
-        % --- Layer 0: Input Nodes (8) ---
-        % We use a \foreach loop to create the 8 input nodes vertically
-        \node[input, draw=magenta!80!black] (l0-1) at (0, 7.5 - 0.7*1) {$\xval{1}$};
-        \node[input, draw=magenta!80!black] (l0-2) at (0, 7.5 - 0.7*2) {$\xval{2}$};
-        \node[input] (l0-3) at (0, 7.5 - 0.7*3) {$\xval{3}$};
-        \node[input] (l0-4) at (0, 7.5 - 0.7*4) {$\xval{4}$};
-        \node[input, draw=green!60!black] (l0-5) at (0, 7.5 - 0.7*5) {$\xval{5}$};
-        \node[input, draw=green!60!black] (l0-6) at (0, 7.5 - 0.7*6) {$\xval{6}$};
-        \node[input] (l0-7) at (0, 7.5 - 0.7*7) {$\xval{7}$};
-        \node[input] (l0-8) at (0, 7.5 - 0.7*8) {$\xval{8}$};
-        % \foreach \i in {1,...,8} {
-        %     \node[input] (l0-\i) at (0, 7.5 - 0.7*\i) {$\xval{\i}$};
-        % }
-
-        % --- Layer 1: Gate Nodes (4) ---
-        % Alternating between + and x gates
-        \node[gate, draw=magenta] (l1-1) at (2, 5.25) {$+$};
-
-        \node[gate] (l1-2) at (2, 4.5) {$\times$};
- 
-        \node[gate, draw=green!80!black] (l1-3) at (2, 3.75) {$+$};
-
-        \node[gate] (l1-4) at (2, 3.0) {$\times$};
-
-        % --- Layer 2: Gate Nodes (4) ---
-        \node[gate] (l2-1) at (4, 5.25) {$\times$};
-        \node[gate] (l2-2) at (4, 4.5) {$+$};
-        \node[gate] (l2-3) at (4, 3.75) {$\times$};
-        \node[gate] (l2-4) at (4, 3.0) {$+$};
-
-        % --- Layer 3: Output Nodes (2) ---
-        \node[output] (l3-1) at (6, 4.5) {$+$};
-        \node[output] (l3-2) at (6, 3.75) {$+$};
-
-
-        % --- Connections ---
-
-        % Connections from Layer 0 to Layer 1
-        \foreach \i in {1,...,4} {
-            \pgfmathtruncatemacro{\j}{2 * \i - 1} % Calculate first source node index
-            \pgfmathtruncatemacro{\k}{2 * \i}     % Calculate second source node index
-            \draw[conn] (l0-\j) -- (l1-\i);
-            \draw[conn] (l0-\k) -- (l1-\i);
-        }
-
-        % Connections from Layer 1 to Layer 2
-        % This wiring pattern creates a mixing of the signals
-        \draw[conn] (l1-1) -- (l2-1);
-        \draw[conn] (l1-2) -- (l2-1);
-
-        \draw[conn] (l1-3) -- (l2-2);
-        \draw[conn] (l1-4) -- (l2-2);
-
-        \draw[conn] (l1-1) -- (l2-3);
-        \draw[conn] (l1-3) -- (l2-3);
-
-        \draw[conn] (l1-2) -- (l2-4);
-        \draw[conn] (l1-4) -- (l2-4);
-
-        % Connections from Layer 2 to Layer 3
-        \draw[conn] (l2-1) -- (l3-1);
-        \draw[conn] (l2-2) -- (l3-1);
-
-        \draw[conn] (l2-3) -- (l3-2);
-        \draw[conn] (l2-4) -- (l3-2);
-
-        % Values in gates, layer 2
-        \node at (2.5, 5.5) {\textcolor{red}{3}};
-        \node at (2.5, 4.75) {\textcolor{red}{0}};
-        \node at (2.5, 4.0) {\textcolor{red}{2}};
-        \node at (2.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 1
-        \node at (4.5, 5.5) {\textcolor{red}{0}};
-        \node at (4.5, 4.75) {\textcolor{red}{2}};
-        \node at (4.5, 4.0) {\textcolor{red}{6}};
-        \node at (4.5, 3.25) {\textcolor{red}{0}};
-
-        % Values in gates, layer 0
-        \node at (6.5, 4.75) {\textcolor{red}{2}};
-        \node at (6.5, 4.0) {\textcolor{red}{6}};
-        \end{tikzpicture}
+            \gkrvaluecircuit[scale=0.9,
+                hlA/.style={onslide=<2->{draw=oc-pink-7, fill=oc-pink-1}},
+                hlB/.style={onslide=<3->{draw=oc-green-7, fill=oc-green-1}}]
         \end{center}
-        \vspace{-12.5px}
+        \vspace{-17.5px}
+        {\small
         \begin{gather*}
-        \mathsf{add}_2 \; \text{is non-zero}: (\textcolor{magenta}{(0,0)},\textcolor{magenta!80!black}{(0,0,0)},\textcolor{magenta!80!black}{(0,0,1)}), 
+        \mathsf{add}_2 \; \text{is non-zero}: \uncover<2->{(\textcolor{oc-pink-7}{(0,0)},\textcolor{oc-pink-7}{(0,0,0)},\textcolor{oc-pink-7}{(0,0,1)}),}
         \;
-        (\textcolor{green!80!black}{(1,0)},\textcolor{green!60!black}{(1,0,0)},\textcolor{green!60!black}{(1,0,1)}). \\
-        \widetilde{\mathsf{add}}_2(\mathbf{X},\mathbf{Y},\mathbf{Z}) = (1-X_1)(1-X_2)(1-Y_1)(1-Y_2)(1-Y_3)(1-Z_1)(1-Z_2)Z_3
-        \end{gather*}
+        \uncover<3->{(\textcolor{oc-green-7}{(1,0)},\textcolor{oc-green-7}{(1,0,0)},\textcolor{oc-green-7}{(1,0,1)}).} \\
+        \uncover<4->{\widetilde{\mathsf{add}}_2(\mathbf{X},\mathbf{Y},\mathbf{Z}) = \textcolor{oc-pink-7}{(1-X_1)(1-X_2)(1-Y_1)(1-Y_2)(1-Y_3)(1-Z_1)(1-Z_2)Z_3} \\
+        + \textcolor{oc-green-7}{X_1(1-X_2)Y_1(1-Y_2)(1-Y_3)Z_1(1-Z_2)Z_3}}
+        \end{gather*}}
     \end{frame}
 
     \begin{frame}{Reducing to Sum-Check}
-        \begin{block}{Remark}
+        \begin{remark}
             Note that the operations encodings $\mathsf{add}_i$ and
             $\mathsf{mul}_i$ (and thus MLEs $\widetilde{\mathsf{add}}_i$ and
             $\widetilde{\mathsf{mul}}_i$) do not depend on the solution witness
             $\{\mathbf{x}^{\langle i \rangle}\}_{i \in [d+1]}$, while the gates
             encodings $W_i$ do depend.
-        \end{block}
+        \end{remark}
+        \pause
 
         \textbf{Idea:} Prover sends the claimed value of $\widetilde{W}_0$ (say,
         $D: \{0,1\}^{v_0} \to \mathbb{F}$), then reduce the claim to the next
         around with $\widetilde{W}_1$ (in general, prove the reducing from
-        $\widetilde{W}_i$ to $\widetilde{W}_{i+1}$). 
+        $\widetilde{W}_i$ to $\widetilde{W}_{i+1}$).
         \begin{figure}
             \includegraphics[width=0.6\textwidth]{images/lecture_16/where.png}
         \end{figure}
@@ -668,21 +323,23 @@
         \begin{lemma}
         The following statement holds:
         \begin{align*}
-            \widetilde{W}_i(\mathbf{z}) = \sum_{\boldsymbol{b},\boldsymbol{c} \in \{0,1\}^{v_{i+1}}} &\Big[ \widetilde{\mathsf{add}}_i(\mathbf{z},\boldsymbol{a},\boldsymbol{b})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) \\
+            \widetilde{W}_i(\mathbf{z}) = \sum_{\boldsymbol{b},\boldsymbol{c} \in \{0,1\}^{v_{i+1}}} &\Big[ \widetilde{\mathsf{add}}_i(\mathbf{z},\boldsymbol{b},\boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) \\
             &+ \widetilde{\mathsf{mul}}_i(\mathbf{z},\boldsymbol{b},\boldsymbol{c})\widetilde{W}_{i+1}(\boldsymbol{b})\widetilde{W}_{i+1}(\boldsymbol{c})\Big].
         \end{align*}
         \end{lemma}
     \end{frame}
 
     \begin{frame}{Why Lemma works?}
-        Both sides are multilinear polynomials, thus it suffices to check the equality only over the 
+        Both sides are multilinear polynomials, thus it suffices to check the equality only over the
         boolean hypercube $\mathbf{z} \in \{0,1\}^{v_i}$.
+        \pause
 
         Fix $\mathbf{z}=\mathbf{z}_0 \in \{0,1\}^{v_i}$. Without loss of generality, assume
         $\mathbf{z}_0$ is the addition gate. This way, we reduced the check to:
         \begin{equation*}
-            \widetilde{W}_i(\mathbf{z}_0) = \sum_{\boldsymbol{b},\boldsymbol{c} \in \{0,1\}^{v_{i+1}}} \widetilde{\mathsf{add}}_i(\mathbf{z},\boldsymbol{a},\boldsymbol{b})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c}))
+            \widetilde{W}_i(\mathbf{z}_0) = \sum_{\boldsymbol{b},\boldsymbol{c} \in \{0,1\}^{v_{i+1}}} \widetilde{\mathsf{add}}_i(\mathbf{z}_0,\boldsymbol{b},\boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c}))
         \end{equation*}
+        \pause
 
          According to $\widetilde{\mathsf{add}}$ definition, the only term that is not
         zero in the sum is for
@@ -691,13 +348,15 @@
         \begin{equation*}
             \widetilde{W}_i(\mathbf{z}_0) = \widetilde{W}_{i+1}(\mathsf{in}_{1,i}(\mathbf{z}_0)) + \widetilde{W}_{i+1}(\mathsf{in}_{2,i}(\mathbf{z}_0))
         \end{equation*}
+        \pause
 
-        \begin{alertblock}{Key Procedure}
-            Apply the Sum-Check protocol on the function 
+        \vspace{-5px}
+        \begin{block}{Key Procedure}
+            Apply the Sum-Check protocol on the function
             \begin{equation*}
-                \small f_i(\boldsymbol{b}, \boldsymbol{c}; \mathbf{r}_i) = \widetilde{\mathsf{add}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) + \widetilde{\mathsf{mul}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})\widetilde{W}_{i+1}(\boldsymbol{b})\widetilde{W}_{i+1}(\boldsymbol{c}).
+                \footnotesize f_i(\boldsymbol{b}, \boldsymbol{c}; \mathbf{r}_i) = \widetilde{\mathsf{add}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) + \widetilde{\mathsf{mul}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})\widetilde{W}_{i+1}(\boldsymbol{b})\widetilde{W}_{i+1}(\boldsymbol{c}).
             \end{equation*}
-        \end{alertblock}
+        \end{block}
     \end{frame}
 
     \begin{frame}{Caveat with Sum-Check}
@@ -705,14 +364,16 @@
 
         In fact, he does not need to until the last round, where he needs to
         call an oracle access $\mathcal{O}^{\; f_i}$ at $(\boldsymbol{b}^*,
-        \boldsymbol{c}^*) \leftarrowS \mathbb{F}^{2v_{i+1}}$. 
-        
+        \boldsymbol{c}^*) \leftarrowS \mathbb{F}^{2v_{i+1}}$.
+        \pause
+
         This requires evaluating:
         \begin{itemize}
-            \item $\widetilde{\mathsf{add}}_i(\mathbf{r}_i,\boldsymbol{b}^*, \boldsymbol{c}^*)$ --- can be done by $\mathcal{V}$.
-            \item $\widetilde{\mathsf{mul}}_i(\mathbf{r}_i,\boldsymbol{b}^*, \boldsymbol{c}^*)$ --- can be done by $\mathcal{V}$.
+            \item $\widetilde{\mathsf{add}}_i(\mathbf{r}_i,\boldsymbol{b}^*, \boldsymbol{c}^*)$ --- can be done by $\mathcal{V}$.\pause
+            \item $\widetilde{\mathsf{mul}}_i(\mathbf{r}_i,\boldsymbol{b}^*, \boldsymbol{c}^*)$ --- can be done by $\mathcal{V}$.\pause
             \item $\widetilde{W}_{i+1}(\boldsymbol{b}^*)$ and $\widetilde{W}_{i+1}(\boldsymbol{c}^*)$ --- $\mathcal{V}$ needs $\mathcal{P}$'s assistance.
         \end{itemize}
+        \pause
 
         $\mathcal{P}$ sends two values $z_b =
         \widetilde{W}_{i+1}(\boldsymbol{b}^*)$ and $z_c =
@@ -722,88 +383,93 @@
     \end{frame}
 
     \begin{frame}{Line Restriction Trick}
-        \begin{block}{Proposition}
+        \begin{proposition}
             Let $\ell: \mathbb{F} \to \mathbb{F}^{v_{i+1}}$ be the line such that
             $\ell(0)=\boldsymbol{b}^*$ and $\ell(1)=\boldsymbol{c}^*$. Then, the prover
-            $\mathcal{P}$ sends the univariate polynomial $q(X)$ claimed to be equal to
+            $\mathcal{P}$ sends the univariate polynomial $q(T)$ claimed to be equal to
             $\widetilde{W}_{i+1} \circ \ell$ --- the restriction of
             $\widetilde{W}_{i+1}$ to the line $\ell$. $\mathcal{V}$ checks whether
-            indeed $\ell(0)=z_b$ and $\ell(1)=z_c$, then chooses a random point
-            $\mathbf{r}^* \xleftarrow{R} \mathbb{F}^{v_{i+1}}$ and checks whether
-            $\widetilde{W}_{i+1}(\ell(\mathbf{r}^*)) = q(\mathbf{r}^*)$.
-        \end{block}
+            indeed $q(0)=z_b$ and $q(1)=z_c$, then chooses a random point
+            $r^* \leftarrowS \mathbb{F}$ and checks whether
+            $\widetilde{W}_{i+1}(\ell(r^*)) = q(r^*)$.
+        \end{proposition}
+        \pause
 
         This way, the interaction ends with new claim about next(previous) layer
         $\widetilde{W}_{i+1}(\mathbf{r}_{i+1})$ with
-        $\mathbf{r}_{i+1}=\ell(\mathbf{r}^*)$.
+        $\mathbf{r}_{i+1}=\ell(r^*)$.
+        \pause
 
         In the last round, $\mathcal{V}$ computes
         $\widetilde{W}_d(\mathbf{r}_d)$ on his own.
     \end{frame}
 
     \begin{frame}{Protocol Summary}
+        \begin{proposition}[GKR Protocol]
+        \small
         \begin{itemize}
             \item $\mathcal{P}$ sends function $D: \{0,1\}^{v_0} \to
-            \mathbb{F}$, claimed to equal $W_0$.
+            \mathbb{F}$, claimed to equal $W_0$.\pause
             \item $\mathcal{V}$ picks random $\mathbf{r}_0 \leftarrowS
-            \mathbb{F}^{v_0}$ and lets $m_0 \gets \widetilde{D}(\mathbf{r}_0)$.
+            \mathbb{F}^{v_0}$ and lets $m_0 \gets \widetilde{D}(\mathbf{r}_0)$.\pause
             \item For each round $i \in [d]$ do the following:
             \begin{itemize}
                 \item Define the $2v_{i+1}$-variate polynomial:
                 \vspace{-5px}
                 \begin{equation*}
-                    \small f_i(\boldsymbol{b}, \boldsymbol{c}; \mathbf{r}_i) = \widetilde{\mathsf{add}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) + \widetilde{\mathsf{mul}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})\widetilde{W}_{i+1}(\boldsymbol{b})\widetilde{W}_{i+1}(\boldsymbol{c}).
+                    \footnotesize f_i(\boldsymbol{b}, \boldsymbol{c}; \mathbf{r}_i) = \widetilde{\mathsf{add}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})(\widetilde{W}_{i+1}(\boldsymbol{b}) + \widetilde{W}_{i+1}(\boldsymbol{c})) + \widetilde{\mathsf{mul}}_i(\mathbf{r}_i, \boldsymbol{b}, \boldsymbol{c})\widetilde{W}_{i+1}(\boldsymbol{b})\widetilde{W}_{i+1}(\boldsymbol{c}).
                 \end{equation*}
                 \item $\mathcal{P}$ claims $\sum_{\boldsymbol{b},\boldsymbol{c}
                 \in \{0,1\}^{v_{i+1}}} f_i(\boldsymbol{b},\boldsymbol{c};
-                \mathbf{r}_i) = m_i$.
+                \mathbf{r}_i) = m_i$.\pause
                 \item $\mathcal{P}$ and $\mathcal{V}$ interact using Sum-Check
                 protocol until the last round when $\mathcal{V}$ needs to
                 evalutate $f_i$ at $\boldsymbol{b}^*, \boldsymbol{c}^*
-                \leftarrowS \mathbb{F}^{v_{i+1}}$.
+                \leftarrowS \mathbb{F}^{v_{i+1}}$.\pause
                 \item $\mathcal{P}$ and $\mathcal{V}$ compute the line $\ell:
                 \mathbb{F} \to \mathbb{F}^{v_{i+1}}$ s.t.
                 $\ell(0)=\boldsymbol{b}^*$ and $\ell(1)=\boldsymbol{c}^*$.
                 \item $\mathcal{P}$ sends $q$ claimed to equal
-                $\widetilde{W}_{i+1} \circ \ell$.
+                $\widetilde{W}_{i+1} \circ \ell$.\pause
                 \item $\mathcal{V}$ validates the last round of sum-check using
-                $\ell(0)$ and $\ell(1)$, then chooses $\mathbf{r}^*
-                \leftarrowS \mathbb{F}^{v_{i+1}}$ and sets $\mathbf{r}_{i+1}
-                \gets \ell(\mathbf{r}^*)$ and $m_{i+1} \gets
-                q(\mathbf{r}_{i+1})$.
-                \item The check reduces to verifying $\widetilde{W}_{i+1}(\mathbf{r}_{i+1})=m_{i+1}$.
+                $q(0)$ and $q(1)$, then chooses $r^*
+                \leftarrowS \mathbb{F}$ and sets $\mathbf{r}_{i+1}
+                \gets \ell(r^*)$ and $m_{i+1} \gets
+                q(r^*)$.
+                \item The check reduces to verifying $\widetilde{W}_{i+1}(\mathbf{r}_{i+1})=m_{i+1}$.\pause
             \end{itemize}
             \item $\mathcal{V}$ directly checks whether
             $m_d=\widetilde{W}_d(\mathbf{r}_d)$.
         \end{itemize}
+        \end{proposition}
     \end{frame}
 
     \section{Grand Product Check}
 
     \begin{frame}{Grand Product Relation}
         \begin{equation*}
-        \mathcal{R}_{GP} = \big\{ (p \in \mathbb{F}, \mathbf{v} \in \mathbb{F}^m)\colon p = \prod_{i=0}^m v_i \big\} \label{grand-product-relation}
+        \mathcal{R}_{GP} = \big\{ (p \in \mathbb{F}, \mathbf{v} \in \mathbb{F}^m)\colon p = \prod_{i \in [m]} v_i \big\}
         \end{equation*}
         Assume that $m$ is a power of $2$.
+        \pause
 
-        
-        
-        Let $\widetilde{v}$ be an MLE of $\mathbf{v}$, by viewing $\mathbf{v}$ as a 
+        Let $\widetilde{v}$ be an MLE of $\mathbf{v}$, by viewing $\mathbf{v}$ as a
         function mapping $\{0,1\}^{\log m} \rightarrow \mathbb{F}$.
     \end{frame}
 
     \begin{frame}{Main Lemma}
         \begin{lemma}
-        A scalar $p$ and a vector $\mathbf{v}$ satisfies the relation $\mathcal{R}_{GP}$ if and only if there exists a 
+        A scalar $p$ and a vector $\mathbf{v}$ satisfies the relation $\mathcal{R}_{GP}$ if and only if there exists a
         multilinear polynomial $f$ in $\log m + 1$ variables such that $f(1,\dots,1, 0) = p$ and $\forall x \in \{0,1\}^{\log m}$
         the following hold:
         \begin{gather*}
         f(0, x) = v(x)\\
         f(1,x) = f(x, 0) \cdot f(x, 1)
         \end{gather*}
+        \pause
         Such polynomial $f$ has the following construction: \begin{itemize}
             \item $f(1,\dots,1) = 0$
-            \item For all $\ell \in [\log m]$ and $x \in \{0,1\}^{\log m - \ell}$: \\ 
+            \item For all $\ell \in [\log m]$ and $x \in \{0,1\}^{\log m - \ell}$: \\
             \vspace{-0.8em}
             \begin{equation*}
                 f(1^\ell, 0, x) = \prod_{y \in \{0,1\}^\ell}v(x,y)
@@ -812,40 +478,34 @@
         \end{lemma}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Grand Product: Example}
         \begin{example}
             Let $m=4$ ($\log m=2$), $\mathbf{v} = \{1, 2, 3, 4\}$, consequently $p = 1\times2\times3\times4=24$, then:
-            \vspace{-5px}
-            
             \begin{align*}
             v(x_1, x_2)& = 1 + 2x_1 + x_2\\
             v(x_1,x_2)&: \quad v(0,0)=1,\; v(0,1)=2,\; v(1,0)=3,\; v(1,1)=4.
-            \vspace{-5px}
             \end{align*}
-            
+            \pause
             Now, we define $f$ as follows:
             \vspace{-5px}
             \begin{equation*}
                 f(0,0,0)= 1,\; f(0,0,1)=2,\; f(0,1,0)=3,\; f(0,1,1)=4,
-                \vspace{-5px}
             \end{equation*}
-            
+            \pause
             and:
             \vspace{-10px}
             \begin{align*}
-            f(1,0,0)&= f(0,0,0) \times f(0,0,1) = 1 \times 2 = 2,\\ 
-            f(1,0,1)&= f(0,1,0) \times f(0,1,1) = 3 \times 4 = 12,\\ 
-            f(1,1,0)&= f(1,0,0) \times f(1,0,1) = 2 \times 12 = 24 = p,\\ 
+            f(1,0,0)&= f(0,0,0) \times f(0,0,1) = 1 \times 2 = 2,\\
+            f(1,0,1)&= f(0,1,0) \times f(0,1,1) = 3 \times 4 = 12,\\
+            f(1,1,0)&= f(1,0,0) \times f(1,0,1) = 2 \times 12 = 24 = p,\\
             f(1,1,1)&= 0.
-            \vspace{-5px}
             \end{align*}
         \end{example}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Grand Product: Binary Tree}
         \begin{example}
             \begin{center}
-                \scalebox{1.0}{
                 \begin{tikzpicture}[
                     level 1/.style={level distance=2cm, sibling distance=4cm},
                     level 2/.style={level distance=2cm, sibling distance=2cm},
@@ -873,7 +533,6 @@
                         }
                     };
                 \end{tikzpicture}
-                }
             \end{center}
             \vspace{-15px}
         \end{example}
@@ -881,33 +540,33 @@
 
     \begin{frame}{Where Is Sum-Check?}
         \centering
-        % Adjust width or height as needed:
         \includegraphics[width=1\linewidth]{./images/lecture_17/where-is-everyone.png}
-        \label{fig:meme}
     \end{frame}
 
     \begin{frame}{Zero-Check}
         \begin{equation*}
             \forall x \in \{0,1\}^{\log m}\colon f(1,x) = f(x, 0) \cdot f(x, 1)
         \end{equation*}
-        
+
         \vspace{-10px}
         \begin{equation*}
             \forall x \in \{0,1\}^{\log m}\colon f(1,x) - f(x, 0) \cdot f(x, 1) = 0
         \end{equation*}
-        
+        \pause
+
         One can use the sum-check protocol to prove the evaluation of $g$ that is referred to a MLE of $f(1,x) - f(x, 0) \cdot f(x, 1)$:
         \begin{equation*}
             g(t) = \sum_{x \in \{0,1\}^{\log m}} \widetilde{\text{eq}}(t,x) \cdot (f(1,x) - f(x, 0) \cdot f(x, 1))
         \end{equation*}
-        
-        By the Schwartz–Zippel lemma, for random $\tau \in \mathbb{F}^{\log m}$,
-        $g(\tau) = 0$ if and only if $g = 0$, except for a soundness error of $\frac{\log m}{|\mathbb{F}|}$.
+        \pause
+
+        By the Schwartz–Zippel lemma, for random $\tau \leftarrowS \mathbb{F}^{\log m}$,
+        $g(\tau) = 0$ if and only if $g = 0$, except for a soundness error of $\frac{\log m}{\#\mathbb{F}}$.
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Reduction to Three Checks}
         Thus, to prove the existence of $f$ and hence the grand product relationship, it suffices
-        to prove, for some verifier selected random $\tau, \gamma \in \mathbb{F}^\ell$, that:
+        to prove, for some verifier selected random $\tau, \gamma \leftarrowS \mathbb{F}^{\log m}$, that:
         \begin{gather}
         \label{eq:grands0}
             0 = \sum_{x \in \{0,1\}^{\log m}} \widetilde{\text{eq}}(x, \tau) \cdot (f(1,x) - f(x, 0) \cdot f(x, 1))\\
@@ -918,16 +577,17 @@
         \end{gather}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Grand Product Check: Protocol}
+        \small
         \begin{algorithm}[H]
             \caption{Grand Product Check}\label{alg:sum_check_grand_product}
             \DontPrintSemicolon
             \SetAlgoLined
 
             \textbf{$\mathcal P$:}
-            Compute polynomials 
-            $v\in\mathbb{F}^{\log m}[x]$, 
-            $f\in\mathbb{F}^{\log m+1}[x]$ 
+            Compute polynomials
+            $v\in\mathbb{F}^{\log m}[x]$,
+            $f\in\mathbb{F}^{\log m+1}[x]$
             such that
             \vspace{-1em}
             \begin{equation*}
@@ -944,7 +604,7 @@
             send $C_f, C_v$ to $\mathcal V$.\;
 
             \textbf{$\mathcal V$:}
-            Choose random $\tau,\gamma\in\mathbb{F}^{\log m}$ and send them to $\mathcal P$.\;
+            Choose random $\tau,\gamma \leftarrowS \mathbb{F}^{\log m}$ and send them to $\mathcal P$.\;
 
             \textbf{$\mathcal P$:}
             Compute $g(x)\;=\;\widetilde{\mathrm{eq}}(x,\tau)\,\bigl(f(1,x)-f(x,0)\,f(x,1)\bigr).$
@@ -968,42 +628,44 @@
 
     \section{Randomized Permutation Check}
 
-    \begin{frame}
+    \begin{frame}{Motivation}
         The goal is to verify, with high probability, whether two sequences of tuples
         are permutations of each other, without performing a full sort or pairwise comparison.
+        \pause
 
-        
         \begin{equation*}
         A = \{(1,2,3),\,(4,0,6)\}, \quad
         B = \{(4,0,6),\,(1,2,3)\}.
         \end{equation*}
+        \pause
         \textit{The naive approach would be to sort both sequences and then compare them.}
     \end{frame}
 
     \begin{frame}{Reed-Solomon Fingerprinting}
         \begin{definition}[Reed-Solomon Fingerprinting]
-            Let $\mathbf{a} \in \mathbb{F}^{n}$, then for a random $\gamma \in \mathbb{F}$, the Reed-Solomon 
+            Let $\mathbf{a} \in \mathbb{F}^{n}$, then for a random $\gamma \in \mathbb{F}$, the Reed-Solomon
             fingerprinting of $\mathbf{a}$ is defined as:
             \begin{equation*}
-                h_{\gamma}(\mathbf{a}) = \sum_{i \in n} a_i \cdot \gamma^i.
+                h_{\gamma}(\mathbf{a}) = \sum_{i \in [n]} a_i \cdot \gamma^i.
             \end{equation*}
+            \pause
 
-            
             $h_{\gamma}(\mathbf{a})$ uniquely identifies the sequence $\mathbf{a}$ with high probability,
-            i.e., \\let $\mathbf{b} \in F^n$ and $\mathbf{a} \neq \mathbf{b}$, then, according to the Schwartz-Zippel lemma:
+            i.e., \\let $\mathbf{b} \in \mathbb{F}^n$ and $\mathbf{a} \neq \mathbf{b}$, then, according to the Schwartz-Zippel lemma:
             \begin{equation*}
-                \Pr[h_{\gamma}(\mathbf{a}) = h_{\gamma}(\mathbf{b})] \leq \frac{n}{|\mathbb{F}|}.
+                \Pr_{\gamma \leftarrowS \mathbb{F}}[h_{\gamma}(\mathbf{a}) = h_{\gamma}(\mathbf{b})] \leq \frac{n}{\#\mathbb{F}}.
             \end{equation*}
         \end{definition}
     \end{frame}
 
     \begin{frame}{Reed-Solomon Fingerprinting}
         \begin{example}
-            Consider all operations in $\mathbb{F}_7$, and set $n=3$, $\gamma=3$.  
+            Consider all operations in $\mathbb{F}_7$, and set $n=3$, $\gamma=3$.
             Let
             \begin{equation*}
                 \mathbf{a} = (1,2,3), \quad \mathbf{b} = (4,0,6).
             \end{equation*}
+            \pause
             Then
             \begin{align*}
                 h_{\gamma}(1,2,3) &=1\cdot3^0 + 2\cdot3^1 + 3\cdot3^2 =1 + 6 + 6 =13 \equiv 6,\\
@@ -1018,32 +680,34 @@
             \begin{equation*}
                 \mathcal{H}_{\tau,\gamma}(X)\;=\;\prod_{x \in X}\bigl(h_{\gamma}(x)-\tau\bigr).
             \end{equation*}
-            
+
             Then comparing $\mathcal{H}_{\tau,\gamma}(A)$ and $\mathcal{H}_{\tau,\gamma}(B)$ yields a
             randomized test for whether $A$ and $B$ are permutations of one another. Concretely:
+            \pause
             \begin{itemize}
-                \item (Completeness) If $A=B$ (as multisets), then  
+                \item (Completeness) If $A=B$ (as multisets), then
                     \vspace{-5px}
                     \begin{equation*}
                         \mathcal{H}_{\tau,\gamma}(A)=\mathcal{H}_{\tau,\gamma}(B)
                         \vspace{-5px}
                     \end{equation*}
-                    with probability 1 over uniform $\tau,\gamma\in\mathbb{F}$.
+                    with probability 1 over uniform $\tau,\gamma \leftarrowS \mathbb{F}$.\pause
                 \item (Soundness) If $A\neq B$, then
                     \vspace{-5px}
                     \begin{equation*}
-                        \Pr\left[\,\mathcal{H}_{\tau,\gamma}(A)=\mathcal{H}_{\tau,\gamma}(B)\right]\;\le\; \frac{\max(|A|,|B|)}{|\mathbb{F}|}.
+                        \Pr_{\tau,\gamma \leftarrowS \mathbb{F}}\left[\,\mathcal{H}_{\tau,\gamma}(A)=\mathcal{H}_{\tau,\gamma}(B)\right]\;\le\; \frac{\max(\#A,\#B)}{\#\mathbb{F}}.
                     \end{equation*}
             \end{itemize}
         \end{definition}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Randomized Permutation Check: Example}
         \begin{example}
+            \small
             Consider all operations in $\mathbb{F}_7$, set $n=3$, $\tau=5$, and $\gamma=3$.\\
             Let $A = \{(1,2,3),\,(4,0,6)\}, \quad B = \{(4,0,6),\,(1,2,3)\}.$
-            
-            
+            \pause
+
             \vspace{5px}
             First compute the Reed–Solomon fingerprints modulo 7:
             \vspace{-7px}
@@ -1051,7 +715,8 @@
                 h_{\gamma}(1,2,3) &=1\cdot3^0 + 2\cdot3^1 + 3\cdot3^2 =1 + 6 + 6 =13 \equiv 6,\\
                 h_{\gamma}(4,0,6) &=4\cdot1 + 0\cdot3 + 6\cdot2 =4 + 0 + 12 =16 \equiv 2. \\[-23pt]
             \end{align*}
-            
+            \pause
+
             Now form the shifted products:
             \vspace{-7px}
             \begin{align*}
@@ -1059,8 +724,8 @@
                 \mathcal{H}_{\tau,\gamma}(B) &=(2-5)\,(6-5) =(-3)\cdot1\equiv4,\\[-23pt]
             \end{align*}
             so the test \emph{accepts} $A$ vs.\ $B$ (they are indeed permutations). \\
-            
-            
+            \pause
+
             \vspace{5px}
             Now consider a non-permutation $B' = \{(1,2,3),\,(2,1,3)\}.$
             \vspace{-5px}
@@ -1072,14 +737,14 @@
                 \mathcal{H}_{\tau,\gamma}(B') =(6-5)\,(4-5) =1\cdot(-1)\equiv6\neq4,
                 \vspace{-5px}
             \end{equation*}
-            so the test \emph{rejects} $A$ vs.\ $B'$.  
+            so the test \emph{rejects} $A$ vs.\ $B'$.
         \end{example}
     \end{frame}
 
     \section{Offline Memory Checking}
 
     \begin{frame}{Motivation}
-        Consider Alice, who stores two values on Bob's dedicated server at 
+        Consider Alice, who stores two values on Bob's dedicated server at
         addresses $0$ and $1$.  Initially, Bob's memory contains
         \vspace{-6px}
         \begin{equation*}
@@ -1087,26 +752,26 @@
             \vspace{-6px}
         \end{equation*}
         Alice then performs the following operations in sequence:
-        
+
         \begin{enumerate}
-            \item writes $150$ at address $0$.  Bob updates his memory to $\{(0,150),(1,200)\}$. 
-            
+            \item writes $150$ at address $0$.  Bob updates his memory to $\{(0,150),(1,200)\}$.\pause
+
             \vspace{-3px}
-            \item read from address $0$ and obtains the reply $150$.
-            
+            \item read from address $0$ and obtains the reply $150$.\pause
+
             \vspace{-3px}
             \item reads from address $1$ and (honestly) obtains $200$.
         \end{enumerate}
+        \pause
 
-        
         However, Bob can cheat on the very last step by returning a wrong value:
         \begin{equation*}
             (1,200)\;\longrightarrow\;(1,300).
             \vspace{-5px}
         \end{equation*}
+        \pause
 
-        
-        Without keeping an auditable record of all reads, Alice cannot later prove that all 
+        Without keeping an auditable record of all reads, Alice cannot later prove that all
         replies came from correct memory contents.
     \end{frame}
 
@@ -1119,17 +784,16 @@
             \vspace{-5px}
             \item $\mathsf{counter}$ is a counter that is incremented each time the value at that address is written to.
         \end{itemize}
-
-        
+        \pause
 
         \vspace{5px}
         The protocol utilizes four sets of tuples:
         \begin{itemize}
             \item $\mathbf{init}$ -- contains the initial memory state;
             \vspace{-5px}
-            \item $\mathbf{write}$ -- contains memory cels that represent write operations;
+            \item $\mathbf{write}$ -- contains memory cells that represent write operations;
             \vspace{-5px}
-            \item $\mathbf{read}$ -- contains memory cels that represent read operations;
+            \item $\mathbf{read}$ -- contains memory cells that represent read operations;
             \vspace{-5px}
             \item $\mathbf{final}$ -- contains the final memory state, where all counters are set to the last value.
         \end{itemize}
@@ -1137,16 +801,17 @@
 
     \begin{frame}{Memory Operations}
         \begin{itemize}
-            \item \textbf{Init:} load initial state; all counters = 0;  
-            \item \textbf{Read:}  
+            \item \textbf{Init:} load initial state; all counters = 0;\pause
+            \item \textbf{Read:}
             \begin{itemize}
-                \item Query untrusted memory at \textsf{addr} → \textsf{(val,counter)};  
+                \item Query untrusted memory at \textsf{addr} $\to$ \textsf{(val,counter)};
                 \item Append \textsf{(addr,val,counter)} to \textbf{reads};
                 \item Append \textsf{(addr,val,counter+1)} to \textbf{writes}.
             \end{itemize}
-            \item \textbf{Write:} 
+            \pause
+            \item \textbf{Write:}
             \begin{itemize}
-                \item Query untrusted memory at \textsf{addr} → \textsf{(val,counter)};  
+                \item Query untrusted memory at \textsf{addr} $\to$ \textsf{(val,counter)};
                 \item Append \textsf{(addr,val,counter)} to \textbf{reads};
                 \item Append \textsf{(addr,\textbf{newval},counter+1)} to \textbf{writes}.
             \end{itemize}
@@ -1154,7 +819,8 @@
     \end{frame}
 
     \begin{frame}{Consistency Check}
-        After all reads and writes are done, the $\mathbf{final}$ set is populated with the final memory state. 
+        After all reads and writes are done, the $\mathbf{final}$ set is populated with the final memory state.
+        \pause
 
         \begin{lemma}
             One can check the consistency of the memory operations by verifying that:
@@ -1162,17 +828,19 @@
                 \mathbf{read} \cup \mathbf{final} = \mathbf{write} \cup \mathbf{init}.
                 \vspace{-5px}
             \end{equation*}
+            \pause
             Equivalently, via randomized permutation check:
             \vspace{-5px}
             \begin{equation*}
-                \mathcal{H}_{\tau,\gamma}(\mathbf{read}) \cdot \mathcal{H}_{\tau,\gamma}(\mathbf{final}) = 
+                \mathcal{H}_{\tau,\gamma}(\mathbf{read}) \cdot \mathcal{H}_{\tau,\gamma}(\mathbf{final}) =
                 \mathcal{H}_{\tau,\gamma}(\mathbf{write}) \cdot \mathcal{H}_{\tau,\gamma}(\mathbf{init}).
             \end{equation*}
         \end{lemma}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Example: Consistent Execution}
         \begin{example}
+            \small
             Suppose the initial memory is:
             \vspace{-5px}
             \begin{equation*}
@@ -1180,8 +848,8 @@
                 \vspace{-5px}
             \end{equation*}
             while $\mathbf{read} = \varnothing \; \text{and} \; \mathbf{write} = \varnothing$.
+            \pause
 
-            
             \vspace{6px}
             \begin{center}
                 \begin{tabular}{c|c|c|c}
@@ -1192,7 +860,8 @@
                 4 & write((2,7))                & -         & $(2,7,1)$\\
                 \end{tabular}
             \end{center}
-            
+            \pause
+
             \vspace{5px}
             \begin{equation*}
                 \mathbf{read} = \{(1,5,0), \; (2,7,0)\},\quad
@@ -1202,18 +871,20 @@
             \begin{equation*}
                 \mathbf{final} = \{(0,2,0), \; (1,6,1), \; (2,7,1), \; (3,9,0)\}
             \end{equation*}
-            
+            \pause
+
             One can clearly see that $\mathbf{read} \cup \mathbf{final} = \mathbf{write} \cup \mathbf{init}$.
             \vspace{-5px}
             \begin{align*}
-                \{\textcolor{blue}{\mathbf{(1,5,0), (2,7,0)}}\} &\cup \{(0,2,0), \textcolor{red}{\mathbf{(1,6,1), (2,7,1)}}, (3,9,0)\} = \\
-                = \{\textcolor{red}{\mathbf{(1,6,1), (2,7,1)}}\} &\cup \{(0,2,0), \textcolor{blue}{\mathbf{(1,5,0), (2,7,0)}}, (3,9,0)\}
+                \{\textcolor{oc-indigo-7}{\mathbf{(1,5,0), (2,7,0)}}\} &\cup \{(0,2,0), \textcolor{oc-red-7}{\mathbf{(1,6,1), (2,7,1)}}, (3,9,0)\} = \\
+                = \{\textcolor{oc-red-7}{\mathbf{(1,6,1), (2,7,1)}}\} &\cup \{(0,2,0), \textcolor{oc-indigo-7}{\mathbf{(1,5,0), (2,7,0)}}, (3,9,0)\}
             \end{align*}
         \end{example}
     \end{frame}
 
-    \begin{frame}
+    \begin{frame}{Example: Inconsistent Execution}
         \begin{example}
+            \small
             Suppose the initial memory is:
             \vspace{-5px}
             \begin{equation*}
@@ -1221,8 +892,8 @@
                 \vspace{-5px}
             \end{equation*}
             while $\mathbf{read} = \varnothing \; \text{and} \; \mathbf{write} = \varnothing$.
+            \pause
 
-            
             \vspace{6px}
             \begin{center}
                 \begin{tabular}{c|c|c|c}
@@ -1231,7 +902,8 @@
                 2 & write((1,6))                & -         & $(1,6,1)$\\
                 \end{tabular}
             \end{center}
-            
+            \pause
+
             \vspace{5px}
             \begin{equation*}
                 \mathbf{read} = \{(1,a,0)\},\quad
@@ -1239,9 +911,10 @@
                 \vspace{-5px}
             \end{equation*}
             \begin{equation*}
-                \mathbf{final} = \{(0,2,0), \; (1,6,1), \; (2,7,1), \; (3,9,0)\}
+                \mathbf{final} = \{(0,2,0), \; (1,6,1), \; (2,7,0), \; (3,9,0)\}
             \end{equation*}
-            
+            \pause
+
             The verifier checks $\mathbf{read} \cup \mathbf{final} = \mathbf{write} \cup \mathbf{init}$:
             \vspace{-5px}
             \begin{align*}
@@ -1252,21 +925,5 @@
         \end{example}
     \end{frame}
 
-    \begin{frame}[plain, standout]
-        \centering
-        \LARGE
-        \textbf{Thank you for your attention} \\
-        
-        \vspace{0.2cm} \Huge \ding{170} \large \\
-        
-        \vspace{1cm}
-  
-        \href{https://zkdl-camp.github.io/}{\raisebox{-.1em}{\hspace{.025em}\faIcon{globe}}\hspace{.325em}zkdl-camp.github.io} \\
-  
-        \href{https://github.com/ZKDL-Camp}{\raisebox{-.1em}{\hspace{.025em}\faIcon{github}}\hspace{.325em}github.com/ZKDL-Camp}
-        
-        \begin{center}
-            \includegraphics[width=0.15\textwidth]{images/logo.png}
-        \end{center}
-    \end{frame}
+    \makeclosingframe
 \end{document}

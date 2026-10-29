@@ -1,0 +1,958 @@
+\documentclass{zkdl-presentation-template}
+
+% Circuit notation of the book
+\providecommand{\Circ}{\textit{\texttt{C}}}
+
+% Circuit diagrams (opencolor roles from CONVENTIONS.md)
+\tikzset{
+    var/.style={circle, draw=oc-gray-7, fill=oc-gray-2, very thick, minimum size=0.7cm, text centered},
+    gate1/.style={circle, draw=oc-indigo-7, fill=oc-indigo-1, ultra thick, minimum size=1cm, text centered},
+    gate2/.style={circle, draw=oc-orange-7, fill=oc-orange-1, ultra thick, minimum size=1cm, text centered},
+    gate3/.style={circle, draw=oc-blue-7, fill=oc-blue-1, ultra thick, minimum size=1cm, text centered},
+    arrow/.style={-latex, ultra thick},
+    wire/.style={arrow, oc-gray-5},
+    outwire/.style={arrow, oc-gray-7}
+}
+
+% PCP oracle diagrams
+\tikzset{
+    oracle/.style={fill=oc-gray-1, draw=oc-gray-9, ultra thick},
+    query/.style={fill=oc-blue-4, draw=oc-gray-9, ultra thick}
+}
+
+% Plots
+\pgfplotsset{
+    zkdlgrid/.style={
+        grid = both,
+        grid style = {line width=.1pt, draw=oc-gray-2},
+        major grid style = {line width=.2pt, draw=oc-gray-5}
+    }
+}
+
+\title[QAP and PCP]{\textbf{QAP, PCP, PoE: Demystifying zk-SNARK Tools}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+        \tableofcontents
+    \end{frame}
+
+    \section{Recap}
+
+    \begin{frame}{Recap: what is zk-SNARK?}
+        \begin{definition}
+            \begin{center}
+                \textbf{zk-SNARK} \\
+                \textbf{Z}ero-\textbf{K}nowledge \textbf{S}uccinct \textbf{N}on-interactive \textbf{AR}gument of \textbf{K}nowledge.
+            \end{center}
+        \end{definition}
+        \pause
+
+        \begin{itemize}[label=\ding{51}]
+            \item \textbf{Argument of Knowledge} --- a proof that the prover knows the data (witness) that resolves a certain
+            problem, and this knowledge can be ``extracted''. \pause
+            \item \textbf{Succinctness} --- the proof size and verification time is relatively small to the computation size and typically does not depend on the size of
+            the data or statement. \pause
+            \item \textbf{Non-interactiveness} --- to produce the proof, the prover does not need any interaction
+            with the verifier. \pause
+            \item \textbf{Zero-Knowledge} --- the verifier learns nothing about the data used to produce the
+            proof, despite knowing that this data resolves the given problem and that the prover possesses it.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Recap: Arbitrary Program To Circuits}
+        We can do that in a way like the computer does it --- \textbf{boolean circuits}.
+
+        \begin{figure}[h!]
+            \centering
+            \begin{tabular}{cc}
+                \begin{tikzpicture}[scale=0.85, every node/.style={scale=0.85}]
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate1] (and) at (1, 0) {\texttt{AND}};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    \draw[wire] (a) -- (and);
+                    \draw[wire] (b) -- (and);
+                    \draw[outwire] (and) -- (c);
+                \end{tikzpicture}
+                &
+                \begin{tikzpicture}[scale=0.85, every node/.style={scale=0.85}]
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate2] (or) at (1, 0) {\texttt{OR}};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    \draw[wire] (a) -- (or);
+                    \draw[wire] (b) -- (or);
+                    \draw[outwire] (or) -- (c);
+                \end{tikzpicture}
+            \end{tabular}
+            \caption{Boolean \texttt{AND} and \texttt{OR} Gates}
+        \end{figure}
+        \pause
+
+        > \textbf{100000 gates} just for \texttt{SHA256}\ldots
+        \pause
+
+        But nothing stops us from using something more powerful instead of boolean values, gates.
+    \end{frame}
+
+    \begin{frame}{Recap: Arbitrary Program To Circuits}
+        Similar to Boolean Circuits, the \textbf{Arithmetic Circuits} consist of gates and wires.
+        \begin{itemize}
+            \item \textbf{Wires}: elements of some finite field $\mathbb{F}$.
+            \item \textbf{Gates}: field addition ($+$) and multiplication ($\times$).
+        \end{itemize}
+        \pause
+
+        \begin{figure}[h!]
+            \centering
+            \begin{tabular}{cc}
+                \begin{tikzpicture}
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate1] (add) at (1, 0) {$+$};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    \draw[wire] (a) -- (add);
+                    \draw[wire] (b) -- (add);
+                    \draw[outwire] (add) -- (c);
+                \end{tikzpicture}
+                &
+                \begin{tikzpicture}
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate2] (mul) at (1, 0) {$\times$};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    \draw[wire] (a) -- (mul);
+                    \draw[wire] (b) -- (mul);
+                    \draw[outwire] (mul) -- (c);
+                \end{tikzpicture}
+            \end{tabular}
+            \caption{Addition and Multiplication Gates}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}[fragile]{Recap: Arbitrary Program To Circuits}
+        \begin{example}
+            How can we translate \texttt{if} statements?
+            \begin{lstlisting}[language=Python,numbers=none]
+def example(a: bool, b: F, c: F) -> F:
+    if a:
+        return b * c
+    else:
+        return b + c
+            \end{lstlisting}
+            \pause
+            We can transform such a function into the next expression:
+            \vspace{-8pt}
+            \begin{equation*}
+                r = a \times (b \times c) + (1 - a) \times (b + c)
+                \vspace{-8pt}
+            \end{equation*}
+            \pause
+            Corresponding equations for the circuit are:
+            \vspace{-8pt}
+            \begin{equation*}
+                \begin{aligned}
+                    r_1 &= b \times c, \quad &r_3 &= 1 - a, \quad &r_5 &= r_3 \times r_2 \\
+                    r_2 &= b + c, \quad &r_4 &= a \times r_1, \quad &r &= r_4 + r_5
+                \end{aligned}
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Recap: Arbitrary Program To Circuits}
+         \begin{figure}[h!]
+             \centering
+             \begin{tikzpicture}
+                 % Nodes
+                 \node[var] (c) at (0.5, -3) {$c$};
+                 \node[var] (b) at (0.5, -1.5) {$b$};
+                 \node[var] (a) at (0.5, 0) {$a$};
+                 \node[var] (one) at (0.5, 1.5) {$1$};
+
+                 % b+c and b*c gates
+                 \node[gate1] (b_plus_c) at (2.5, -1.5) {$+$};
+                 \node[gate2] (b_times_c) at (2.5, -3.0) {$\times$};
+
+                 \node[gate3] (one_minus_a) at (2.5, 0.75) {$-$};
+
+                 % a*b*c and (1-a)(b+c) gates
+                 \node[gate2] (a_times_b_times_c) at (5, -2.0) {$\times$};
+                 \node[gate2] (one_minus_a_times_b_plus_c) at (5, -0.5) {$\times$};
+
+                 % a*b*c + (1-a)(b+c) gate
+                 \node[gate1] (r) at (7.5, -1.25) {$+$};
+
+                 % Result node
+                 \node[var] (result) at (10, -1.25) {$r$};
+
+                 % b+c and b*c arrows
+                 \draw[wire] (b) to (b_plus_c);
+                 \draw[wire] (b) to (b_times_c);
+                 \draw[wire] (c) to (b_plus_c);
+                 \draw[wire] (c) to (b_times_c);
+
+                 % 1 - a arrows
+                 \draw[wire] (one) to (one_minus_a);
+                 \draw[wire] (a) to (one_minus_a);
+
+                 % a*b*c and (1-a)(b+c) arrows
+                 \draw[wire] (a) to [bend left=20] (a_times_b_times_c);
+                 \draw[wire] (b_times_c) to node[midway, above] {$r_1$} (a_times_b_times_c);
+                 \draw[wire] (one_minus_a) to node[midway, above] {$r_3$} (one_minus_a_times_b_plus_c);
+                 \draw[wire] (b_plus_c) to node[midway, above] {$r_2$} (one_minus_a_times_b_plus_c);
+
+                 % a*b*c + (1-a)(b+c) arrows
+                 \draw[wire] (a_times_b_times_c) to [bend right=20] node[midway, above] {$r_4$} (r);
+                 \draw[wire] (one_minus_a_times_b_plus_c) to [bend left=20] node[midway, above] {$r_5$} (r);
+
+                 % Result arrow
+                 \draw[outwire] (r) to (result);
+             \end{tikzpicture}
+             \caption{Example of a circuit evaluating the \texttt{if} statement logic.}
+         \end{figure}
+    \end{frame}
+
+    \begin{frame}{Recap: R1CS}
+        Each \textbf{constraint} in the Rank-1 Constraint System must be in the form:
+        \begin{equation*}
+            \langle \boldsymbol{\ell}, \mathbf{z}\rangle \times \langle \boldsymbol{r}, \mathbf{z}\rangle = \langle \boldsymbol{o}, \mathbf{z}\rangle
+        \end{equation*}
+        \pause
+        Where $\langle \mathbf{u}, \mathbf{v}\rangle$ is a dot product.
+        \vspace{-10pt}
+        \begin{equation*}
+            \langle \mathbf{u}, \mathbf{v} \rangle := \mathbf{u}^{\top}\mathbf{v} = \sum_{i=1}^{n} u_i v_i
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Thus
+        \vspace{-5pt}
+        \begin{equation*}
+            \left(\sum_{i=1}^{n} \ell_i z_i\right) \times \left(\sum_{j=1}^{n} r_j z_j\right) = \sum_{k=1}^{n} o_k z_k
+        \end{equation*}
+        That is, actually, a quadratic equation with multiple variables.
+    \end{frame}
+
+    \begin{frame}{Recap: R1CS}
+        \begin{example}
+            Consider the most basic circuit with one multiplication gate: $x_1 \times x_2 = r$.
+            The witness vector $\mathbf{z} = (r, x_1, x_2)$. So
+            \vspace{-5pt}
+            \begin{align*}
+                z_2 &\times z_3 = z_1 \\
+                (0 + z_2 + 0) &\times (0 + 0 + z_3) = z_1 + 0 + 0 \\
+                (0z_1 + 1z_2 + 0z_3) &\times (0z_1 + 0z_2 + 1z_3) = 1z_1 + 0z_2 + 0z_3
+            \end{align*}
+            \pause
+            Therefore the coefficients vectors are:
+            \vspace{-5pt}
+            \begin{equation*}
+                \boldsymbol{\ell} = (0, 1, 0), \quad \boldsymbol{r} = (0, 0, 1), \quad \boldsymbol{o} = (1, 0, 0).
+                \vspace{-5pt}
+            \end{equation*}
+            \pause
+            The general form of our constraint is:
+            \vspace{-5pt}
+            \begin{equation*}
+                (\ell_1z_1 + \ell_2z_2 + \ell_3z_3)(r_1z_1 + r_2z_2 + r_3z_3) = o_1z_1 + o_2z_2 + o_3z_3
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Recap: R1CS}
+        \vspace{-10pt}
+        \begin{equation*}
+            r = x_1 \times (x_2 \times x_3) + (1 - x_1) \times (x_2 + x_3)
+        \end{equation*}
+        \pause
+        Thus, the next constraints can be built:
+        \vspace{-5pt}
+        \begin{align*}
+            x_1 \times x_1 &= x_1 \quad \text{(binary check)} \tag{1} \\
+            x_2 \times x_3 &= \mathsf{mult} \tag{2} \\
+            x_1 \times \mathsf{mult} &= \mathsf{selectMult} \tag{3} \\
+            (1 - x_1) \times (x_2 + x_3) &= r - \mathsf{selectMult} \tag{4}
+        \end{align*}
+        \pause
+        The witness vector: $\mathbf{z} = (1, r, x_1, x_2, x_3, \mathsf{mult}, \mathsf{selectMult})$.
+        \pause
+
+        \vspace{2pt}
+        The coefficients vectors:
+        \vspace{-25pt}
+        {\center\small\begin{align*}
+            \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{o}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+            \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0), & \boldsymbol{r}_2 &= (0, 0, 0, 0, 1, 0, 0), & \boldsymbol{o}_2 &= (0, 0, 0, 0, 0, 1, 0) \\
+            \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_3 &= (0, 0, 0, 0, 0, 1, 0), & \boldsymbol{o}_3 &= (0, 0, 0, 0, 0, 0, 1) \\
+            \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0), & \boldsymbol{r}_4 &= (0, 0, 0, 1, 1, 0, 0), & \boldsymbol{o}_4 &= (0, 1, 0, 0, 0, 0, -1)
+        \end{align*}}
+    \end{frame}
+
+    \section[QAP]{Quadratic Arithmetic Program}
+
+    \begin{frame}{Why do we need QAP?}
+        Problems we have for now: \pause
+        \begin{itemize}[label=\ding{51}]
+            \item Although Rank-1 Constraint Systems provide a powerful method for representing
+            computations, they are not succinct. \pause
+            \item We need to transform our computations into a form that is more convenient for
+            proving statements about them.
+        \end{itemize}
+        \pause
+
+        \begin{alertblock}{Notice}
+            A very convenient form for representing computations is \textbf{polynomials}!
+
+            \vspace{10px}
+
+            \textbf{Idea:} Instead of checking polynomial equality $P(T)=Q(T)$ at multiple points $x_1,\dots,x_n$ (essentially, checking each constraint), we check it only once at $\tau \leftarrowS \mathbb{F}$: $P(\tau)=Q(\tau)$. Soundness is guaranteed by the \textbf{Schwartz-Zippel Lemma}.
+        \end{alertblock}
+    \end{frame}
+
+    \begin{frame}{R1CS in Matrix Form}
+        We finished with the following constraint vectors:
+        \begin{equation*}
+            \boldsymbol{\ell}_1, \boldsymbol{\ell}_2, \dots, \boldsymbol{\ell}_m, \quad
+            \boldsymbol{r}_1, \boldsymbol{r}_2, \dots, \boldsymbol{r}_m, \quad
+            \boldsymbol{o}_1, \boldsymbol{o}_2, \dots, \boldsymbol{o}_m.
+        \end{equation*}
+        \pause
+        Of course, they form corresponding matrices:
+        \begin{equation*}
+            L = \begin{bmatrix}
+                L_{1,1} & L_{1,2} & \dots & L_{1,n} \\
+                L_{2,1} & L_{2,2} & \dots & L_{2,n} \\
+                \vdots & \vdots & \ddots & \vdots \\
+                L_{m,1} & L_{m,2} & \dots & L_{m,n}
+            \end{bmatrix}, \;
+            \text{same goes for $R$ and $O$}
+        \end{equation*}
+        \pause
+        An example of a single ``if'' statement:
+        \begin{center}
+        \begin{minipage}{0.4\textwidth}
+        \vspace{-15pt}
+        {\small \begin{align*}
+            \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+            \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0) \\
+            \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0) \\
+            \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0)
+        \end{align*}}
+        \end{minipage}
+        \begin{minipage}{0.5\textwidth}
+        \begin{equation*}
+            L = {\small \begin{bmatrix}
+                0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+                0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+                0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+                1 & 0 & -1 & 0 & 0 & 0 & 0
+            \end{bmatrix}}
+        \end{equation*}
+        \end{minipage}
+        \end{center}
+        \pause
+
+        Pleeeeeenty of zeroes, right? And this is just one out of 3 matrices...
+    \end{frame}
+
+    \begin{frame}{Columns of the Matrix}
+        The previous witness vector:
+        \begin{equation*}
+            \mathbf{z} = (1, r, \overset{\textcolor{oc-red-7}{3}}{\textcolor{oc-red-7}{x_1}}, x_2, x_3, \mathsf{mult}, \mathsf{selectMult})
+        \end{equation*}
+        Let us take a closer look at the matrix columns:
+        \begin{equation*}
+            \begin{bmatrix}
+                0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                0 & 0 & \textcolor{oc-red-7}{0} & 1 & 0 & 0 & 0 \\
+                0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                1 & 0 & \textcolor{oc-red-7}{-1} & 0 & 0 & 0 & 0
+            \end{bmatrix}
+        \end{equation*}
+        \pause
+        Consider 4th constraint: $(1 - x_1) \times (x_2 + x_3) = r - \mathsf{selectMult}$
+        \begin{equation*}
+            \begin{bmatrix}
+                0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                0 & 0 & \textcolor{oc-red-7}{0} & 1 & 0 & 0 & 0 \\
+                0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                \textcolor{oc-blue-7}{1} & \textcolor{oc-blue-7}{0} & \boxed{-1} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0}
+            \end{bmatrix}
+        \end{equation*}
+        \pause
+        So, every column is a mapping of constraint number to a coefficient for the witness element.
+    \end{frame}
+
+    \begin{frame}{Polynomial Interpolation}
+        As we know, such a mapping can be built using Lagrange interpolation polynomial with the
+        following formula:
+        \vspace{-10pt}
+        \begin{equation*}
+            f(T) = \sum_{i=0}^{n} y_i e_i(T), \quad e_i(T) = \prod_{j=0, j \neq i}^{n} \frac{T-x_j}{x_i-x_j}.
+            \vspace{-10pt}
+        \end{equation*}
+        \pause
+
+        There are $n$ columns and $m$ constraints. So, it results in $n$ polynomials such that:
+        \vspace{-10pt}
+        \begin{equation*}
+            \ell_j(i) = L_{i,j}, \; i \in \{1,\dots,m\}, \; j \in \{1,\dots,n\}
+            \vspace{-10pt}
+        \end{equation*}
+        \pause
+
+        The same is true for matrices $R$ and $O$, with $3n$ polynomials in total, $n$ for each of the
+        coefficients matrices:
+        \vspace{-8pt}
+        \begin{equation*}
+            \ell_1(T), \dots, \ell_n(T),
+            r_1(T), \dots, r_n(T),
+            o_1(T), \dots, o_n(T)
+        \end{equation*}
+        \pause
+
+        \vspace{-10pt}
+        \begin{remarkblock}{Note}
+            We could have assigned any \textit{unique} index from $\mathbb{F}$ to each constraint
+            (say, $t_i$ for each $i \in \{1,\dots,m\}$) and interpolate through these points:
+            \vspace{-8pt}
+            \begin{equation*}
+                \ell_j(t_i) = L_{i,j}, \; i \in \{1,\dots,m\}, \; j \in \{1,\dots,n\}
+            \end{equation*}
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Polynomial Interpolation: Example}
+        \begin{example}
+            Considering the witness vector $\mathbf{z}$ and matrix $L$ from the previous example, for the variable
+            $x_1$, the next set of points can be derived:
+            \vspace{-10pt}
+            \begin{equation*}
+                \{(1,1), (2,0), (3,1), (4,-1)\}
+            \end{equation*}
+            \pause
+            The Lagrange interpolation polynomial for this set of points:
+            \begin{align*}
+                e_1(T) &= -\frac{(T - 2)(T - 3)(T - 4)}{6}, \; &e_2(T) &= \frac{(T - 1)(T - 3)(T - 4)}{2}, \\
+                e_3(T) &= -\frac{(T - 1)(T - 2)(T - 4)}{2}, \; &e_4(T) &= \frac{(T - 1)(T - 2)(T - 3)}{6}.
+            \end{align*}
+            \pause
+
+            Thus, the polynomial is given by:
+            \begin{align*}
+                \ell_{x_1}(T) &= 1 \cdot e_1(T) + 0 \cdot e_2(T) + 1 \cdot e_3(T) + (-1) \cdot e_4(T) \\
+                &= -\frac{5}{6} T^3 + 6T^2 - \frac{79}{6} T + 9
+            \end{align*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Polynomial Interpolation: Example}
+        \begin{center}
+            \begin{tikzpicture}
+                \begin{axis}[
+                    axis lines = middle,
+                    xlabel = {$T$},
+                    ylabel = {$\ell_{x_1}(T)$},
+                    ymin = -2.99, ymax = 2.99,
+                    xmin = -0.5, xmax = 4.99,
+                    domain = 0:5,
+                    samples = 100,
+                    ytick = {-3,...,3},
+                    xtick = {0,1,...,5},
+                    zkdlgrid
+                ]
+                \addplot[
+                    color=oc-blue-7,
+                    thick
+                ]
+                {-5/6*x^3 + 6*x^2 - 79/6*x + 9};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(1,1) (2,0) (3,1) (4,-1)};
+
+                \node at (axis cs:1,1.5) [anchor=west] {\small $(1,1)$};
+                \node at (axis cs:2,0.2) [anchor=south] {\small $(2,0)$};
+                \node at (axis cs:3,1.5) [anchor=west] {\small $(3,1)$};
+                \node at (axis cs:4,-1) [anchor=west] {\small $(4,-1)$};
+
+                \end{axis}
+            \end{tikzpicture}
+
+            \scriptsize\textbf{Illustration:} The Lagrange interpolation polynomial for points $\{(1,1), (2,0), (3,1), (4,-1)\}$ visualized over $\mathbb{R}$.
+        \end{center}
+    \end{frame}
+
+    \begin{frame}{Why Polynomials?}
+        \begin{questionblock}{Question}
+            But what does it change? We ``exchanged'' $3n$ columns for $3n$ polynomials.
+        \end{questionblock}
+        \pause
+
+        \vspace{-5pt}
+        Consider two polynomials $p(T)$ and $q(T)$:
+        \begin{equation*}
+            \quad p(T) = -\frac{1}{2}T^2 + \frac{3}{2}T, \qquad
+            q(T) = \frac{1}{3}T^3 - 2T^2 + \frac{8}{3}T + 1.
+            \vspace{-5pt}
+        \end{equation*}
+        With corresponding sets of points:
+        \vspace{-5pt}
+        \begin{equation*}
+            \{(0, 0), (1, 1), (2, 1), (3, 0)\}, \quad \{(0, 1), (1, 2), (2, 1), (3, 0)\}
+            \vspace{-10pt}
+        \end{equation*}
+        \pause
+
+        The sum of these polynomials can be calculated as:
+        \vspace{-5pt}
+        \begin{equation*}
+            (p+q)(T) = \frac{1}{3}T^3 - \frac{5}{2}T^2 + \frac{25}{6}T + 1
+            \vspace{-5pt}
+        \end{equation*}
+        The resulting polynomial $p+q$ corresponds to the set of points:
+        \vspace{-5pt}
+        \begin{equation*}
+            \{(0, 1), (1, 3), (2, 2), (3, 0)\}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Why Polynomials?}
+        \begin{figure}[H]
+            \centering
+            \begin{tikzpicture}
+                \begin{axis}[
+                    axis lines = middle,
+                    xlabel = {$T$},
+                    ylabel = {$y$},
+                    ymin = -0.99, ymax = 3.99,
+                    xmin = -0.5, xmax = 3.99,
+                    domain = 0:5,
+                    samples = 100,
+                    ytick = {-1,...,4},
+                    xtick = {0,1,...,4},
+                    zkdlgrid
+                ]
+
+                % p(T)
+                \addplot[
+                    color=oc-blue-7,
+                    thick
+                ]
+                {3/2*x - 1/2*x^2};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0, 0) (1, 1) (2, 1) (3, 0)};
+                \node at (axis cs:3.35,-0.7) [anchor=east] {$p(T)$};
+
+                \node at (axis cs:0,-0.2) [anchor=west] {\tiny $(0, 0)$};
+                \node at (axis cs:1,1) [anchor=south] {\tiny $(1, 1)$};
+                \node at (axis cs:2.1,1) [anchor=south] {\tiny $(2, 1)$};
+                \node at (axis cs:2.9,0.2) [anchor=west] {\tiny $(3, 0)$};
+
+                % q(T)
+                \addplot[
+                    color=oc-green-7,
+                    thick
+                ]
+                {1/3*x^3 - 2*x^2 + 8/3*x + 1};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0,1) (1,2) (2,1) (3, 0)};
+                \node at (axis cs:3.7,0.7) [anchor=south] {$q(T)$};
+
+                \node at (axis cs:0,1) [anchor=west] {\tiny $(0, 1)$};
+                \node at (axis cs:1,2) [anchor=south] {\tiny $(1, 2)$};
+
+                % (p+q)(T)
+                \addplot[
+                    color=oc-orange-7,
+                    thick
+                ]
+                {1/3*x^3 - 5/2*x^2 + 25/6*x + 1};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0,1) (1,3) (2,2) (3, 0)};
+                \node at (axis cs:3.4,-0.55) [anchor=west] {$(p+q)(T)$};
+
+                \node at (axis cs:1,3) [anchor=south] {\tiny $(1, 3)$};
+                \node at (axis cs:2,2) [anchor=west] {\tiny $(2, 2)$};
+
+                \end{axis}
+            \end{tikzpicture}
+            \caption{Addition of two polynomials}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Putting It All Together}
+        \vspace{-5pt}
+        Now, using coefficients encoded with polynomials, we can build a constraint number
+        $j \in \{1, \dots, m\}$ in the next way:
+        \vspace{-5pt}
+        \begin{align*}
+            &(z_1\ell_1(j) + z_2\ell_2(j) + \dots + z_n\ell_n(j)) \times \\
+            \times &(z_1r_1(j) + z_2r_2(j) + \dots + z_nr_n(j)) = \\
+            = &(z_1o_1(j) + z_2o_2(j) + \dots + z_no_n(j))
+            \vspace{-5pt}
+        \end{align*}
+        \pause
+        Or written more concisely:
+        \vspace{-5pt}
+        \begin{equation*}
+            \left( \sum_{i = 1}^{n} z_i\ell_i(T) \right) \times \left( \sum_{i = 1}^{n} z_ir_i(T) \right) = \left( \sum_{i = 1}^{n} z_io_i(T) \right)
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Putting It All Together}
+        Hold on, but why does it hold? Let us substitute any $T=j$ into this equation:
+        \vspace{-5pt}
+        \begin{equation*}
+            \left( \sum_{i = 1}^{n} z_i\ell_i(j) \right) \times \left( \sum_{i = 1}^{n} z_ir_i(j) \right) = \left( \sum_{i = 1}^{n} z_io_i(j) \right) \; \commentgray{for all $j \in \{1,\dots,m\}$}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Recall that we interpolated polynomials to have $\ell_i(j) = L_{j,i}$. Therefore, the equation above can be reduced to:
+        \vspace{-5pt}
+        \begin{equation*}
+            \left( \sum_{i = 1}^{n} z_iL_{j,i} \right) \times \left( \sum_{i = 1}^{n} z_iR_{j,i} \right) = \left( \sum_{i = 1}^{n} z_iO_{j,i} \right) \; \commentgray{for all $j \in \{1,\dots,m\}$}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        But hold on again! Notice that $\sum_{i = 1}^{n} z_iL_{j,i} = \langle \mathbf{z}, \boldsymbol{\ell}_j \rangle$ and therefore we have:
+        \vspace{-5pt}
+        \begin{equation*}
+            \langle \mathbf{z}, \boldsymbol{\ell}_j \rangle \times \langle \mathbf{z}, \boldsymbol{r}_j \rangle = \langle \mathbf{z}, \boldsymbol{o}_j \rangle \; \commentgray{for all $j \in \{1,\dots,m\}$,}
+            \vspace{-5pt}
+        \end{equation*}
+
+        so we ended up with the initial $m$ constraint equations!
+    \end{frame}
+
+    \begin{frame}{Vanishing Polynomial}
+        Now let us define polynomials $\ell(T)$, $r(T)$, $o(T)$ for easier notation:
+        \vspace{-5pt}
+        \begin{equation*}
+            \ell(T) = \sum_{i = 1}^{n} z_i\ell_i(T), \quad r(T) = \sum_{i = 1}^{n} z_ir_i(T), \quad o(T) = \sum_{i = 1}^{n} z_io_i(T)
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Therefore:
+        \vspace{-5pt}
+        \begin{equation*}
+            \ell(j) \times r(j) = o(j) \; \commentgray{for all $j \in \{1,\dots,m\}$}
+            \vspace{-5pt}
+        \end{equation*}
+
+        Now, we can define a polynomial $m(T)$, that has zeros at all elements from the set
+        $\Omega = \{1,\dots,m\}$
+        \vspace{-5pt}
+        \begin{equation*}
+            m(T) = \ell(T) \times r(T) - o(T)
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        It means, that $m(T)$ can be divided by \textbf{vanishing polynomial} $z_{\Omega}(T)$ without a remainder!
+        \vspace{-8pt}
+        \begin{equation*}
+            z_{\Omega}(T) = \prod_{i=1}^m (T - i), \qquad \text{$h(T) = \frac{m(T)}{z_{\Omega}(T)}$ is a polynomial}
+            \vspace{-5pt}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Quadratic Arithmetic Program}
+        \begin{definition}[Quadratic Arithmetic Program]
+            Suppose that $m$ R1CS constraints with a witness of size $n$ are written in a form $L\mathbf{z} \odot R\mathbf{z} = O\mathbf{z}$ for $L,R,O \in \mathbb{F}^{m \times n}$.
+
+            Then, the \textbf{Quadratic Arithmetic Program} consists of $3n$ polynomials $\ell_1,\dots,\ell_n$, $r_1,\dots,r_n$, $o_1,\dots,o_n$ such that:
+            \begin{equation*}
+                \ell_j(i) = L_{i,j}, \; r_j(i) = R_{i,j}, \; o_j(i) = O_{i,j} \; \commentgray{for all $i \in \{1,\dots,m\}$, $j \in \{1,\dots,n\}$}
+            \end{equation*}
+
+            Then, $\mathbf{z} \in \mathbb{F}^n$ is a valid assignment for the given QAP and \textbf{target polynomial} $z(T) = \prod_{i=1}^m (T-i)$ if and only if there exists such a polynomial $h(T)$ such that
+            \begin{equation*}
+                \left( \sum_{i = 1}^{n} z_i\ell_i(T) \right)\left( \sum_{i = 1}^{n} z_ir_i(T) \right) - \left( \sum_{i = 1}^{n} z_io_i(T) \right) = z(T)h(T)
+            \end{equation*}
+        \end{definition}
+    \end{frame}
+
+    \section{Probabilistically Checkable Proofs}
+
+    \begin{frame}{Probabilistically Checkable Proofs}
+        \begin{figure}[H]
+            \centering
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] at (-4.0, 0.0) (prover) {\includegraphics[width=1.25cm]{images/common/prover.png}\\Prover $\mathcal{P}$};
+                \node[inner sep=0pt, align=center] at (4.0, 0.0) (verifier) {\includegraphics[width=1.25cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$};
+
+                \draw[oracle] (-2.0, 4) rectangle (2.0, 3.25);
+
+                \node at (0, 2.85) (pcp) {\textbf{PCP Oracle}};
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (prover)--(pcp) node[midway, left=3mm]{\shortstack{Generate an\\oracle ($\pi$)}};
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (verifier)--(pcp) node[midway, right=3mm]{\shortstack{Point queries\\$q_1,\dots,q_m$}};
+
+                \pause
+                % Query boxes
+                \draw[query] (-1.0, 4) rectangle (-0.8, 3.25);
+                \node at (-0.9, 4.35) {$q_1$};
+                \draw[query] (0.0, 4) rectangle (0.2, 3.25);
+                \node at (0.1, 4.35) {$q_2$};
+                \draw[query] (0.5, 4) rectangle (0.7, 3.25);
+                \node at (0.6, 4.35) {$q_3$};
+            \end{tikzpicture}
+            \caption{Illustration of a Probabilistically Checkable Proof (PCP) system. The prover $\mathcal{P}$ generates a PCP oracle $\pi$ that is queried by the verifier $\mathcal{V}$ at specific points $q_1,\dots,q_m$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Extensions of PCPs}
+        Three main extensions of PCPs that are frequently used in SNARKs are:
+        \begin{itemize}
+            \item \textbf{IPCP} (\textbf{Interactive PCP}): The prover commits to the PCP oracle and then, based on the interaction between the prover and verifier, the verifier queries the oracle and decides whether to accept the proof.\pause
+            \item \textbf{IOP} (\textbf{Interactive Oracle Proof}): The prover and verifier interact and on each round, the prover commits to a new oracle. The verifier queries the oracle and decides whether to accept the proof.\pause
+            \item \textbf{LPCP} (\textbf{Linear PCP}): The prover commits to a linear function and the verifier queries the function at specific points.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Interactive Oracle Proofs}
+        \begin{figure}[H]
+            \centering
+            \begin{tikzpicture}[scale=0.9, every node/.style={scale=0.9}]
+                \node[inner sep=0pt, align=center] at (-4.0, 0.5) (prover) {\includegraphics[width=1cm]{images/common/prover.png}\\Prover $\mathcal{P}$};
+                \node[inner sep=0pt, align=center] at (4.0, 0.5) (verifier) {\includegraphics[width=1cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$};
+
+                % Oracle 1
+                \node at (-2.0, 5.625) (oracle_1_left) {};
+                \node at (2.0, 5.625) (oracle_1_right) {};
+                \draw[oracle] (-2.0, 6) rectangle (2.0, 5.25);
+                \draw[query] (-1.0, 6) rectangle (-0.8, 5.25);
+                \node at (-0.9, 6.35) {$q_1$};
+                \draw[query] (0.0, 6) rectangle (0.2, 5.25);
+                \node at (0.1, 6.35) {$q_2$};
+                \draw[query] (0.5, 6) rectangle (0.7, 5.25);
+                \node at (0.6, 6.35) {$q_3$};
+                \node at (0, 4.85) {\textbf{PCP Oracle \#1}};
+
+                % Oracle 2
+                \node at (-2.0, 3.625) (oracle_2_left) {};
+                \node at (2.0, 3.625) (oracle_2_right) {};
+                \draw[oracle] (-2.0, 4) rectangle (2.0, 3.25);
+                \draw[query] (-0.4, 4) rectangle (-0.2, 3.25);
+                \node at (-0.3, 4.35) {$q_1'$};
+                \draw[query] (0.2, 4) rectangle (0.4, 3.25);
+                \node at (0.3, 4.35) {$q_2'$};
+                \draw[query] (1.5, 4) rectangle (1.7, 3.25);
+                \node at (1.6, 4.35) {$q_3'$};
+                \node at (0, 2.85) {\textbf{PCP Oracle \#2}};
+
+                % Oracle 3
+                \node at (-2.0, 1.625) (oracle_3_left) {};
+                \node at (2.0, 1.625) (oracle_3_right) {};
+                \draw[oracle] (-2.0, 2) rectangle (2.0, 1.25);
+                \draw[query] (-1.5, 2) rectangle (-1.3, 1.25);
+                \node at (-1.4, 2.35) {$q_1''$};
+                \draw[query] (0.3, 2) rectangle (0.5, 1.25);
+                \node at (0.4, 2.35) {$q_2''$};
+                \draw[query] (1.0, 2) rectangle (1.2, 1.25);
+                \node at (1.1, 2.35) {$q_3''$};
+                \node at (0, 0.85) {\textbf{PCP Oracle \#3}};
+
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (prover)--(oracle_1_left) node[midway, left=3mm]{\shortstack{Commit to\\oracles}};
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (verifier)--(oracle_1_right) node[midway, right=3mm]{Point queries};
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (prover)--(oracle_2_left);
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (verifier)--(oracle_2_right);
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (prover)--(oracle_3_left);
+                \draw[-{Stealth[length=3mm]},line width=0.4mm] (verifier)--(oracle_3_right);
+
+                % Two arrows to left and to right between the prover and verifier with the "Interaction" label
+                \draw[{Stealth[length=3mm]}-{Stealth[length=3mm]},line width=0.4mm,dashed] (prover) to node[midway, below]{Interaction} (verifier);
+            \end{tikzpicture}
+            \caption{Illustration of an Interactive Oracle Proof (IOP). On each round $i$ ($1 \leq i \leq r$), $\mathcal{V}$ sends a message $m_i$, and $\mathcal{P}$ commits to a new oracle $\pi_i$, which $\mathcal{V}$ can query at $\mathbf{q}_i=(q_{i,1},\dots,q_{i,m})$.}
+        \end{figure}
+    \end{frame}
+
+    \section{QAP as a Linear PCP}
+
+    \begin{frame}{Linear PCP}
+        \begin{definition}[Linear PCP]
+            A \textbf{Linear PCP} is a PCP where the prover commits to a linear function $\boldsymbol{\pi} = (\pi_1,\dots,\pi_k)$ and the verifier queries the function at specific points $\mathbf{q}_1,\dots,\mathbf{q}_r$. Then, the prover responds with the values of the function at these points:
+            \begin{equation*}
+                \langle \boldsymbol{\pi}_1, \mathbf{q}_1 \rangle, \langle \boldsymbol{\pi}_2, \mathbf{q}_2 \rangle, \dots, \langle \boldsymbol{\pi}_r, \mathbf{q}_r \rangle.
+            \end{equation*}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{QAP as a Linear PCP}
+        \begin{example}[QAP as a Linear PCP]
+            Recall that key QAP equation is:
+            \begin{equation*}
+                \ell(T) \times r(T) - o(T) = z(T)h(T).
+            \end{equation*}
+            Denote $\boldsymbol{\ell}(T) = (\ell_1(T),\dots,\ell_n(T))$, and similarly $\boldsymbol{r}(T)$, $\boldsymbol{o}(T)$.
+            \pause
+
+            Now, consider the following \textbf{linear PCP for QAP}:
+            \begin{algoen}
+                \item $\mathcal{P}$ commits to an extended witness $\mathbf{z}$ and coefficients $\mathbf{h} = (h_1,\dots,h_n)$ of $h(T)$.\pause
+                \item $\mathcal{V}$ samples $\gamma \leftarrowS \mathbb{F}$ and sends query $\boldsymbol{\gamma} = (\gamma,\gamma^2,\dots,\gamma^n)$ to $\mathcal{P}$.\pause
+                \item $\mathcal{P}$ reveals the following values:
+                \begin{align*}
+                    \pi_1 &\gets \langle \mathbf{z}, \boldsymbol{\ell}(\gamma) \rangle, \quad &\pi_2 &\gets \langle \mathbf{z}, \boldsymbol{r}(\gamma) \rangle, \\
+                    \pi_3 &\gets \langle \mathbf{z}, \boldsymbol{o}(\gamma) \rangle, \quad &\pi_4 &\gets z(\gamma) \cdot \langle \mathbf{h}, \boldsymbol{\gamma} \rangle.
+                \end{align*}
+                \vspace{-10pt}
+                \pause
+                \item $\mathcal{V}$ checks whether $\pi_1\pi_2 - \pi_3 = \pi_4$.
+            \end{algoen}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Why is it Sound?}
+        \begin{questionblock}{Question}
+            Why is it safe to use such a check? (assuming proper commitments).
+        \end{questionblock}
+        \pause
+
+        The polynomials $\ell(T)$, $r(T)$ and $o(T)$ are interpolated polynomials using
+        $\left| \Circ \right|$ (number of gates) points, so:
+        \vspace{-5pt}
+        \begin{equation*}
+            \deg(\ell) \le \left| \Circ \right|, \quad
+            \deg(r) \le \left| \Circ \right|, \quad
+            \deg(o) \le \left| \Circ \right|
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Thus, we can estimate the degree of polynomial $m(T) = \ell(T)r(T) - o(T)$.
+        \vspace{-5pt}
+        \begin{equation*}
+            \deg(m) \leq \max\{\deg(\ell) + \deg(r), \deg(o)\} \leq 2 \left| \Circ \right|
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        If an adversary $\mathcal{A}$ does not know a valid witness $\mathbf{z}$, he can compute a
+        polynomial $(\widetilde{m}(T), \widetilde{h}(T)) \gets \mathcal{A}(\cdot)$ that satisfies a verifier
+        $\mathcal{V}$ with probability:
+        \vspace{-5pt}
+        \begin{equation*}
+            \Pr_{s \leftarrowS \mathbb{F}}[\widetilde{m}(s) = z(s)\widetilde{h}(s)] \leq \frac{2 \left| \Circ \right|}{\#\mathbb{F}}
+        \end{equation*}
+
+        If $\#\mathbb{F}$ is large enough, $2|\Circ|/\#\mathbb{F}$ is \textit{negligible}.
+    \end{frame}
+
+    \section{Proof Of Exponent}
+
+    \begin{frame}{Encrypted Verification}
+        Let us try to prove that we know some polynomial $p(T)$ that can be divided by $t(T)$ without a
+        remainder.
+        \pause
+
+        Consider the polynomial: $p(T) = T^2 - 5T + 2$. Additionally, we will need a cyclic group $\mathbb{G}$ with a generator $g \in \mathbb{G}$. We also define the \textit{encryption} operation as follows:
+        \begin{equation*}
+            \mathsf{Enc}: \mathbb{F} \to \mathbb{G}, \quad \mathsf{Enc}(x) := g^x
+        \end{equation*}
+        \pause
+
+        Essentially, $\mathsf{Enc}(p(\tau))$ is the \textbf{KZG Commitment}. Let us see the encryption of $p(\tau)$ for our example:
+        \begin{equation*}
+            \mathsf{Enc}(p(\tau)) = g^{p(\tau)} = g^{\left( \tau^2 - 5\tau + 2 \right)}  = \left( g^{\tau^2} \right)^1 \cdot {\left( g^{\tau^1} \right)}^{-5} \cdot \left(g^{\tau^0}\right)^2
+        \end{equation*}
+        \pause
+
+        \begin{remarkblock}{Note}
+            KZG Commitment requires only encrypted powers of $\tau$: $\{g^{\tau^i}\}_{i \in [d]}$.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Encrypted Verification}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Picks a random value $\tau \leftarrowS \mathbb{F}$. \pause
+            \item \vspace{-3pt} Calculates the public parameters $\{g^{\tau^i}\}_{i \in [d]}$. \pause
+            \item \vspace{-3pt} Calculates $t(\tau)$. \pause
+            \item \vspace{-3pt} Outputs prover parameters $\{g^{\tau^i}\}_{i \in [d]}$. \pause
+        \end{itemize}
+        \textbf{Prover}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Calculates $h(T) = \frac{p(T)}{t(T)}$. \pause
+            \item \vspace{-3pt} Using $\{g^{\tau^i}\}_{i \in [d]}$ calculates $g^{p(\tau)}$ and $g^{h(\tau)}$. \pause
+            \item \vspace{-3pt} Provides encrypted polynomials $g^{p(\tau)}$ and $g^{h(\tau)}$ to the verifier. \pause
+        \end{itemize}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Checks whether $g^{p(\tau)} = \left( g^{h(\tau)} \right)^{t(\tau)}$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{That doesn't work...}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Picks a random value $\tau \leftarrowS \mathbb{F}$. \pause
+            \item \vspace{-3pt} Calculates the public parameters $\{g^{\tau^i}\}_{i \in [d]}$. \pause
+            \item \vspace{-3pt} Calculates $t(\tau)$. \pause
+            \item \vspace{-3pt} Outputs prover parameters $\{g^{\tau^i}\}_{i \in [d]}$. \pause
+        \end{itemize}
+        \textbf{Adversary}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Picks a random value $r \leftarrowS \mathbb{F}$, calculates $g^r$. \pause
+            \item \vspace{-3pt} Calculates $g^{t(\tau)}$. \pause
+            \item \vspace{-3pt} Calculates $g^{\widetilde{p}(\tau)} = {\left( g^{t(\tau)} \right)}^r$. \pause
+        \end{itemize}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Checks whether $g^{\widetilde{p}(\tau)} = \left( g^{r} \right)^{t(\tau)}$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Proof Of Exponent}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Picks random values $\tau \leftarrowS \mathbb{F}$, $\alpha \leftarrowS \mathbb{F}$. \pause
+            \item \vspace{-3pt} Calculates the public parameters $\{g^{\tau^i}\}_{i \in [d]}$ and $\{g^{\alpha\tau^i}\}_{i \in [d]}$. \pause
+            \item \vspace{-3pt} Calculates $t(\tau)$. \pause
+        \end{itemize}
+        \textbf{Prover}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Calculates $h(T) = \frac{p(T)}{t(T)}$. \pause
+            \item \vspace{-3pt} Using $\{g^{\tau^i}\}_{i \in [d]}$ calculates $g^{p(\tau)}$, $g^{h(\tau)}$. \pause
+            \item \vspace{-3pt} Using $\{g^{\alpha\tau^i}\}_{i \in [d]}$ calculates $g^{p'(\tau)} = g^{\alpha p(\tau)}$. \pause
+            \item \vspace{-3pt} Provides encrypted polynomials to the verifier. \pause
+        \end{itemize}
+        \textbf{Verifier}:
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Checks whether $g^{p(\tau)} = \left( g^{h(\tau)} \right)^{t(\tau)}$. \pause
+            \item \vspace{-3pt} Checks whether $g^{p'(\tau)} = \left( g^{p(\tau)} \right)^{\alpha} = g^{\alpha p(\tau)}$.
+        \end{itemize}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

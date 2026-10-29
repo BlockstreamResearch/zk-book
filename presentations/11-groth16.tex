@@ -1,0 +1,1192 @@
+\documentclass{zkdl-presentation-template}
+
+\usepackage{changepage}
+
+% Circuit notation of the book
+\providecommand{\Circ}{\textit{\texttt{C}}}
+
+% Plots
+\pgfplotsset{
+    zkdlgrid/.style={
+        grid = both,
+        grid style = {line width=.1pt, draw=oc-gray-2},
+        major grid style = {line width=.2pt, draw=oc-gray-5}
+    }
+}
+
+% Protocol diagrams
+\tikzset{
+    arrow/.style={-latex, ultra thick}
+}
+
+% Highlight of what changed in the protocol (as in the book)
+\newcommand{\chg}[1]{\textcolor{oc-green-8}{#1}}
+
+\title[Groth16]{\textbf{Pairing-Based SNARKs:\\Pinocchio and Groth16}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+        \tableofcontents
+    \end{frame}
+
+    \section{Recap}
+
+    \begin{frame}{Recap: R1CS}
+        Each \textbf{constraint} in the Rank-1 Constraint System must be in the form:
+        \begin{equation*}
+            \langle \boldsymbol{\ell}, \mathbf{z}\rangle \times \langle \boldsymbol{r}, \mathbf{z}\rangle = \langle \boldsymbol{o}, \mathbf{z}\rangle
+        \end{equation*}\pause
+
+        Where $\langle \mathbf{u}, \mathbf{v}\rangle$ is a dot product.
+        \vspace{-10pt}
+        \begin{equation*}
+            \langle \mathbf{u}, \mathbf{v} \rangle := \mathbf{u}^{\top}\mathbf{v} = \sum_{i=1}^{n} u_i v_i
+            \vspace{-5pt}
+        \end{equation*}\pause
+
+        Thus
+        \vspace{-5pt}
+        \begin{equation*}
+            \left(\sum_{i=1}^{n} \ell_i z_i\right) \times \left(\sum_{j=1}^{n} r_j z_j\right) = \sum_{k=1}^{n} o_k z_k
+        \end{equation*}
+        That is, actually, a quadratic equation with multiple variables.
+    \end{frame}
+
+    \begin{frame}[fragile]{Recap: R1CS}
+        Consider the simplest program:
+        \vspace{10pt}
+        \begin{lstlisting}[language=Python,numbers=none]
+    def example(a: F, b: F, c: F) -> F:
+        if a:
+            return b * c
+        else:
+            return b + c
+        \end{lstlisting}
+    \end{frame}
+
+    \begin{frame}{Recap: R1CS}
+        \vspace{-10pt}
+        \begin{equation*}
+            r = x_1 \times (x_2 \times x_3) + (1 - x_1) \times (x_2 + x_3)
+        \end{equation*}\pause
+        Thus, the next constraints can be built:
+        \vspace{-5pt}
+        \begin{align*}
+            x_1 \times x_1 &= x_1 \quad \text{(binary check)} \tag{1} \\
+            x_2 \times x_3 &= \mathsf{mult} \tag{2} \\
+            x_1 \times \mathsf{mult} &= \mathsf{selectMult} \tag{3} \\
+            (1 - x_1) \times (x_2 + x_3) &= r - \mathsf{selectMult} \tag{4}
+        \end{align*}\pause
+        The witness vector: $\mathbf{z} = (1, r, x_1, x_2, x_3, \mathsf{mult}, \mathsf{selectMult})$.
+
+        \vspace{2pt}\pause
+        The coefficients vectors:
+        \vspace{-25pt}
+        {\center\small\begin{align*}
+            \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{o}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+            \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0), & \boldsymbol{r}_2 &= (0, 0, 0, 0, 1, 0, 0), & \boldsymbol{o}_2 &= (0, 0, 0, 0, 0, 1, 0) \\
+            \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_3 &= (0, 0, 0, 0, 0, 1, 0), & \boldsymbol{o}_3 &= (0, 0, 0, 0, 0, 0, 1) \\
+            \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0), & \boldsymbol{r}_4 &= (0, 0, 0, 1, 1, 0, 0), & \boldsymbol{o}_4 &= (0, 1, 0, 0, 0, 0, -1)
+        \end{align*}}
+    \end{frame}
+
+    \begin{frame}{Recap: QAP}
+        R1CS provides us with the following constraint vectors:
+        \vspace{-8pt}
+        \begin{equation*}
+            \boldsymbol{\ell}_1, \boldsymbol{\ell}_2, \dots, \boldsymbol{\ell}_m, \quad
+            \boldsymbol{r}_1, \boldsymbol{r}_2, \dots, \boldsymbol{r}_m, \quad
+            \boldsymbol{o}_1, \boldsymbol{o}_2, \dots, \boldsymbol{o}_m.
+            \vspace{-5pt}
+        \end{equation*}\pause
+        Of course, they form corresponding matrices:
+        \vspace{-5pt}
+        \begin{equation*}
+            L = \begin{bmatrix}
+                L_{1,1} & L_{1,2} & \dots & L_{1,n} \\
+                L_{2,1} & L_{2,2} & \dots & L_{2,n} \\
+                \vdots & \vdots & \ddots & \vdots \\
+                L_{m,1} & L_{m,2} & \dots & L_{m,n}
+            \end{bmatrix}, \;
+            \text{same goes for $R$ and $O$}
+        \end{equation*}\pause
+        An example of a single ``if'' statement:
+        \begin{center}
+            \begin{minipage}{0.4\textwidth}
+            \vspace{-15pt}
+            {\small \begin{align*}
+                \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+                \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0) \\
+                \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0) \\
+                \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0)
+            \end{align*}}
+            \end{minipage}
+            \begin{minipage}{0.5\textwidth}
+                \vspace{-10pt}
+                \begin{equation*}
+                    \begin{bmatrix}
+                        0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                        0 & 0 & \textcolor{oc-red-7}{0} & 1 & 0 & 0 & 0 \\
+                        0 & 0 & \textcolor{oc-red-7}{1} & 0 & 0 & 0 & 0 \\
+                        \textcolor{oc-blue-7}{1} & \textcolor{oc-blue-7}{0} & \boxed{-1} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0} & \textcolor{oc-blue-7}{0}
+                    \end{bmatrix}
+                \end{equation*}
+            \end{minipage}
+        \end{center}
+    \end{frame}
+
+    \begin{frame}{Recap: QAP}
+        \begin{center}
+            \begin{tikzpicture}
+                \begin{axis}[
+                    axis lines = middle,
+                    xlabel = {$T$},
+                    ylabel = {$\ell_{x_1}(T)$},
+                    ymin = -2.99, ymax = 2.99,
+                    xmin = -0.5, xmax = 4.99,
+                    domain = 0:5,
+                    samples = 100,
+                    ytick = {-3,...,3},
+                    xtick = {0,1,...,5},
+                    zkdlgrid
+                ]
+                \addplot[
+                    color=oc-blue-7,
+                    thick
+                ]
+                {-5/6*x^3 + 6*x^2 - 79/6*x + 9};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(1,1) (2,0) (3,1) (4,-1)};
+
+                \node at (axis cs:1,1.5) [anchor=west] {\small $(1,1)$};
+                \node at (axis cs:2,0.2) [anchor=south] {\small $(2,0)$};
+                \node at (axis cs:3,1.5) [anchor=west] {\small $(3,1)$};
+                \node at (axis cs:4,-1) [anchor=west] {\small $(4,-1)$};
+
+                \end{axis}
+            \end{tikzpicture}
+
+            \scriptsize\textbf{Illustration:} The Lagrange interpolation polynomial for points $\{(1,1), (2,0), (3,1), (4,-1)\}$ visualized over $\mathbb{R}$.
+        \end{center}
+    \end{frame}
+
+    \begin{frame}{Recap: QAP}
+        \begin{figure}[H]
+            \centering
+            \begin{tikzpicture}
+                \begin{axis}[
+                    axis lines = middle,
+                    xlabel = {$T$},
+                    ylabel = {$y$},
+                    ymin = -0.99, ymax = 3.99,
+                    xmin = -0.5, xmax = 3.99,
+                    domain = 0:5,
+                    samples = 100,
+                    ytick = {-1,...,4},
+                    xtick = {0,1,...,4},
+                    zkdlgrid
+                ]
+
+                % p(T)
+                \addplot[
+                    color=oc-blue-7,
+                    thick
+                ]
+                {3/2*x - 1/2*x^2};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0, 0) (1, 1) (2, 1) (3, 0)};
+                \node at (axis cs:3.35,-0.7) [anchor=east] {$p(T)$};
+
+                \node at (axis cs:0,-0.2) [anchor=west] {\tiny $(0, 0)$};
+                \node at (axis cs:1,1) [anchor=south] {\tiny $(1, 1)$};
+                \node at (axis cs:2.1,1) [anchor=south] {\tiny $(2, 1)$};
+                \node at (axis cs:2.9,0.2) [anchor=west] {\tiny $(3, 0)$};
+
+                % q(T)
+                \addplot[
+                    color=oc-green-7,
+                    thick
+                ]
+                {1/3*x^3 - 2*x^2 + 8/3*x + 1};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0,1) (1,2) (2,1) (3, 0)};
+                \node at (axis cs:3.7,0.7) [anchor=south] {$q(T)$};
+
+                \node at (axis cs:0,1) [anchor=west] {\tiny $(0, 1)$};
+                \node at (axis cs:1,2) [anchor=south] {\tiny $(1, 2)$};
+
+                % (p+q)(T)
+                \addplot[
+                    color=oc-orange-7,
+                    thick
+                ]
+                {1/3*x^3 - 5/2*x^2 + 25/6*x + 1};
+                \addplot[
+                    only marks,
+                    mark=*,
+                    color=oc-red-7
+                ]
+                coordinates {(0,1) (1,3) (2,2) (3, 0)};
+                \node at (axis cs:3.4,-0.55) [anchor=west] {$(p+q)(T)$};
+
+                \node at (axis cs:1,3) [anchor=south] {\tiny $(1, 3)$};
+                \node at (axis cs:2,2) [anchor=west] {\tiny $(2, 2)$};
+
+                \end{axis}
+            \end{tikzpicture}
+            \caption{Addition of two polynomials}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Recap: QAP}
+        \vspace{-5pt}
+        Now, using coefficients encoded with polynomials, we can build a constraint number
+        $j \in \{1, \dots, m\}$ in the next way:
+        \vspace{-5pt}
+        \begin{align*}
+            &(z_1\ell_1(j) + z_2\ell_2(j) + \dots + z_n\ell_n(j)) \times \\
+            \times &(z_1r_1(j) + z_2r_2(j) + \dots + z_nr_n(j)) = \\
+            = &(z_1o_1(j) + z_2o_2(j) + \dots + z_no_n(j))
+            \vspace{-5pt}
+        \end{align*}
+        \pause
+        Or written more concisely:
+        \vspace{-5pt}
+        \begin{equation*}
+            \left( \sum_{i = 1}^{n} z_i\ell_i(T) \right) \times \left( \sum_{i = 1}^{n} z_ir_i(T) \right) = \left( \sum_{i = 1}^{n} z_io_i(T) \right)
+        \end{equation*}
+
+        \vspace{-5pt}
+        \begin{equation*}
+            \ell(T) \times r(T) = o(T) \; \commentgray{on $\{1,\dots,m\}$}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Recap: QAP}
+        Now, we can define a \textbf{master polynomial} $m(T)$, that has zeros at all elements from the set
+        $\Omega = \{1,\dots,m\}$
+        \vspace{-5pt}
+        \begin{equation*}
+            m(T) = \ell(T) \times r(T) - o(T)
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        It means, that $m(T)$ can be divided by \textbf{vanishing polynomial} $z_{\Omega}(T)$ without a remainder!
+        \vspace{-8pt}
+        \begin{equation*}
+            z_{\Omega}(T) = \prod_{i=1}^m (T - i), \qquad \text{$h(T) = \frac{m(T)}{z_{\Omega}(T)}$ is a polynomial}
+            \vspace{-5pt}
+        \end{equation*}
+    \end{frame}
+
+    \section{Encrypted Verification}
+
+    \begin{frame}{Current Point}
+        We've managed to encode into \textbf{a single polynomial} an entire computation (a program),
+        of any size, independent of how much data it consumes. \\ \pause
+        \vspace{10pt}
+        Now, we need to figure out the protocol, how a prover can succinctly prove the knowledge of
+        a correct witness for some circuit to a verifier, additionally, make it zero-knowledge and
+        non-interactive.\pause
+
+        Where the knowledge of the correct witness is a knowledge of the quotient polynomial $h(T)$.
+        \begin{equation*}
+            m(T) = h(T) \times z_{\Omega}(T)
+        \end{equation*}
+
+        \begin{remark}
+            Further, for brevity, we will denote $z_{\Omega}(T)$ as $z(T)$.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Notation Preliminaries: Groups}
+        In this section, we will use:
+        \begin{itemize}[label=\ding{51}]
+            \item Group of points on elliptic curve
+            denoted as $\mathbb{G}$ of prime order $q$ with a generator $g$.\pause
+            \item The symmetric pairing function $e: \mathbb{G} \times \mathbb{G} \to \mathbb{G}_T$, where
+            $(\mathbb{G}_T, \times)$ is a target group (typically, just a scalar from extension $\mathbb{F}_{p^k}$).
+        \end{itemize}
+        \pause
+        \begin{remarkblock}{Recall}
+            The core property of the pairing function $e$ is the \textbf{bilinearity}:
+            \begin{equation*}
+                e(g^{\alpha}, g^{\beta}) = e(g^{\alpha\beta}, g) = e(g, g^{\alpha\beta}) = e(g,g)^{\alpha\beta}.
+            \end{equation*}
+
+            Here, $g^{\alpha}$ is the same as ``scalar multiplication of a generator by a scalar $\alpha \in \mathbb{Z}_q$''.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Notation Preliminaries: QAP}
+        Recall that the core equation to be proven is:
+        \begin{equation*}
+            \textcolor{oc-indigo-8}{\underbrace{\left( \sum_{i = 1}^{n} z_i\ell_i(T) \right)}_{\text{left wires encoding}}} \times \textcolor{oc-yellow-8}{\underbrace{\left( \sum_{i = 1}^{n} z_ir_i(T) \right)}_{\text{right wires encoding}}} - \textcolor{oc-green-8}{\underbrace{\left( \sum_{i = 1}^{n} z_io_i(T) \right)}_{\text{output encodings}}} = z(T)h(T)
+        \end{equation*}
+        \pause
+
+        Shortly, $\ell(T) \times r(T) - o(T) = z(T)h(T)$.
+    \end{frame}
+
+    \begin{frame}{Naive Proof}
+        Suppose, we are given a circuit $\Circ$ with a maximum degree $d$ of polynomials
+        used underneath.
+
+        Thus, all parties additionally know the target polynomial $z(T)$ and QAP polynomials
+        $\{\ell_i(T)\}_{i \in [n]}, \{r_i(T)\}_{i \in [n]}, \{o_i(T)\}_{i \in [n]}$, where $n$ is
+        number of witness elements.
+        \pause
+
+        \textbf{Prover}
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Provides witness $\mathbf{z}$ to a Verifier.
+        \end{itemize}
+        \pause
+        \textbf{Verifier}
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Checks $\left( \sum_{i = 1}^{n} z_i\ell_i(T) \right) \times \left( \sum_{i = 1}^{n} z_ir_i(T) \right) = \left( \sum_{i = 1}^{n} z_io_i(T) \right)$ on $\Omega$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Naive Proof}
+        \begin{itemize}
+            \item[\xmark] Succinct
+            \item[\cmark] Non-Interactive
+            \item[\xmark] Zero-Knowledge
+        \end{itemize}
+        \pause
+
+        \vspace{20pt}
+        \begin{columns}
+            \begin{column}{0.7\textwidth}
+                The verifier could actually just run a program that represents a circuit
+                $\Circ$ on witness data $\mathbf{z}$.
+            \end{column}
+
+            \begin{column}{0.2\textwidth}
+                \includegraphics[width=\linewidth]{images/common/new-moon-with-face.jpg}
+            \end{column}
+        \end{columns}\pause
+
+        We, definitely, need to encrypt the witness data $\mathbf{z}$ somehow...
+    \end{frame}
+
+    \begin{frame}{Encryption and KZG Commitment}
+        Let us define the \textit{encryption} operation as follows:
+        \vspace{-10pt}
+        \begin{equation*}
+            \mathsf{Enc}: \mathbb{Z}_q \to \mathbb{G}, \quad \mathsf{Enc}(x) := g^x
+            \vspace{-5pt}
+        \end{equation*}\pause
+        Essentially, $\mathsf{Enc}(p(\tau))$ is the \textbf{KZG Commitment} $\mathsf{com}(p)$.
+        \begin{example}
+            Consider the polynomial: $p(T) = T^2 - 5T + 2$, the encryption of $p(\tau)$ can be found as follows:
+            {\large
+            \begin{equation*}
+                \mathsf{Enc}(p(\tau)) = g^{p(\tau)} = g^{\left( \tau^2 - 5\tau + 2 \right)}  = \left( g^{\tau^2} \right)^1 \cdot {\left( g^{\tau^1} \right)}^{-5} \cdot \left(g^{\tau^0}\right)^2
+            \end{equation*}}
+        \end{example}\pause
+        \begin{questionblock}{Question}
+            KZG Commitment requires encrypted powers of $\tau$: $\{g^{\tau^i}\}_{i \in [d]}$. But
+            where can the prover take them?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Trusted Setup}
+        \textbf{Trusted Party Setup}
+        \vspace{-5pt}
+        \begin{itemize}[label=\ding{51}]
+            \item \vspace{-3pt} Picks a random value $\tau \leftarrowS \mathbb{F}$. \pause
+            \item \vspace{-3pt} Calculates the public parameters $\{g^{\tau^i}\}_{i \in [d]}$.\pause
+            \item \vspace{-3pt} \textbf{Deletes} $\tau$ (toxic waste).\pause
+            \item \vspace{-3pt} \textbf{Outputs} prover parameters $\mathsf{pp} \gets \{g^{\tau^i}\}_{i \in [d]}$ and verifier parameters $\mathsf{vp} \gets \mathsf{com}(z)$.
+        \end{itemize} \pause
+
+        This way, we can find the KZG commitment for each polynomial. For example:
+        \begin{equation*}
+            \mathsf{com}(\ell) \triangleq g^{\ell(\tau)} = g^{\sum_{i=0}^d \ell_i \tau^i} = \prod_{i=0}^d (g^{\tau^i})^{\ell_i},
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Encrypted Verification}
+        Now, we can calculate the following KZG commitments (or, synonymously, encryptions):
+        \begin{equation*}
+            g^{\ell(\tau)}, g^{r(\tau)}, g^{o(\tau)}, g^{h(\tau)}, g^{z(\tau)}
+        \end{equation*}
+        But how can we verify $h(T)z(T) = \ell(T)r(T) - o(T)$ in the encrypted space?
+        \pause
+
+        Well, first notice that, according to the \textbf{Schwartz-Zippel Lemma}, \textit{with overwhelming probability} the check is equivalent to:
+        \begin{equation*}
+            \ell(\tau)r(\tau) = z(\tau)h(\tau) + o(\tau).
+        \end{equation*}
+        \pause
+        So, we can check this equality as follows:
+        \begin{equation*}
+            e(\mathsf{com}(\ell), \mathsf{com}(r)) = e(\mathsf{com}(z), \mathsf{com}(h)) \cdot e(\mathsf{com}(o), g),
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Attempt \#1: Encrypted Verification}
+        \scriptsize
+
+        \textbf{Trusted Setup: }
+        $\tau \leftarrowS \mathbb{F} \textbf{,} \quad \{g^{\tau^i}\}_{i \in [d]}\textbf{,} \quad g^{z(\tau)} \textbf{,} \quad \textbf{delete}(\tau)$.
+        \vspace{10pt}
+
+        \begin{center}
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] (prover) at (-3.5, -3) {
+                    \includegraphics[width=2cm]{images/common/prover.png}\\Prover $\mathcal{P}$
+                };
+
+                \node[inner sep=0pt, align=center] (verifier) at (4, -3) {
+                    \includegraphics[width=2cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$
+                };
+
+                \onslide<2->{
+                    \node[inner sep=0pt, align=center] (pdata) at (-3, -0.6) {
+                        \begin{minipage}{4cm}
+                            \begin{itemize}[label=\ding{51}]
+                                \item $h(T) = \frac{\ell(T) \times r(T) - o(T)}{z(T)}$.
+                                \onslide<3->{\item {
+                                    KZG commitments:
+                                    \vspace{-10pt}
+                                    \begin{align*}
+                                        \pi_L &\gets \mathsf{com}(\ell), &\pi_R &\gets \mathsf{com}(r), \\
+                                        \pi_O &\gets \mathsf{com}(o), &\pi_H &\gets \mathsf{com}(h),
+                                    \end{align*}
+                                }}
+                            \end{itemize}
+                        \end{minipage}
+                    };
+                }
+
+                \onslide<4->{
+                    \draw[arrow] (prover) -- (verifier) node[midway, above=1mm] {$\boldsymbol{\pi} = (\pi_L,\pi_R,\pi_O,\pi_H)$};
+                }
+
+                \onslide<5->{
+                    \node[inner sep=0pt, align=center] (vdata) at (5, -1.1) {
+                        \begin{minipage}{6cm}
+                            \begin{itemize}[label=\ding{51}]
+                                \item $e(\pi_L, \pi_R) \xlongequal{?} \\ e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$.
+                            \end{itemize}
+                        \end{minipage}
+                    };
+                }
+            \end{tikzpicture}
+        \end{center}
+    \end{frame}
+
+    \begin{frame}{Attempt \#1: Encrypted Verification}
+        \begin{itemize}
+            \item[\cmark] Succinct
+            \item[\cmark] Non-Interactive
+            \item[\cmark] Zero-Knowledge \pause
+            \item[\xmark] \vspace{7pt} Does it work?
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Why it doesn't work??}\begin{adjustwidth}{-5mm}{0mm}
+        \scriptsize
+
+        \textbf{Trusted Setup: }
+        $\tau \leftarrowS \mathbb{F} \textbf{,} \quad \{g^{\tau^i}\}_{i \in [d]}\textbf{,} \quad g^{z(\tau)}\textbf{,}$ \textbf{delete}($\tau$).
+        \vspace{10pt}
+
+        \begin{center}
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] (prover) at (-3.5, -2.4) {
+                    \includegraphics[width=2cm]{images/common/prover.png}\\Prover $\mathcal{P}$
+                };
+
+                \node[inner sep=0pt, align=center] (verifier) at (4, -2.4) {
+                    \includegraphics[width=2cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$
+                };
+
+                \onslide<2->{\node[inner sep=0pt, align=center] (pdata) at (-2.3, 0) {
+                    \begin{minipage}{6cm}
+                        \begin{itemize}[label=\ding{51}]
+                            \onslide<3->{\item $h'(T) \leftarrowS \mathbb{F}[T], \quad m'(T) = z(T) \times h'(T)$.}
+                            \onslide<4->{\item Finds $\ell'(T), r'(T), o'(T)$ such that: \\ $\ell'(T) \times r'(T) - o'(T) = m'(T)$}
+                            \onslide<5->{\item {
+                                KZG commitments:
+                                \vspace{-10pt}
+                                \begin{align*}
+                                    \pi_{\ell'} &\gets \mathsf{com}(\ell'), &\pi_{r'} &\gets \mathsf{com}(r'), \\
+                                    \pi_{o'} &\gets \mathsf{com}(o'), &\pi_{h'} &\gets \mathsf{com}(h'),
+                                \end{align*}
+                            }}
+                        \end{itemize}
+                    \end{minipage}
+                };}
+
+                \onslide<6->{\draw[arrow] (prover) -- (verifier) node[midway, above=1mm] {$\boldsymbol{\pi} = (\pi_{\ell'},\pi_{r'},\pi_{o'},\pi_{h'})$};}
+
+                \onslide<7->{\node[inner sep=0pt, align=center] (vdata) at (5.1, -0.6) {
+                    \begin{minipage}{6cm}
+                        \begin{itemize}[label=\ding{51}]
+                            \item $e(\pi_{\ell'}, \pi_{r'}) \xlongequal{?} \\ e(\mathsf{com}(z), \pi_{h'}) \cdot e(\pi_{o'}, g)$.
+                        \end{itemize}
+                    \end{minipage}
+                };}
+            \end{tikzpicture}
+        \end{center}
+
+        \pause
+        \begin{alertblock}{Problem}
+            Prover isn't forced to use the values from the trusted setup.
+        \end{alertblock}
+    \end{adjustwidth}\end{frame}
+
+    \begin{frame}{Attempt \#2: Proof Of Exponent}
+        \scriptsize
+
+        \textbf{Trusted Setup: }
+        $\tau, \chg{\alpha} \leftarrowS \mathbb{F} \textbf{,} \quad \{ \{g^{\tau^i}, \chg{g^{\alpha \tau^i}}\}_{i \in [d]} \} \textbf{,} \quad \{g^{z(\tau)}, \chg{g^{\alpha}}\}\textbf{,} \quad \textbf{delete}(\tau, \chg{\alpha})$.
+        \vspace{10pt}
+
+        \begin{center}
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] (prover) at (-3.5, -3) {
+                    \includegraphics[width=2cm]{images/common/prover.png}\\Prover $\mathcal{P}$
+                };
+
+                \node[inner sep=0pt, align=center] (verifier) at (4, -3) {
+                    \includegraphics[width=2cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$
+                };
+
+                \onslide<2->{\node[inner sep=0pt, align=center] (pdata) at (-3, -0.6) {
+                    \begin{minipage}{4cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $h(T) = \frac{\ell(T) \times r(T) - o(T)}{z(T)}$.
+                            \onslide<3->{\item {
+                                KZG commitments:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    \pi_L &\gets g^{\ell(\tau)}, \quad & \chg{\pi_L'} &\gets \chg{g^{\alpha \ell(\tau)}},\\[-2pt]
+                                    \pi_R &\gets g^{r(\tau)}, \quad & \chg{\pi_R'} &\gets \chg{g^{\alpha r(\tau)}},\\[-2pt]
+                                    \pi_O &\gets g^{o(\tau)}, \quad & \chg{\pi_O'} &\gets \chg{g^{\alpha o(\tau)}},\\[-2pt]
+                                    \pi_H &\gets g^{h(\tau)}, \quad & \chg{\pi_H'} &\gets \chg{g^{\alpha h(\tau)}}.
+                                \end{align*}
+                            }}
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+
+                \onslide<4->{\draw[arrow] (prover) -- (verifier) node[midway, above=1mm] {$\boldsymbol{\pi} = (\pi_L,\pi_R,\pi_O,\pi_H,\chg{\pi_L',\pi_R',\pi_O',\pi_H'})$};}
+
+                \onslide<5->{\node[inner sep=0pt, align=center] (vdata) at (5, -0.6) {
+                    \begin{minipage}{4cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $e(\pi_L, \pi_R) \xlongequal{?}\\ e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$.
+                            \onslide<6->{\item \chg{
+                                Proof of Exponent:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    e(\pi_L, g^{\alpha}) &= e(\pi_L', g), \qquad\qquad\qquad\\[-2pt]
+                                    e(\pi_R, g^{\alpha}) &= e(\pi_R', g), \\[-2pt]
+                                    e(\pi_O, g^{\alpha}) &= e(\pi_O', g), \\[-2pt]
+                                    e(\pi_H, g^{\alpha}) &= e(\pi_H', g).
+                                \end{align*}
+                            }}
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+            \end{tikzpicture}
+        \end{center}
+    \end{frame}
+
+    \begin{frame}{Including PoE}
+        \begin{itemize}
+            \item[\cmark] Succinct
+            \item[\cmark] Non-Interactive
+            \item[\cmark] Zero-Knowledge \pause
+            \item[\xmark] Sound
+        \end{itemize}
+        \pause
+
+        \vspace{15pt}
+        \begin{alertblock}{Problem}
+            There is no guarantee that the same witness $\mathbf{z}$ was used to calculate all the commitments $\pi_L, \pi_R, \pi_O, \pi_H$.
+        \end{alertblock}
+    \end{frame}
+
+    \section{Make It Sound}
+
+    \begin{frame}{Additional Optimization}
+        Recall that:
+        \begin{equation*}
+            \ell(T) = \sum_{i=1}^n z_i\ell_i(T), \quad r(T) = \sum_{i=1}^n z_i r_i(T), \quad o(T) = \sum_{i=1}^n z_io_i(T).
+        \end{equation*}
+        \pause
+
+        Here public data is:
+        \begin{equation*}
+            \{\ell_i(T)\}_{i \in [n]}, \{r_i(T)\}_{i \in [n]}, \{o_i(T)\}_{i \in [n]}
+        \end{equation*}
+        \pause
+
+        Moreover, it's defined only by the circuit and trusted setup, thus, it can be calculated before proof generation as a part of the trusted setup.
+    \end{frame}
+
+    \begin{frame}{Additional Optimization}
+        Updated Trusted Setup:
+        \vspace{-10pt}
+        {\scriptsize \begin{align*}
+            \{g^{\tau^i}\}_{i \in [d]}&, \quad \{g^{\alpha \tau^i}\}_{i \in [d]}, \\
+            \chg{\{g^{\ell_i(\tau)}\}_{i \in [n]}}&, \quad \chg{\{g^{\alpha \ell_i(\tau)}\}_{i \in [n]}},\\
+            \chg{\{g^{r_i(\tau)}\}_{i \in [n]}}&, \quad \chg{\{g^{\alpha r_i(\tau)}\}_{i \in [n]}},\\
+            \chg{\{g^{o_i(\tau)}\}_{i \in [n]}}&, \quad \chg{\{g^{\alpha o_i(\tau)}\}_{i \in [n]}}
+        \end{align*}}
+        \pause
+
+        Consider the polynomial $\ell(T) = \sum_{i=1}^n z_i\ell_i(T)$.
+        \pause
+
+        $\mathcal{P}$ can compute the KZG commitment $\pi_L$ and its PoE $\pi_L'$ as follows:
+        \begin{align*}
+            \pi_L &\triangleq g^{\ell(\tau)} = g^{\sum_{i=1}^n z_i \ell_i(\tau)} = \prod_{i=1}^n (g^{\ell_i(\tau)})^{z_i}, \\
+            \pi_L' &\triangleq g^{\alpha \ell(\tau)} = g^{\alpha \sum_{i=1}^n z_i \ell_i(\tau)} = \prod_{i=1}^n (g^{\alpha \ell_i(\tau)})^{z_i}.
+        \end{align*}
+    \end{frame}
+
+    \begin{frame}{Witness Consistency Check}
+        To prove that the same $\mathbf{z}$ is used in all commitments, we need some ``checksum''
+        term that will somehow combine all polynomials $\ell(T)$, $r(T)$, and $o(T)$ with the witness
+        $\mathbf{z}$.
+        \pause
+
+        We can do so by proving the next simple statement:
+        \vspace{-5pt}
+        \begin{equation*}
+            g^{\ell(\tau) + r(\tau) + o(\tau)} = \pause \prod_{i=1}^n {\left(g^{\ell_i(\tau) + r_i(\tau) + o_i(\tau)}\right)}^{z_i}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        And we already know how to do that --- PoE!
+    \end{frame}
+
+    \begin{frame}{Witness Consistency Check}
+        Let us introduce one more coefficient...
+        \vspace{-5pt}
+        \begin{equation*}
+            \beta \leftarrowS \mathbb{F}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Extended trusted setup contains additional values:
+        \vspace{-5pt}
+        \begin{equation*}
+            g^{\beta}, \quad \{g^{\beta(\ell_i(\tau) + r_i(\tau) + o_i(\tau))}\}_{i \in [n]}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+        Prover needs to calculate $\pi_{\beta}$:
+        \vspace{-5pt}
+        \begin{equation*}
+            \pi_{\beta} \gets g^{\beta(\ell(\tau) + r(\tau) + o(\tau))} = \pause \prod_{i=1}^{n} \left(g^{\beta(\ell_i(\tau) + r_i(\tau) + o_i(\tau))}\right)^{z_i}
+        \end{equation*}
+        \pause
+        And easy check for verifier:
+        \vspace{-5pt}
+        \begin{equation*}
+            e(\pi_L\pi_R\pi_O, g^{\beta}) = e(\pi_{\beta}, g).
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{One more time... that doesn't work}
+        If the witness is consistent, the following condition must hold:
+        \vspace{-3pt}
+        {\small \begin{equation*}
+            (z_{\ell,i}\ell_i(\tau) + z_{r,i}r_i(\tau) + z_{o,i}o_i(\tau))\beta = z_{\beta,i}\beta(\ell_i(\tau) + r_i(\tau) + o_i(\tau)) \; \commentgray{for all $i \in [n]$}
+            \vspace{-10pt}
+        \end{equation*}}
+        \pause
+
+        But, what if $\ell_i \equiv r_i$. Let us call them $q$, thus:
+        \vspace{-3pt}
+        \begin{equation*}
+            (z_{\ell,i} + z_{r,i})q + z_{o,i}o_i(\tau)= z_{\beta,i}(2q + o_i(\tau)) \; \commentgray{for all $i \in [n]$}
+            \vspace{-10pt}
+        \end{equation*}
+        \pause
+
+        The adversary can choose $z_{\ell,i}$, $z_{r,i}$ and $z_{o,i}$ such that:
+        \vspace{-5pt}
+        \begin{equation*}
+            z_{\beta,i} := z_{o,i} \quad \text{and} \quad z_{\ell,i}=2z_{o,i} - z_{r,i}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+
+        \begin{example}
+            \begin{equation*}
+                z_{\beta} = z_o = 5, \quad z_{\ell} = 7, \quad z_r = 3
+                \vspace{-25pt}
+            \end{equation*}
+
+            \begin{align*}
+                (7 + 3)q + 5o(\tau) = 5(2q + o(\tau)) \\
+                10q + 5o(\tau) = 10q + 5o(\tau)
+            \end{align*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{More coefficients!}
+        The main problem is that if $r_i \equiv \ell_i$ then $\beta r_i \equiv \beta \ell_i$.\pause
+
+        Let us fix that by introducing separate $\beta$ coefficients for $\ell$, $r$ and $o$.
+        \begin{equation*}
+            \left( \beta_L, \beta_R, \beta_O \right) \leftarrowS \mathbb{F}^3
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+
+        Therefore, $\beta_R r_i \neq \beta_L \ell_i$ even if $r_i \equiv \ell_i$, so the previous hack doesn't work.\pause
+
+        So, finally, the trusted setup is updated with:
+        \vspace{-5pt}
+        \begin{equation*}
+            g^{\beta_L}, g^{\beta_R}, g^{\beta_O}, \{g^{\beta_L\ell_i(\tau) + \beta_Rr_i(\tau) + \beta_Oo_i(\tau)}\}_{i \in [n]}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+
+        Verification:
+        \vspace{-5pt}
+        \begin{equation*}
+            e(\pi_L, g^{\beta_L}) \cdot e(\pi_R, g^{\beta_R}) \cdot e(\pi_O, g^{\beta_O}) = e(\pi_{\beta}, g)
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Even more coefficients!}
+        As the adversary has access to the public $g^{\beta_L}$, $g^{\beta_R}$, $g^{\beta_O}$ he still can cheat the verifier by calculating a modified $\pi_{\beta}$.
+
+        \begin{example}
+            \small
+            Consider a constraint $z_1 \times z_1 = z_2$. Let us try to assign $2$ and $5$ for $z_1$ in a single constraint. As $2 \times 5 = 10$, $z_2$ should contain the value $10$.
+            \vspace{-5pt}
+            \begin{equation*}
+                \mathbf{z} = (z_1, z_2) = (2, 10)
+                \vspace{-5pt}
+            \end{equation*}
+            \pause
+            The next QAP can be built:
+            \vspace{-5pt}
+            \begin{align*}
+                \ell(T) &= 2\ell_1(T) + 10\ell_2(T) \\
+                r(T) &= 2r_1(T) + 3 + 10r_2(T) \\
+                o(T) &= 2o_1(T) + 10o_2(T)
+            \end{align*}
+            \pause
+            Compute $\pi_{\beta}$ as:
+            \vspace{-5pt}
+            \begin{equation*}
+                (g^{\beta_L\ell_1(\tau) + \beta_Rr_1(\tau) + \beta_Oo_1(\tau)})^2 \cdot (g^{\beta_R})^3 \cdot (g^{\beta_L\ell_2(\tau) + \beta_Rr_2(\tau) + \beta_Oo_2(\tau)})^{10}
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Even more coefficients!}
+        To prevent this, let us introduce... one more coefficient!
+        \vspace{-5pt}
+
+        \begin{equation*}
+            \gamma \leftarrowS \mathbb{F}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+
+        So, finally... the trusted setup is updated with:
+        \vspace{-5pt}
+        \begin{equation*}
+            g^{\gamma}, g^{\beta_L\gamma}, g^{\beta_R\gamma}, g^{\beta_O\gamma}, \{g^{\beta_L\ell_i(\tau) + \beta_Rr_i(\tau) + \beta_Oo_i(\tau)}\}_{i \in [n]}
+            \vspace{-5pt}
+        \end{equation*}
+        \pause
+
+        Proving process isn't changed, unlike verification:
+        \begin{equation*}
+            e(\pi_L, g^{\beta_L\gamma}) \cdot e(\pi_R, g^{\beta_R\gamma}) \cdot e(\pi_O, g^{\beta_O\gamma}) = e(\pi_{\beta}, g^{\gamma})
+        \end{equation*}
+
+        That makes it infeasible to cheat.
+    \end{frame}
+
+    \begin{frame}{Attempt \#3: Sound SNARK Protocol}
+        \scriptsize
+
+        \textbf{Trusted Setup: }
+        $\tau, \alpha, \chg{\beta_L, \beta_R, \beta_O, \gamma} \leftarrowS \mathbb{F} \textbf{,} \quad \{ \{g^{\tau^i}, g^{\alpha \tau^i} \}_{i \in [d]}\textbf{,} \quad \chg{\{g^{\beta_L\ell_i(\tau) + \beta_Rr_i(\tau) + \beta_Oo_i(\tau)}\}_{i \in [n]}} \} \textbf{,}$
+        $\{ g^{z(\tau)}, g^{\alpha}, \chg{g^{\beta_L}, g^{\beta_R}, g^{\beta_O}, g^{\beta_L\gamma}, g^{\beta_R\gamma}, g^{\beta_O\gamma}, g^{\gamma}}\}\textbf{,} \quad \textbf{delete}(\tau, \alpha, \chg{\beta_L, \beta_R, \beta_O, \gamma})$.
+        \vspace{10pt}
+
+        \begin{center}
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] (prover) at (-3.5, -3) {
+                    \includegraphics[width=2cm]{images/common/prover.png}\\Prover $\mathcal{P}$
+                };
+
+                \node[inner sep=0pt, align=center] (verifier) at (4, -3) {
+                    \includegraphics[width=2cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$
+                };
+
+                \onslide<2->{\node[inner sep=0pt, align=center] (pdata) at (-3, 0) {
+                    \begin{minipage}{4cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $h(T) = \frac{\ell(T) \times r(T) - o(T)}{z(T)}$.
+                            \onslide<3->{\item {
+                                KZG commitments:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    \pi_L &\gets g^{\ell(\tau)}, \quad &\pi_L' &\gets g^{\alpha \ell(\tau)},\\[-2pt]
+                                    \pi_R &\gets g^{r(\tau)}, \quad &\pi_R' &\gets g^{\alpha r(\tau)},\\[-2pt]
+                                    \pi_O &\gets g^{o(\tau)}, \quad &\pi_O' &\gets g^{\alpha o(\tau)},\\[-2pt]
+                                    \pi_H &\gets g^{h(\tau)}, \quad &\pi_H' &\gets g^{\alpha h(\tau)}.
+                                \end{align*}
+                                \vspace{-16pt}
+                            }}
+                            \onslide<4->{\item \chg{
+                                \vspace{-18pt}
+                                $\pi_{\beta} \gets g^{\beta_L\ell(\tau) + \beta_Rr(\tau) + \beta_Oo(\tau)}$
+                            }}
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+
+                \onslide<5->{\draw[arrow] (prover) -- (verifier) node[midway, above=1mm] {$\boldsymbol{\pi} = (\pi_L,\pi_R,\pi_O,\pi_H,\pi_L',\pi_R',\pi_O',\pi_H',\chg{\pi_{\beta}})$};}
+
+                \onslide<6->{\node[inner sep=0pt, align=center] (vdata) at (5, -0.2) {
+                    \begin{minipage}{5cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $e(\pi_L, \pi_R) \xlongequal{?}\\ e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$.
+                            \onslide<7->{\item {
+                                Proof of Exponent:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    e(\pi_L, g^{\alpha}) &= e(\pi_L', g), \qquad\qquad\qquad\\[-2pt]
+                                    e(\pi_R, g^{\alpha}) &= e(\pi_R', g), \\[-2pt]
+                                    e(\pi_O, g^{\alpha}) &= e(\pi_O', g), \\[-2pt]
+                                    e(\pi_H, g^{\alpha}) &= e(\pi_H', g).
+                                \end{align*}
+                                \vspace{-16pt}
+                            }}
+                            \onslide<8->{\item \chg{
+                                $e(\pi_L, g^{\gamma\beta_L}) \cdot e(\pi_R, g^{\gamma\beta_R}) \cdot \\ \cdot e(\pi_O, g^{\gamma\beta_O}) = e(\pi_{\beta}, g^{\gamma})$
+                            }}
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+            \end{tikzpicture}
+        \end{center}
+    \end{frame}
+
+    \section{Make it Zero-Knowledge}
+
+    \begin{frame}{Why do we need modifications?}
+        \begin{questionblock}{Question}
+            \begin{itemize}[label=\ding{228}]
+                \item According to the security assumptions, given any element of our proof $\boldsymbol{\pi}$, it is impossible to restore the witness $\mathbf{z}$.\pause
+                \item Well, that is true, but does it guarantee that no other information about $\mathbf{z}$ is \textbf{leaked}?\pause
+            \end{itemize}
+
+            It does not! For example, given $\boldsymbol{\pi}$, I can check if $\ell(T) = 10r(T)$. \pause
+
+            How? Simply check
+            \begin{equation*}
+                \pi_L \xlongequal{?} \pi_R^{10}.
+            \end{equation*}
+            \pause
+
+            This works since $\pi_L = g^{\ell(\tau)}$ and $\pi_R = g^{r(\tau)}$, so
+            \begin{equation*}
+                \pi_L = \pi_R^{10} \Leftrightarrow g^{\ell(\tau)} = g^{10r(\tau)} \Leftrightarrow \ell(\tau) = 10r(\tau) \Leftrightarrow \ell(T) = 10r(T)
+            \end{equation*}
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{How do we fix that? Analysis}
+        \begin{block}{Analysis}
+            \begin{itemize}[label=\ding{228}]
+                \item Currently, proof consists of four ingredients: $\pi_L, \pi_R, \pi_O, \pi_H$, and their corresponding PoEs. \pause
+                \item But, current construction creates some ``connection'' between these ingredients. For example, $\pi_L^{101} = \pi_R$ reveals whether $101\ell(T)=r(T)$ or $\pi_L\pi_O=\pi_R$ whether $\ell(T) + o(T) = r(T)$. \pause
+                \item Therefore, the prover must add some ``noise'' to the proof, so that the verifier can't use the proof to extract any information about the witness. The randomness of prover is kept secret. \pause
+                \item Simultaneously, this noise would still make the same proof checkable by already defined verification equations.
+            \end{itemize}
+        \end{block}
+        \pause
+
+        \begin{questionblock}{Question}
+            So how do we represent such ``noise'' while preserving ``homomorphic'' properties of the proof?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{How do we fix that? Doing stuff}
+        \begin{block}{Idea \#1}
+            Let prover pick random values $\delta_L, \delta_R, \delta_O, \delta_H \leftarrowS \mathbb{F}$ and calculate the ``distorted'' values:
+            \begin{equation*}
+                \pi_L \gets g^{\ell(\tau) + \delta_L}, \quad \pi_R \gets g^{r(\tau) + \delta_R}, \quad \text{same for $\pi_O, \pi_H$}
+            \end{equation*}
+            \pause\textbf{Problem (informally):} To make previous verification mechanism work, $\delta_H$ must be picked ``carefully''. However, it's impossible to do so with this construction.
+        \end{block}
+        \pause
+
+        \begin{block}{Idea \#2}
+            Let prover pick random values $\delta_L, \delta_R, \delta_O \leftarrowS \mathbb{F}$ and calculate:
+            \begin{equation*}
+                \pi_L \gets g^{\ell(\tau) + \delta_L z(\tau)}, \quad \pi_R \gets g^{r(\tau) + \delta_R z(\tau)}, \quad \pi_O \gets g^{o(\tau) + \delta_O z(\tau)}
+            \end{equation*}
+        \end{block}
+    \end{frame}
+
+    \begin{frame}{Making Idea Practical}
+        This expression can be easily evaluated. For example,
+        \begin{equation*}
+            \pi_L = g^{\ell(\tau)} \cdot \left(g^{z(\tau)}\right)^{\delta_L} = \mathsf{com}(\ell) \cdot \mathsf{com}(z)^{\delta_L}
+        \end{equation*}
+        \pause
+
+        \begin{alertblock}{Problem}
+            However, the verifier can't check the equation $e(\pi_L, \pi_R) = e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$ anymore.
+        \end{alertblock}
+        \pause
+
+        \begin{block}{Idea \#3}
+            Our ``noise'' must be controlled! This can be achieved by calculating $\pi_H$ as $g^{h(\tau) + \Delta_H}$ where $\Delta_H$ depends on $\delta_L, \delta_R, \delta_O$ (and possibly other public parameters).
+        \end{block}
+    \end{frame}
+
+    \begin{frame}{Making Idea Practical}
+        Check $e(\pi_L, \pi_R) = e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$ is now equivalent to:
+        \begin{equation*}
+            (\ell(T) + \delta_L z(T))(r(T) + \delta_R z(T)) = (h(T) + \Delta_H)z(T) + (o(T) + \delta_O z(T)),
+        \end{equation*}
+        \pause
+
+        which, by expanding, gives us the following equation:
+        \begin{align*}
+            \cancel{\ell(T)r(T)} + \delta_R \ell(T)z(T) + \delta_L z(T)r(T) + \delta_L \delta_R z(T)^2 \\= \cancel{h(T)z(T) + o(T)} + \Delta_Hz(T) + \delta_O z(T)
+        \end{align*}
+        \pause
+
+        where we can cancel out $\ell(T)r(T)$ and $h(T)z(T) + o(T)$ terms since they are equal based on initial construction. This way, we get the following expression for $\Delta_H$:
+        \begin{equation*}
+            \boxed{\Delta_H = \delta_O + \delta_R \ell(T) + \delta_L r(T) + \delta_L \delta_R z(T)}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Witness Consistency Proof}
+        Finally, let us not forget about $\pi_{\beta}$! Previously, we had:
+        \begin{equation*}
+            \pi_{\beta} = g^{\beta_L\ell(\tau) + \beta_Rr(\tau) + \beta_Oo(\tau)}
+        \end{equation*}
+        \pause
+
+        Now, we change:
+        \begin{itemize}[label=\ding{228}]
+            \item $\ell(\tau) \mapsto \ell(\tau) + \delta_L z(\tau)$
+            \item $r(\tau) \mapsto r(\tau) + \delta_R z(\tau)$
+            \item $o(\tau) \mapsto o(\tau) + \delta_O z(\tau)$
+        \end{itemize}
+        \pause
+
+        Therefore, our new $\pi_{\beta}$ becomes:
+        \begin{equation*}
+            \pi_{\beta} = \chg{\left(g^{\beta_Lz(\tau)}\right)^{\delta_L}\left(g^{\beta_R z(\tau)}\right)^{\delta_R}\left(g^{\beta_O z(\tau)}\right)^{\delta_O}}g^{\beta_L \ell(\tau) + \beta_R r(\tau) + \beta_O o(\tau)}
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Overall Protocol}
+        \scriptsize
+
+        \textbf{Trusted Setup: }
+        $\tau, \alpha, \beta_L, \beta_R, \beta_O, \gamma \leftarrowS \mathbb{F} \textbf{,} \quad \{ \{g^{\tau^i}, g^{\alpha \tau^i} \}_{i \in [d]}\textbf{,} \quad \{\chg{g^{\beta_L\ell_i(\tau)}, g^{\beta_Rr_i(\tau)}, g^{\beta_Oo_i(\tau)}}\}_{i \in [n]} \} \textbf{,}$
+        $\{ g^{z(\tau)}, g^{\alpha}, g^{\beta_L}, g^{\beta_R}, g^{\beta_O}, g^{\beta_L\gamma}, g^{\beta_R\gamma}, g^{\beta_O\gamma}, g^{\gamma}\}\textbf{,} \quad \textbf{delete}(\tau, \alpha, \beta_L, \beta_R, \beta_O, \gamma)$.
+        \vspace{10pt}
+
+        \begin{center}
+            \begin{tikzpicture}
+                \node[inner sep=0pt, align=center] (prover) at (-3.5, -3) {
+                    \includegraphics[width=2cm]{images/common/prover.png}\\Prover $\mathcal{P}$
+                };
+
+                \node[inner sep=0pt, align=center] (verifier) at (4, -3) {
+                    \includegraphics[width=2cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$
+                };
+
+                \onslide<2->{\node[inner sep=0pt, align=center] (pdata) at (-3, 0) {
+                    \begin{minipage}{4cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $h(T) = \frac{\ell(T) \times r(T) - o(T)}{z(T)}$.
+                            \onslide<3->{\item {
+                                Sample $\delta_L,\delta_R,\delta_O \leftarrowS \mathbb{F}$, compute:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    \pi_L \gets g^{\ell(\tau)}\chg{(g^{z(\tau)})^{\delta_L}}, \pi_L' \gets g^{\alpha \ell(\tau)}\chg{(g^{\alpha z(\tau)})^{\delta_L}},\\[-2pt]
+                                    \pi_R \gets g^{r(\tau)}\chg{(g^{z(\tau)})^{\delta_R}}, \pi_R' \gets g^{\alpha r(\tau)}\chg{(g^{\alpha z(\tau)})^{\delta_R}},\\[-2pt]
+                                    \pi_O \gets g^{o(\tau)}\chg{(g^{z(\tau)})^{\delta_O}}, \pi_O' \gets g^{\alpha o(\tau)}\chg{(g^{\alpha z(\tau)})^{\delta_O}},\\[-2pt]
+                                    \pi_H \gets g^{h(\tau)}\chg{(g^{\delta_O})(g^{r(\tau)})^{\delta_L}(g^{\ell(\tau)})^{\delta_R}(g^{z(\tau)})^{\delta_L\delta_R}}
+                                \end{align*}
+                                \vspace{-16pt}
+                            }}
+                            \onslide<4->{
+                                \vspace{-5pt}
+                                $\pi_{\beta} = \dots$
+                            }
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+
+                \onslide<5->{\draw[arrow] (prover) -- (verifier) node[midway, above=1mm] {$\boldsymbol{\pi} = (\pi_L,\pi_R,\pi_O,\pi_H,\pi_L',\pi_R',\pi_O',\pi_H',\pi_{\beta})$};}
+
+                \onslide<6->{\node[inner sep=0pt, align=center] (vdata) at (5, -0.2) {
+                    \begin{minipage}{5cm}
+                        {\tiny\begin{itemize}[label=\ding{51}]
+                            \item $e(\pi_L, \pi_R) \xlongequal{?}\\ e(\mathsf{com}(z), \pi_H) \cdot e(\pi_O, g)$.
+                            \onslide<7->{\item {
+                                Proof of Exponent:
+                                \vspace{-8pt}
+                                \begin{align*}
+                                    e(\pi_L, g^{\alpha}) &= e(\pi_L', g), \qquad\qquad\qquad\\[-2pt]
+                                    e(\pi_R, g^{\alpha}) &= e(\pi_R', g), \\[-2pt]
+                                    e(\pi_O, g^{\alpha}) &= e(\pi_O', g), \\[-2pt]
+                                    e(\pi_H, g^{\alpha}) &= e(\pi_H', g).
+                                \end{align*}
+                                \vspace{-16pt}
+                            }}
+                            \onslide<8->{\item $e(\pi_L, g^{\gamma\beta_L}) \cdot e(\pi_R, g^{\gamma\beta_R}) \cdot \\ \cdot e(\pi_O, g^{\gamma\beta_O}) = e(\pi_{\beta}, g^{\gamma})$}
+                        \end{itemize}}
+                    \end{minipage}
+                };}
+            \end{tikzpicture}
+        \end{center}
+    \end{frame}
+
+    \section{Real Protocols}
+
+    \begin{frame}{Public and Private Inputs}
+        So far, the verifier did not use the public statement at all. Split the indices of the extended witness $\mathbf{z}$ into $\mathcal{I}_{\text{io}}$ (input/output, public) and $\mathcal{I}_{\text{mid}}$ (intermediate, private), with $\mathcal{I}_{\text{mid}} \cap \mathcal{I}_{\text{io}} = \emptyset$, $\mathcal{I}_{\text{mid}} \cup \mathcal{I}_{\text{io}} = \{1,\dots,n\}$.
+        \pause
+
+        \begin{equation*}
+            \pi_L = \underbrace{\textcolor{oc-pink-7}{g^{\sum_{i \in \mathcal{I}_{\text{mid}}} z_i\ell_i(\tau)}}}_{\textcolor{oc-pink-7}{\text{new $\pi_L$}}}
+            \times
+            \underbrace{\chg{g^{\sum_{i \in \mathcal{I}_{\text{io}}} z_i\ell_i(\tau)}}}_{\chg{\pi_{\ell,\text{io}}}}.
+        \end{equation*}
+        \pause
+
+        \begin{remark}
+            The prover computes $\pi_L,\pi_R,\pi_O$ only over $\mathcal{I}_{\text{mid}}$, while the verifier restores $\pi_L^* \gets \pi_L\prod_{i \in \mathcal{I}_{\text{io}}} (g^{\ell_i(\tau)})^{z_i}$ (and similarly $\pi_R^*$, $\pi_O^*$) from the public values and uses them in the polynomial equality check.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Complexity of the Basic Protocol}
+        \begin{proposition}[Complexity of the Basic Protocol]
+            Suppose circuit consists of $n$ gates. Then, the complexity of the basic protocol is as follows:
+            \begin{itemize}
+                \item \textbf{Proof Size:} $O(1)$ --- constant number of group elements.
+                \item \textbf{Setup Time:} $O(n)$ --- calculating powers of $\tau$, evaluations at $\tau$.
+                \item \textbf{Prover Time:} $O(n \log n)$ --- using FFT and wise choice of $\Omega$.
+                \item \textbf{Verifier Time:} $O(1)$ --- constant number of pairings.
+            \end{itemize}
+            \pause
+
+            However, $O(1)$ is not very descriptive for proof and verifier complexities, so let us provide a more detailed analysis.
+            \begin{itemize}
+                \item \textbf{Proof Size:} 9 $\mathbb{G}$ group elements.
+                \item \textbf{Verifier Time:} 15 pairings.
+            \end{itemize}
+        \end{proposition}
+        \pause
+
+        We can do better!
+    \end{frame}
+
+    \begin{frame}{Pinocchio Protocol}
+        \begin{block}{Idea}
+            In toxic waste, include $\rho_L,\rho_R \leftarrowS \mathbb{F}$, set $\rho_O \gets \rho_L\rho_R$, and define the following generators:
+            \begin{equation*}
+                g_L \gets g^{\rho_L}, \quad g_R \gets g^{\rho_R}, \quad g_O \gets g^{\rho_O}
+            \end{equation*}
+        \end{block}
+        \pause
+
+        \begin{remarkblock}{Reason}
+            Such choice of generators reduces 15 pairings to \textbf{11 pairings}. Additionally, we have only \textbf{8 group elements} in the proof.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Groth16 Protocol}
+        \begin{block}{Idea: Generic Group Model}
+            Use \textbf{Generic Group Model} (GGM) technique. Simply put, GGM allows the adversary to only make \textbf{oracle requests} to compute the group operations. For example, having a set $\{g^{\alpha r_i(\tau)}\}_{i \in [d]}$, adversary can compute only linear combinations of these values. In the particular case of Groth16, instead of considering $\ell_i(T)$, $r_i(T)$, and $o_i(T)$ separately, we construct their linear combinations as $Q_i(T) := \beta \ell_i(T) + \alpha r_i(T) + o_i(T)$, where $\alpha$ and $\beta$ are toxic parameters.
+        \end{block}
+        \pause
+
+        \begin{remarkblock}{Asymmetric Pairing}
+            Groth16 uses the asymmetric pairing $e: \mathbb{G}_1 \times \mathbb{G}_2 \to \mathbb{G}_T$ with generators $g_1 \in \mathbb{G}_1$ and $g_2 \in \mathbb{G}_2$: it is more efficient than the symmetric one.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Groth16 Protocol: Setup Procedure}
+        Sample $\alpha,\beta,\gamma,\delta,\tau \leftarrowS \mathbb{F}$. The proving key is formed as follows:
+        \begin{align*}
+            \mathsf{pp} \gets \Big(&g_1^{\alpha},g_1^{\beta},g_1^{\delta},\left\{g_1^{\tau^i},g_1^{(\beta \ell_i(\tau) + \alpha r_i(\tau) + o_i(\tau))/\gamma}, g_1^{\tau^i z(\tau)/\delta}\right\}_{i \in [n]}, \\
+            &g_2^{\beta}, g_2^{\delta}, g_2^{\gamma}, \{g_2^{\tau^i}\}_{i \in [d]}\Big)
+        \end{align*}
+    \end{frame}
+
+    \begin{frame}{Groth16 Protocol: Proving Procedure}
+        Sample random $\delta_L,\delta_R \leftarrowS \mathbb{F}$ and compute the following values:
+        \begin{gather*}
+            \pi_L \gets g_1^{\alpha + \sum_{i=1}^n z_i\ell_i(\tau) + \delta_L\delta}, \quad \pi_R \gets g_2^{\beta + \sum_{i=1}^n z_ir_i(\tau) + \delta_R\delta}, \\ \pi_O \gets g_1^{\frac{Q_{\text{mid}}(\tau)+h(\tau)z(\tau)}{\delta} + \ell\delta_R + r\delta_L - \delta_L\delta_R\delta},
+        \end{gather*}
+        \pause
+
+        where by $Q_{\text{mid}}$ we denoted the following expression:
+        \begin{equation*}
+            Q_{\text{mid}}(\tau) = \sum_{i \in \mathcal{I}_{\text{mid}}} z_iQ_i(\tau) = \sum_{i \in \mathcal{I}_{\text{mid}}}z_i(\beta \ell_i(\tau) + \alpha r_i(\tau) + o_i(\tau))
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Groth16 Protocol: Verification Procedure}
+        The verifier first calculates the following value:
+        \begin{equation*}
+            \pi_{\text{io}} \gets g_1^{\sum_{i \in \mathcal{I}_{\text{io}}}z_i(\beta \ell_i(\tau) + \alpha r_i(\tau) + o_i(\tau))/\gamma},
+        \end{equation*}
+        \pause
+
+        and then checks the following single condition:
+        \begin{equation*}
+            e(\pi_L, \pi_R) = e(g_1^{\alpha}, g_2^{\beta})e(\pi_{\text{io}},g_2^{\gamma})e(\pi_O,g_2^{\delta})
+        \end{equation*}
+        \pause
+
+        \begin{remarkblock}{Note}
+            $e(g_1^{\alpha}, g_2^{\beta})$ can be additionally hard-coded in the verifier, thus reducing the number of pairings to 3. Finally, the proof's size is now reduced to 3 group elements: two from $\mathbb{G}_1$, and one from $\mathbb{G}_2$.
+        \end{remarkblock}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

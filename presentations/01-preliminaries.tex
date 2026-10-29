@@ -1,0 +1,564 @@
+\documentclass{zkdl-presentation-template}
+
+\title[Mathematics: Part I]{\textbf{Mathematics for Cryptography: Basic Notation and Groups}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+  
+    \begin{frame}{Plan}
+      \tableofcontents
+    \end{frame}
+
+    \section{Some words about the course}
+    \begin{frame}{About ZKDL} 
+
+      \begin{columns}
+        % Description
+        \begin{column}{0.7\textwidth}
+          \begin{itemize}
+            \item ZKDL is an intensive course on low-level zero-knowledge cryptography.\pause
+            \item We will learn zero-knowledge proving systems \textbf{from total scratch}.\pause
+            \item This means that material is \textbf{hard}. We want commitment and attention from your side.\pause
+            \item We, in turn, provide you structured explanation of the material, practical examples and exercises.\pause
+          \end{itemize}
+        \end{column}
+        % Column 2    
+        \begin{column}{0.3\textwidth}
+            \begin{figure}
+            \centering
+                \includegraphics[width=1\textwidth]{images/logo.png}
+            \end{figure}
+        \end{column}
+        \end{columns}
+
+        \begin{alertblock}{Note}
+          This course is helpful for everyone: even lecturers do not know all the material fully. Please, feel free to ask questions and provide feedback --- we will adjust the material accordingly.
+        \end{alertblock}
+
+    \end{frame}
+
+    \begin{frame}{Why ZKDL?}
+
+      \begin{columns}
+        % Description
+        \begin{column}{0.65\textwidth}
+          \begin{itemize}
+            \item Better Mathematics understanding.\pause
+            \item Skill of reading academic papers and writing your own ones.\pause
+            \item Public speech skills for lecturers on complex topics.\pause
+            \item Our knowledge structurization condensed in one course.\pause
+            \item Importance of ZK is quite obvious.\pause
+            \item And, of course, cryptography is fun!\pause
+          \end{itemize}
+        \end{column}
+        % Column 2    
+        \begin{column}{0.35\textwidth}
+            \begin{figure}
+            \centering
+                \includegraphics[width=\textwidth]{images/lecture_1/thonk.png}
+            \end{figure}
+        \end{column}
+        \end{columns}
+        
+        \begin{alertblock}{Note}
+          We are R\&D experts in Cryptography, so we need to boost our skills in academic writing, lecturing, and understanding advanced topics.
+        \end{alertblock}
+    \end{frame}
+
+    \begin{frame}{Format}
+      \begin{enumerate}
+        \item We will gather every Thursday at 7PM.\pause
+        \item Lecturer will be different based on the topic.\pause
+        \item We will send you the lecture notes beforehand. Highly recommended to read it before the lecture.\pause
+        \item We also attach exercises, which are highly recommended. You might ask questions about them during the lecture.\pause
+        \item \textit{Optionally}, we will conduct workshops on a separate day. We will discuss this later.
+      \end{enumerate}
+    \end{frame}
+
+    \begin{frame}{Contents}
+
+      \begin{columns}
+        % Description
+        \begin{column}{0.65\textwidth}
+          \begin{enumerate}
+            \item Mathematics preliminaries: groups, fields, polynomials, linear algebra, elliptic curves and pairings.\pause
+            \item Building SNARKs from scratch: $\Sigma$-protocols, circuits, QAP, Groth16.\pause
+            \item Modern proving systems: Bulletproofs, Sum-Check and GKR, lookup checks, UltraGroth.\pause
+            \item Post-quantum zero-knowledge: lattice-based protocols (LaBRADOR) and hash-based ones (STARK).
+          \end{enumerate}
+        \end{column}
+        % Column 2    
+        \begin{column}{0.35\textwidth}
+            \begin{figure}
+            \centering
+                \includegraphics[width=\textwidth]{images/lecture_1/blender.png}
+            \end{figure}
+        \end{column}
+        \end{columns}
+    \end{frame}
+
+    \section{Notation}
+
+    \subsection{Sets}
+
+    \begin{frame}{Sets}
+      \begin{definition}
+        \textbf{Set} is a collection of (possibly) \textit{distinct} objects, considered as an object in its own right. \pause
+      \end{definition}
+
+      \begin{example}
+        \begin{itemize}
+          \item $\mathbb{N}$ is a set of natural numbers.
+          \item $\mathbb{Z}$ is a set of integers.
+          \item $\mathbb{R}$ is a set of real numbers.
+          \item $\mathbb{R}_{>0}$ is a set of positive real numbers. \pause
+          \item $\{1, 2, 5, 10\}$ is a set of four elements.
+          \item $\{1, 2, 2, 3\} = \{1,2,3\}$ --- we do not count duplicates.\pause
+          \item $\{1,2,3\} = \{2,1,3\}$ --- order does not matter.
+          \item $\{\{1,2\},\{3,4\}, \{\sqrt{5}\}\}$ --- elements can be sets themselves.
+        \end{itemize}
+      \end{example}
+    \end{frame}
+
+    \begin{frame}{Operations on sets}
+    % --- Writing diagrams ---
+    \def\firstcircle{(0,0) circle (1.5cm)}
+    \def\secondcircle{(0:2cm) circle (1.5cm)}
+
+    \colorlet{circle edge}{oc-indigo-5}
+    \colorlet{circle area}{oc-indigo-2}
+
+    \tikzset{filled/.style={fill=circle area, draw=circle edge, ultra thick},
+        outline/.style={draw=circle edge, ultra thick}}    
+
+        \begin{figure}
+          \begin{center}
+          \begin{tabular}{cc}
+          % Set A and B
+          \begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+              \begin{scope}
+                  \clip \firstcircle;
+                  \fill[filled] \secondcircle;
+              \end{scope}
+              \draw[outline] \firstcircle node {$A$};
+              \draw[outline] \secondcircle node {$B$};
+              \node[anchor=south] at (current bounding box.north) {$A \cap B$};
+          \end{tikzpicture} &   
+          %Set A or B but not (A and B) also known a A xor B
+          \begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+              \draw[filled, even odd rule] \firstcircle node {$A$}
+                                          \secondcircle node{$B$};
+              \node[anchor=south] at (current bounding box.north) {$\overline{A \cap B}$};
+          \end{tikzpicture}
+          \\
+          % Set A or B
+          \begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+              \draw[filled] \firstcircle node {$A$}
+                          \secondcircle node {$B$};
+              \node[anchor=south] at (current bounding box.north) {$A \cup B$};
+          \end{tikzpicture} &  
+          % Set A but not B
+          \begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+              \begin{scope}
+                  \clip \firstcircle;
+                  \draw[filled, even odd rule] \firstcircle node {$A$}
+                                             \secondcircle;
+              \end{scope}
+              \draw[outline] \firstcircle
+                          \secondcircle node {$B$};
+              \node[anchor=south] at (current bounding box.north) {$A \setminus B$};
+          \end{tikzpicture}
+      \end{tabular}
+      \end{center}
+      \label{fig:venn_diagrams}
+      \end{figure}
+    \end{frame}
+    
+    \begin{frame}{Operations on sets: Examples}
+      \begin{questionblock}{Question \#1}
+        What does $\mathbb{Z} \setminus \{0,1\}$ mean?\pause
+      \end{questionblock}
+
+      \begin{questionblock}{Question \#2}
+        How to simplify $\mathbb{Q} \cap \mathbb{Z}$?\pause
+      \end{questionblock}
+
+      \begin{questionblock}{Question \#3}
+        What is the result of $\{1,2,3\} \cup \{3,4,5\}$?
+      \end{questionblock}
+      \pause
+
+      \begin{remarkblock}{Notation}
+        We write $\#A$ (or $|A|$) for the number of elements in $A$. For example, $\#\{1,2,5,10\} = 4$.
+      \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Defining sets}
+      \begin{example}
+        \begin{itemize}
+          \item $\{x \in \mathbb{R}: x^2 = 1\}$ -- a set of real numbers that satisfy the equation $x^2 = 1$.\pause
+          \item $\{x \in \mathbb{Z}: x \text{ is even}\}$ -- a set of even integers.\pause
+          \item $\{x^2: x \in \mathbb{R}, x^3 = 1\}$ -- a set of squares of real numbers that satisfy the equation $x^3 = 1$.\pause
+          \item $\{x \in \mathbb{N}: x \text{ is prime}\} \setminus \{2\}$ -- a set of odd prime numbers.\pause
+        \end{itemize}
+      \end{example}
+
+      \begin{questionblock}{Question \#1}
+        How to simplify the set $\{x \in \mathbb{N}: x^2 = 2\}$?\pause
+      \end{questionblock}
+  
+      \begin{questionblock}{Question \#2(*)}
+        How to simplify the set $\{\sin \pi k: k \in \mathbb{Z}\}$?
+      \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Cartesian Product}
+        \begin{definition}
+          \textbf{Cartesian product} of two sets $A$ and $B$ is a set of all possible ordered pairs $(a,b)$ where $a \in A$ and $b \in B$. We denote it as $A \times B$.\pause
+        \end{definition}
+
+        \begin{definition}
+          \textbf{Cartesian power} of a set $A$ is a set of all possible ordered tuples $(a_1,a_2,\cdots,a_n)$ where $a_i \in A$. We denote it as $A^n$.\pause
+        \end{definition}
+
+        \begin{example}
+          Consider sets $A = \{1,2\}$ and $B = \{3,4\}$. Then, $A \times B = \{(1,3), (1,4), (2,3), (2,4)\}$.\pause
+        \end{example}
+
+        \begin{example}
+          $\mathbb{R}^2$ is a set of all possible points in the Cartesian plane.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Cartesian Product Questions}
+      \begin{questionblock}{Question \#1}
+        What does $\{0,1\}^{5}$ mean?\pause
+      \end{questionblock}
+
+      \begin{questionblock}{Question \#2}
+        How to interpret the set $\{(x,y) \in \mathbb{N}^2: x = y\}$?\pause
+      \end{questionblock}
+
+      \begin{questionblock}{Question \#3(*)}
+        How to interpret the set $\{(x,y) \in \mathbb{R}^2: x^2+y^2=1\}$?
+      \end{questionblock}
+    \end{frame}
+
+    \subsection{Logic}
+    \begin{frame}{Basic Logic}
+        \begin{itemize}
+          \item $\forall$ means ``for all''.
+          \item $\exists$ means ``there exists'', $\exists!$ means ``there exists the only''.
+          \item $\land$ means ``and''.
+          \item $\lor$ means ``or''.\pause
+        \end{itemize}
+
+        \begin{questionblock}{Question \#1}
+            Is it true that $(\forall x \in \mathbb{N}): \{x > 0\}$?\pause
+        \end{questionblock}
+
+        \begin{questionblock}{Question \#2}
+            Is it true that $(\exists x \in \mathbb{N}): \{x \geq 0 \land x < 1\}$?\pause
+        \end{questionblock}
+
+        \begin{questionblock}{Question \#3}
+            Is it true that $(\forall x \in \mathbb{Z})\, (\exists y \in \mathbb{N}): \{y > x\}$?
+        \end{questionblock}
+    \end{frame}
+
+    \subsection{Randomness and Sequences}
+
+    \begin{frame}{Randomness and Sequences}
+        \begin{block}{Notation}
+          To denote probability of event $E$, we use notation $\Pr[E]$. The probability of $E$ given that $F$ happened is $\Pr[E \mid F]$. For example,
+          \begin{equation*}
+              \Pr[x \equiv 1 \; (\mathrm{mod}\; 3) \mid x \gets \mathsf{RollDice}()] = \frac{1}{3}.
+          \end{equation*}
+        \end{block}
+        \pause
+
+        \begin{block}{Notation}
+            To denote that we take an element from a set $S$ uniformly at random, we use notation $x \leftarrowS S$.
+
+            For example, when throwing a coin, we can write $x \leftarrowS \{\text{heads}, \text{tails}\}$.\pause
+        \end{block}
+
+        \begin{block}{Notation}
+          To denote an infinite sequence $x_1,x_2,\dots$, we use $\{x_i\}_{i \in \mathbb{N}}$. We write $[n] := \{0,\dots,n-1\}$,
+          so a finite sequence $x_0,x_1,\dots,x_{n-1}$ is $\{x_i\}_{i \in [n]}$. To enumerate
+          through a list of indices $\mathcal{I} \subseteq \mathbb{N}$, we use notation
+          $\{x_i\}_{i \in \mathcal{I}}$. Vectors are bold: $\mathbf{x} = (x_1,x_2,x_3) \in \mathbb{F}^3$.
+        \end{block}
+    \end{frame}
+
+    \section{Basic Group Theory}
+
+    \subsection{Reasoning behind Groups}
+    \begin{frame}{Why Groups?!}
+        Well, first of all, we want to work with integers\ldots
+
+        Imagine that Alice pays to Bob with a card number $N$, but instead of paying to a number $N$, the system pays 
+        to another card number $N+k, k \ll N$, which is only by 0.001\% different. Bob would not be 99.999\% happy\ldots
+
+        \begin{figure}
+          \includegraphics[width=1.0\textwidth]{images/lecture_1/why_integers.pdf}
+          \label{fig:why_integers}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Why Groups?!}
+        But integers on their own are not enough. We need to define a structure that allows us to perform operations on them.
+
+        This is very similar to interfaces: we abstract from the implementation, just merely stating we have ``some'' operation.
+
+        \begin{example}
+            Consider set $\mathbb{G} := \{\text{Dmytro}, \text{Dan}, \text{Friendship}\}$. We can safely define an operation $\oplus$ as:
+            \begin{gather*}
+                \text{Dmytro} \oplus \text{Dan} = \text{Friendship} \\ 
+                \text{Dan} \oplus \text{Friendship} = \text{Dmytro} \\
+                \text{Friendship} \oplus \text{Dmytro} = \text{Dan}
+            \end{gather*}
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Rhetorical question}
+            What makes $(\mathbb{G}, \oplus)$ a group?
+        \end{questionblock}
+    \end{frame}
+    \subsection{Group Definition and Examples}
+    \begin{frame}{Group Definition}
+      \begin{definition}
+        \textbf{Group} $(\mathbb{G}, \oplus)$, is a set with a binary operation $\oplus$ with following rules:
+        \begin{enumerate}
+            \item \textbf{Closure:} Binary operations always outputs an element from $\mathbb{G}$, that is $\forall a,b \in \mathbb{G}: a \oplus b \in \mathbb{G}$.\pause
+            \item \textbf{Associativity:} $\forall a,b,c \in \mathbb{G}: (a \oplus b)\oplus c = a \oplus (b \oplus c)$.\pause
+            \item \textbf{Identity element:} There exists a so-called identity element $e \in \mathbb{G}$ such that $\forall a \in \mathbb{G}: e \oplus a = a \oplus e = a$.\pause
+            \item \textbf{Inverse element:} $\forall a \in \mathbb{G} \; \exists b \in \mathbb{G}: a\oplus b = b \oplus a = e$. We commonly denote the inverse element as $(\ominus a)$. \pause
+        \end{enumerate}
+    \end{definition}
+
+    \begin{definition}
+        A group is called \textbf{abelian} if it satisfies the additional rule called \textbf{commutativity}: $\forall a,b \in \mathbb{G}: a \oplus b = b \oplus a$.
+    \end{definition}
+    \end{frame}
+
+    \begin{frame}{Explanation for Developers: Trait}
+      \begin{center}
+        \begin{figure}
+          \includegraphics[width=0.8\textwidth]{images/lecture_1/group_in_rust.png}
+          \label{fig:group_in_rust}
+        \end{figure}
+
+        More on that: ``Some Fun: Group Implementation in Rust'' in the book (\href{https://github.com/BlockstreamResearch/zk-book}{github.com/BlockstreamResearch/zk-book}).
+      \end{center}
+    \end{frame}
+
+    \begin{frame}{Group Examples}
+      \begin{example}
+        A group of integers with the regular addition $(\mathbb{Z},+)$ (also called the \textit{additive} group of integers) is a group.\pause
+      \end{example}
+      
+      \begin{example}
+          The multiplicative group of positive real numbers $(\mathbb{R}_{> 0}, \times)$ is a group for similar reasons.\pause
+      \end{example}
+      
+      \begin{questionblock}{Question \#1}
+          Is $(\mathbb{R}, \times)$ a group? If no, what is missing?\pause
+      \end{questionblock}
+
+      \begin{questionblock}{Question \#2}
+        Is $(\mathbb{Z}, \times)$ a group? If no, what is missing?
+      \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Small Note on Notation}
+      \begin{block}{Additive group}
+          We say that a group is \textit{additive} if the operation is denoted as $+$, and the identity element is denoted as $0$.\pause
+      \end{block}
+
+      \begin{block}{Multiplicative group}
+          We say that a group is \textit{multiplicative} if the operation is denoted as $\times$, and the identity element is denoted as $1$.\pause
+      \end{block}
+      \begin{remarkblock}{Rule of thumb}
+        We use additive notation when we imply that the group $\mathbb{G}$ is the set of points on the elliptic curve, while multiplicative is typically used in the rest of the cases.
+      \end{remarkblock}
+  \end{frame}
+
+    \begin{frame}{Abelian Groups Examples and Non-Examples}
+      \begin{questionblock}{Question \#3}
+        Is $(\mathbb{R}, -)$ a group? If no, what is missing? \pause
+      \end{questionblock}
+      \begin{questionblock}{Question \#4}
+          Set $V$ is a set of tuples $(v_1,v_2,v_3)$ where each $v_i \in \mathbb{R} \setminus \{0\}$. Define the operation $\odot$ as
+          \begin{equation*}
+              (v_1,v_2,v_3) \odot (u_1,u_2,u_3) = (v_1u_1, v_2u_2, v_3u_3)
+          \end{equation*}
+
+          Is $(V, \odot)$ a group? If no, what is missing?\pause
+      \end{questionblock}
+      \begin{remarkblock}{Conclusion}
+        Group is just a fancy name for a set with a binary operation that behaves nicely.
+      \end{remarkblock}
+    \end{frame}
+
+    \subsection{Subgroups}
+    \begin{frame}{Subgroup}
+
+      \begin{questionblock}{Question}
+          Suppose $(\mathbb{G}, \oplus)$ is a group. Is any subset $\mathbb{H} \subset \mathbb{G}$ a group?\pause
+      \end{questionblock}
+
+      \begin{definition}
+          A \textbf{subgroup} is a subset $\mathbb{H} \subset \mathbb{G}$ that is a group with the same operation $\oplus$. We denote it as $\mathbb{H} \leq \mathbb{G}$.\pause
+      \end{definition}
+
+      \begin{example}
+          Consider $(\mathbb{Z}, +)$. Then, although $\mathbb{N} \subset \mathbb{Z}$, it is not a subgroup, as it does not have inverses.\pause
+      \end{example}
+
+      \begin{example}
+          Consider $(\mathbb{Z}, +)$. Then, $3\mathbb{Z} = \{3k: k \in \mathbb{Z}\} \subset \mathbb{Z}$ is a subgroup.
+      \end{example}
+  \end{frame}
+
+  \begin{frame}{Questions}
+    \begin{questionblock}{Question \#1}
+      Does any group have at least one subgroup?\pause
+    \end{questionblock}
+
+    \textbf{Answer.} Yes, take $\mathbb{H} = \{e\} \leq \mathbb{G}$.\pause
+
+    \begin{questionblock}{Question \#2*}
+      Let $\mathsf{GL}(\mathbb{R},2)$ be a mutliplicative group of invertable matrices, while $\mathsf{SL}(\mathbb{R},2)$ be a multiplicative group of matrices with determinant 1. Is $\mathsf{SL}(\mathbb{R},2) \leq \mathsf{GL}(\mathbb{R},2)$?\pause
+    \end{questionblock}
+
+    \textbf{Answer.} Yes. For $A = \begin{bmatrix}
+      a & b \\
+      c & d
+    \end{bmatrix} \in \mathsf{SL}(\mathbb{R},2)$ the inverse is $A^{-1} = \begin{bmatrix}
+      d & -b \\ -c & a
+    \end{bmatrix}$. Also, $\det (AB) = \det A \cdot \det B$, so the product of two matrices with determinant 1 has determinant 1, so the operation in closed.
+  \end{frame}
+
+  \subsection{Cyclic Groups}
+
+  \begin{frame}{Cyclic Subgroup.}
+    \begin{definition}
+      Given a group $\mathbb{G}$ and $g \in \mathbb{G}$ the cyclic subgroup generated by $g$ is
+      \begin{equation*}
+          \langle g \rangle = \{g^n: n \in \mathbb{Z}\} = \{\dots,g^{-3}, g^{-2}, g^{-1}, e, g, g^2, g^3, \dots\}.
+      \end{equation*}
+    \end{definition}
+    \pause
+    \begin{example}
+        Consider the group of integers modulo $12$, denoted by $\mathbb{Z}_{12}$. Consider $2 \in \mathbb{Z}_{12}$, the subgroup generated by $2$ is then
+        \begin{equation*}
+            \langle 2 \rangle = \{2,4,6,8,10, 0\}
+        \end{equation*}
+    \end{example}
+    \pause
+    \begin{definition}
+      We say that a group $\mathbb{G}$ is \textbf{cyclic} if there exists an element $g \in \mathbb{G}$ such that $\mathbb{G}$ is generated by $g$, that is, $\mathbb{G} = \langle g \rangle$.
+    \end{definition}
+  \end{frame}
+
+  \begin{frame}{Cyclic Subgroup Examples.}
+    \begin{example}
+      Take $\mathbb{Q}^{\times}$. One of the possible cyclic subgroups is $\mathbb{H}=\{2^n: n \in \mathbb{Z}\}$.\pause
+    \end{example}
+
+    \begin{questionblock}{Question \#1}
+      What is the generator of $\mathbb{H}$ in the example above?\pause
+    \end{questionblock}
+
+    \begin{questionblock}{Question \#2}
+      What is the generator of $7\mathbb{Z} = \{7k: k \in \mathbb{Z}\} = \{\dots,-14,-7,0,7,14,\dots\}$?
+    \end{questionblock}
+  \end{frame}
+
+  \subsection{Homomorphism and Isomorphism}
+
+  \begin{frame}{Homomorphism}
+    \begin{definition}
+      A \textbf{homomorphism} is a function $\phi: \mathbb{G} \rightarrow \mathbb{H}$ between two groups $(\mathbb{G}, \oplus)$ and $(\mathbb{H}, \odot)$ that preserves the group structure, i.e., 
+      \begin{equation*}
+        \forall a,b \in \mathbb{G}: \phi(a \oplus b) = \phi(a) \odot \phi(b)
+      \end{equation*}
+    \end{definition}
+    \pause
+
+    \begin{example}
+      Consider $(\mathbb{Z}, +)$ and $(\mathbb{R}_{>0}, \times)$. Then, the function $\phi: \mathbb{Z} \rightarrow \mathbb{R}_{>0}$ defined as $\phi(k) = 2^k$ is a homomorphism.\pause
+    \end{example}
+
+    \textbf{Proof}. Take any $n,m \in \mathbb{Z}$ and consider $\phi(n+m)$:
+    \begin{equation*}
+      \phi(n+m) = 2^{n+m} = 2^n \times 2^m = \phi(n) \times \phi(m)
+    \end{equation*}
+  \end{frame}
+
+  \begin{frame}{Mapping types}
+    \begin{figure}
+      \includegraphics[width=0.7\textwidth]{images/lecture_1/mapping.pdf}
+      \label{fig:mappings}
+    \end{figure}
+  \end{frame}
+
+  \begin{frame}{Homomorphism}
+    \begin{definition}
+      \textbf{Isomorphism} is a bijective homomorphism.\pause
+    \end{definition}
+
+    \begin{definition}
+      Two groups $\mathbb{G}$ and $\mathbb{H}$ are \textbf{isomorphic} if there exists an isomorphism between them. We denote it as $\mathbb{G} \cong \mathbb{H}$.\pause
+    \end{definition}
+
+    \begin{example}
+     $\phi: k \mapsto 2^k$ from the previous example is a homomorphism between $(\mathbb{Z},+)$ and $(\mathbb{R}_{>0},\times)$, but not an isomorphism. Indeed, there is no $x \in \mathbb{Z}$ such that $2^x = 3 \in \mathbb{R}_{>0}$.\pause
+    \end{example}
+
+    \begin{questionblock}{Question}
+      What can we do to make $\phi$ an isomorphism?
+     \end{questionblock}
+  \end{frame}
+
+  \begin{frame}{Field}
+    \begin{block}{Informal Definition}
+        \textbf{Field} $\mathbb{F}$ is a set equipped with appropriate \textbf{addition} and \textbf{multiplication} operations with the corresponding well-defined inverses, where you can perform the basic arithmetic.\pause
+    \end{block}
+    
+      \begin{definition}
+        A \textbf{field} is a set $\mathbb{F}$ with two operations $\oplus$ and $\odot$ such that:
+        \begin{enumerate}
+            \item $(\mathbb{F}, \oplus)$ is an abelian group with identity $e_{\oplus}$.
+            \item $(\mathbb{F} \setminus \{e_{\oplus}\}, \odot)$ is an abelian group.
+            \item The \textbf{distributive law} holds: $\forall a,b,c \in \mathbb{F}: a \odot (b \oplus c) = (a \odot b) \oplus (a \odot c)$.
+        \end{enumerate}
+      \end{definition}
+    \end{frame}
+
+    \begin{frame}{Field Examples}
+      \begin{example}
+        The set of real numbers $(\mathbb{R}, +, \times)$ is obviously a field. So is $(\mathbb{Q}, +, \times)$.\pause
+    \end{example}
+
+    \begin{definition}
+      \textbf{Finite Field} is the set $\{0,\dots,p-1\}$ equipped with operations modulo $p$ is a field if $p$ is a prime number.\pause
+    \end{definition}
+
+    \begin{example}
+      The set $\mathbb{F}_5 = \{0,1,2,3,4\}$ with operations modulo $5$ is a field. Operation examples:
+      \begin{itemize}
+        \item $3 + 4 = 2$.
+        \item $3 \times 2 = 1$.
+        \item $4^{-1} = 4$ since $4 \times 4 = 1$.
+      \end{itemize}
+    \end{example}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}
