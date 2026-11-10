@@ -1,0 +1,1012 @@
+\documentclass{zkdl-presentation-template}
+
+\title[ZK-STARK]{\textbf{Building ZK-STARK}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+% Diagram macros (they must live outside frames)
+% FRI: a strip of #2 cells centred at #1, named #3, fill #4
+\newcommand{\fristrip}[4]{%
+    \foreach \i in {1,...,#2} {
+        \node[cell, fill=#4] at ([xshift=0.32cm*\i-0.16cm*#2-0.16cm]#1) {};
+    }
+    \node[left] at ([xshift=-0.16cm*#2-0.1cm]#1) {#3 $=$};
+}
+% FRI: queried cells #3 (0-based) of a strip of #2 cells centred at #1
+\newcommand{\friquery}[3]{%
+    \foreach \i in {#3} {
+        \node[qcell] at ([xshift=0.32cm*\i-0.16cm*#2+0.16cm]#1) {};
+    }
+}
+\newcommand{\fromverifier}[2]{%
+    \draw[send] ([yshift=#1]vs) -- ([yshift=#1]ps) node[midway, above=0mm]{#2};
+}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents[hideallsubsections]
+    \end{frame}
+
+    \begin{frame}{Where are we?}
+        \begin{itemize}
+            \item Previous lecture: any Poly-IOP becomes an IOP via \textbf{bind, quotient, batch}, using a single black box: a $\delta$-RS-IOPP that tests whether $h: \Omega \to \mathbb{F}$ is close to $\mathsf{RS}[\mathbb{F}, \Omega, k]$.\pause
+            \item Today, part I: open this box --- the \textbf{FRI} protocol.\pause
+            \item Today, part II: the Poly-IOP itself --- the \textbf{Arithmetic Intermediate Representation} (AIR).\pause
+            \item Together: a \textbf{STARK} (Scalable Transparent ARgument of Knowledge), which needs only a hash function: no trusted setup, plausibly post-quantum.
+        \end{itemize}
+    \end{frame}
+
+    \section{The FRI Protocol}
+
+    \begin{frame}{Why is the Problem Non-trivial?}
+        \begin{itemize}
+            \item Without the prover's help, the verifier needs $k + 1$ queries: interpolate $h$ through $k$ points and check one more point.\pause
+            \item In applications, $k$ is the size of the whole computation: as slow as recomputing everything.\pause
+            \item \textbf{FRI} (Fast Reed--Solomon IOP of Proximity): the prover sends a few additional oracles, after which the verifier needs only $O(\log n)$ queries.
+        \end{itemize}
+        \pause
+
+        \begin{remarkblock}{Main ingredient: folding}
+            Folding maps ``is $g$ close to $\mathsf{RS}[\mathbb{F}, \Omega, k]$?'' to the same problem for $\mathsf{Fold}(g, \beta)$: half the dimension, half the domain. After $\log_2 k$ folds the code consists of \textbf{constants}, and the prover simply sends the constant.
+        \end{remarkblock}
+        We assume $k = 2^\ell$ and denote the folding challenges by $\beta$.
+    \end{frame}
+
+    \subsection{Folding Is Local}
+
+    \begin{frame}{Recall: 2-way Folding}
+        \begin{definition}[2-way folding]
+            For $g: \Omega \to \mathbb{F}$ and $\beta \in \mathbb{F}$, define $g_E, g_O: \Omega^2 \to \mathbb{F}$ by
+            \begin{equation*}
+                g_E(x^2) := \frac{g(x) + g(-x)}{2}, \qquad g_O(x^2) := \frac{g(x) - g(-x)}{2x},
+            \end{equation*}
+            and $\mathsf{Fold}(g, \beta) := g_E + \beta \cdot g_O: \Omega^2 \to \mathbb{F}$.
+        \end{definition}
+        \pause
+
+        \begin{alertblock}{Obstacle}
+            The verifier cannot compute $\mathsf{Fold}(g, \beta)$ itself: that requires reading all of $g$.
+        \end{alertblock}
+        \pause
+
+        \textbf{Solution:} the prover sends the fold as a new oracle, and the verifier spot-checks it. Folding is \textbf{local}: $\mathsf{Fold}(g, \beta)(x^2)$ depends only on $g(x)$ and $g(-x)$, so one value of the fold costs two cells of $g$.
+    \end{frame}
+
+    \begin{frame}{Folding Geometrically}
+        \begin{figure}
+            \centering
+            \begin{tikzpicture}[
+                lab/.style={font=\footnotesize},
+                pt/.style={circle, inner sep=1.7pt},
+            ]
+                \draw[-{Stealth[length=2mm]}, oc-gray-6] (-2.6, 0) -- (3.6, 0) node[lab, right] {$T$};
+                \draw[-{Stealth[length=2mm]}, oc-gray-6] (0, -0.3) -- (0, 2.9);
+                \node[pt, fill=oc-blue-8] (a) at (-1.5, 0.76) {};
+                \node[pt, fill=oc-blue-8] (b) at (1.5, 1.99) {};
+                \draw[densely dashed, oc-gray-6] (-1.5, 0) node[lab, below] {$-x$} -- (a);
+                \draw[densely dashed, oc-gray-6] (1.5, 0) node[lab, below] {$x$} -- (b);
+                \node[lab, above left] at (a) {$g(-x)$};
+                \node[lab, above left] at (b) {$g(x)$};
+                \uncover<2->{
+                \draw[very thick, oc-blue-6] (-2.5, 0.35) -- (3.3, 2.73);
+                \node[lab, text=oc-blue-8, rotate=22] at (-0.4, 1.45) {line $L$};}
+                \uncover<3->{
+                \node[pt, fill=oc-orange-7] (c) at (2.7, 2.48) {};
+                \draw[densely dashed, oc-orange-7] (2.7, 0) node[lab, below, text=oc-orange-9] {$\beta$} -- (c);
+                \node[lab, right=2pt, text=oc-orange-9] at (c) {$\mathsf{Fold}(g, \beta)(x^2)$};}
+            \end{tikzpicture}
+            \caption{The values of $g$ at $\pm x$ determine a line $L$; the fold at $x^2$ is $L(\beta)$. Drawn over the reals only for intuition.}
+        \end{figure}
+        \pause[4]
+
+        \begin{questionblock}{Question \#1}
+            Let $L$ be the unique polynomial of degree at most $1$ with $L(x) = g(x)$ and $L(-x) = g(-x)$. Show that $\mathsf{Fold}(g, \beta)(x^2) = L(\beta)$.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Folding: Example}
+        \begin{example}
+            $\mathbb{F} = \mathbb{F}_{17}$, $\Omega = \langle 2 \rangle$ listed as $1, 2, 4, 8, 16, 15, 13, 9$, $k = 4$ ($\rho = 1/2$). The polynomial $f = 3 + T + 2T^2 + 5T^3$ gives
+            \begin{equation*}
+                g = \overline{f} = (11, 2, 2, 13, 16, 3, 0, 11).
+            \end{equation*}
+        \end{example}
+        \pause
+
+        Take $\beta = 2$. The fold at $1^2 = 1$ uses the pair $\{1, 16\} = \{1, -1\}$:
+        \begin{equation*}
+            \mathsf{Fold}(g, 2)(1) = \frac{11 + 16}{2} + 2 \cdot \frac{11 - 16}{2} = 27 \cdot 9 - 5 = 0 \pmod{17},
+        \end{equation*}
+        using $2^{-1} = 9$ in $\mathbb{F}_{17}$.
+        \pause
+
+        The other three pairs give $\mathsf{Fold}(g, 2) = (0, 2, 10, 8)$ on $\Omega^2$ (listed as $1, 4, 16, 13$): the evaluations of $f_E + 2 f_O = 5 + 12T$, of degree less than $2$. \cmark
+    \end{frame}
+
+    \subsection{The Protocol}
+
+    \begin{frame}{Notation}
+        \begin{itemize}
+            \item $\Omega_i := \Omega^{2^i}$ is the domain after $i$ folds: $\Omega_0 = \Omega$, $\Omega_1 = \Omega^2$, \ldots\pause
+            \item $\code_i := \mathsf{RS}[\mathbb{F}, \Omega_i, k/2^i]$ is the corresponding code.\pause
+            \item All these codes have the \textbf{same rate} $\rho$, and the last one, $\code_\ell$, consists of the constant functions.
+        \end{itemize}
+        \pause
+
+        Two phases:
+        \begin{itemize}
+            \item \textbf{commit phase}: the prover sends every fold as a new oracle;
+            \item \textbf{query phase}: only afterwards, the verifier spot-checks consecutive oracles.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{The FRI Protocol}
+        \begin{definition}[FRI]
+            Input: an oracle $g_0 := g: \Omega_0 \to \mathbb{F}$; goal: test proximity to $\code_0 = \mathsf{RS}[\mathbb{F}, \Omega, k]$.
+            \begin{itemize}
+                \item<2-> \textbf{Commit phase.} For every $i \in [\ell]$:
+                \begin{algoen}
+                    \item the verifier samples $\beta_i \leftarrowS \mathbb{F}$;
+                    \item the prover sends $g_{i+1}: \Omega_{i+1} \to \mathbb{F}$; honestly, $g_{i+1} := \mathsf{Fold}(g_i, \beta_i)$.
+                \end{algoen}
+                Finally, the prover sends a constant $c \in \mathbb{F}$, and we set $g_\ell(y) := c$ for all $y \in \Omega_\ell$.
+                \item<3-> \textbf{Query phase.} Repeat $s$ times:
+                \begin{algoen}
+                    \item the verifier samples $x_0 \leftarrowS \Omega_0$ and sets $x_{i+1} := x_i^2$;
+                    \item for every $i \in [\ell]$, it queries $g_i(\pm x_i)$ and checks the \textbf{round consistency}
+                    \begin{equation*}
+                        g_{i+1}(x_{i+1}) = \frac{g_i(x_i) + g_i(-x_i)}{2} + \beta_i \cdot \frac{g_i(x_i) - g_i(-x_i)}{2x_i}.
+                    \end{equation*}
+                \end{algoen}
+            \end{itemize}
+            \uncover<3->{The verifier accepts if and only if all checks pass.}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{The FRI Protocol}
+        \begin{figure}
+            \centering
+            \scalebox{0.6}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.32cm, inner sep=0pt},
+                qcell/.style={draw=oc-orange-8, thick, fill=oc-orange-3, minimum size=0.32cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=0.9cm]{images/common/prover.png}\\Prover $\mathcal{P}$};
+                \node[inner sep=0pt, align=center, right=7cm of prover] (verifier) {\includegraphics[width=0.9cm]{images/common/verifier.png}\\Verifier $\mathcal{V}^{\textcolor{oc-red-8}{g_0}}$};
+                \coordinate (ps) at (prover.south);
+                \coordinate (vs) at (prover.south -| verifier.south);
+                \path (ps) -- (vs) coordinate[midway] (c);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]ps) -- ([yshift=-7.1cm]ps);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]vs) -- ([yshift=-7.1cm]vs);
+                % input oracle
+                \node[draw=oc-red-6, dashed, thick, rounded corners=2pt, minimum width=6.6cm, minimum height=1.15cm] at ([yshift=-0.95cm]c) {};
+                \node[text=oc-red-8, font=\small] at ([yshift=-0.6cm]c) {input oracle};
+                \coordinate (s) at ([yshift=-1.15cm]c);
+                \fristrip{s}{16}{$\textcolor{oc-red-8}{g_0}$}{oc-red-1}
+                \uncover<5->{\friquery{s}{16}{3,11}}
+                % commit phase
+                \uncover<2->{
+                \fromverifier{-2.3cm}{Sample $\beta_0 \leftarrowS \mathbb{F}$}
+                \coordinate (s) at ([yshift=-2.85cm]c);
+                \fristrip{s}{8}{$g_1$}{oc-blue-1}
+                \draw[send] ([yshift=-3.2cm]ps) -- ([yshift=-3.2cm]vs);}
+                \uncover<3->{
+                \fromverifier{-3.95cm}{Sample $\beta_1 \leftarrowS \mathbb{F}$}
+                \coordinate (s) at ([yshift=-4.5cm]c);
+                \fristrip{s}{4}{$g_2$}{oc-blue-1}
+                \draw[send] ([yshift=-4.85cm]ps) -- ([yshift=-4.85cm]vs);}
+                \uncover<4->{
+                \node at ([yshift=-5.2cm]c) {$\vdots$};
+                \fromverifier{-5.95cm}{Sample $\beta_{\ell-1} \leftarrowS \mathbb{F}$}
+                \draw[send] ([yshift=-6.75cm]ps) -- ([yshift=-6.75cm]vs) node[midway, above=0mm]{Send constant $c$};}
+                % queried cells
+                \uncover<5->{
+                \coordinate (s) at ([yshift=-2.85cm]c);
+                \friquery{s}{8}{3,7}
+                \coordinate (s) at ([yshift=-4.5cm]c);
+                \friquery{s}{4}{1,3}
+                \node[align=center, fill=white, below=7.15cm of verifier]{
+                \noindent\rule{4.6cm}{0.8pt}\\
+                Repeat $s$ times:\\
+                sample $x_0 \leftarrowS \Omega_0$, set $x_{i+1} := x_i^2$,\\
+                query $g_i(\pm x_i)$, check round consistency\\
+                \noindent\rule{4.6cm}{0.8pt}};}
+            \end{tikzpicture}%
+            }
+            \caption{Each $\beta_i$ is answered with $g_{i+1}$, half as long as $g_i$. A query follows a random point down the layers and reads the pairs $\pm x_i$ (orange).}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{The FRI Protocol: Observations}
+        \begin{itemize}
+            \item The left-hand side of the round consistency check needs no extra query: $g_{i+1}(x_{i+1})$ is one of the two values queried in the next round; in the last round it is the constant $c$.\pause
+            \item \textbf{Completeness:} by the folding lemma, every honest $g_i$ is a codeword of $\code_i$, so $g_\ell$ is indeed constant.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{The FRI Protocol: Example}
+        \begin{example}
+            Continue the folding example with $k = 4$, so FRI has $\ell = 2$ rounds.
+            \begin{itemize}
+                \item<2-> After $\beta_0 = 2$: $g_1 = (0, 2, 10, 8)$ on $\Omega_1 = \{1, 4, 16, 13\}$.
+                \item<3-> After $\beta_1 = 5$: $g_2 = (14, 14)$ on $\Omega_2 = \{1, 16\}$, indeed constant, so $c = 14$.
+                \item<4-> If $x_0 = 2$, then $x_1 = 4$ and the verifier checks
+                \begin{equation*}
+                    g_1(4) = \frac{g_0(2) + g_0(15)}{2} + 2 \cdot \frac{g_0(2) - g_0(15)}{2 \cdot 2} = \frac{2 + 3}{2} + \frac{2 - 3}{2} = 2,
+                \end{equation*}
+                \item<5-> and similarly, in the last round,
+                \begin{equation*}
+                    c = \frac{g_1(4) + g_1(13)}{2} + 5 \cdot \frac{g_1(4) - g_1(13)}{2 \cdot 4} = 14.
+                \end{equation*}
+            \end{itemize}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{FRI as a Tree}
+        \begin{figure}
+            \centering
+            \resizebox{\linewidth}{!}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-green-8, fill=oc-green-1, minimum width=0.62cm, minimum height=0.48cm, inner sep=0pt, font=\small},
+                hot/.style={draw=oc-orange-8, very thick, fill=oc-orange-2},
+                pt/.style={font=\scriptsize, text=oc-gray-6},
+                lab/.style={font=\footnotesize},
+                edge/.style={oc-green-5, thick},
+                hedge/.style={oc-orange-7, very thick},
+            ]
+                \def\dx{0.98}
+                \foreach \p/\v [count=\j from 0] in {1/11, 16/16, 4/2, 13/0, 2/2, 15/3, 8/13, 9/11} {
+                    \node[cell] (a\j) at (\dx*\j, 0) {$\v$};
+                    \node[pt, above=0pt] at (a\j.north) {$\p$};
+                }
+                \node[lab, anchor=east] at (-0.6, 0) {$g_0$ on $\Omega_0$};
+                \uncover<2->{
+                \foreach \p/\v [count=\j from 0] in {1/0, 16/10, 4/2, 13/8} {
+                    \node[cell] (b\j) at (\dx*2*\j+\dx/2, -1.7) {$\v$};
+                    \node[pt, above=0pt] at (b\j.north) {$\p$};
+                }
+                \foreach \j in {0,...,3} {
+                    \pgfmathtruncatemacro{\l}{2*\j}\pgfmathtruncatemacro{\r}{2*\j+1}
+                    \draw[edge] (a\l.south) -- (b\j.north west);
+                    \draw[edge] (a\r.south) -- (b\j.north east);
+                }
+                \node[lab, anchor=east] at (-0.6, -1.7) {$g_1$ on $\Omega_1$};
+                \node[lab, text=oc-green-9, anchor=west] at (\dx*7+0.5, -0.85) {fold, $\beta_0 = 2$};}
+                \uncover<3->{
+                \foreach \p/\v [count=\j from 0] in {1/14, 16/14} {
+                    \node[cell] (c\j) at (\dx*4*\j+\dx*1.5, -3.4) {$\v$};
+                    \node[pt, above=0pt] at (c\j.north) {$\p$};
+                }
+                \foreach \j in {0,1} {
+                    \pgfmathtruncatemacro{\l}{2*\j}\pgfmathtruncatemacro{\r}{2*\j+1}
+                    \draw[edge] (b\l.south) -- (c\j.north west);
+                    \draw[edge] (b\r.south) -- (c\j.north east);
+                }
+                \node[lab, anchor=east] at (-0.6, -3.4) {$g_2$ on $\Omega_2$};
+                \node[lab, text=oc-green-9, anchor=west] at (\dx*7+0.5, -2.55) {fold, $\beta_1 = 5$};
+                \node[lab, text=oc-gray-7, anchor=north] at (\dx*3.5, -3.9) {constant: the prover sends $c = 14$};}
+                \uncover<4->{
+                \node[cell, hot] at (a4) {$2$};
+                \node[cell, hot] at (a5) {$3$};
+                \node[cell, hot] at (b2) {$2$};
+                \node[cell, hot] at (b3) {$8$};
+                \node[cell, hot] at (c1) {$14$};
+                \draw[hedge] (a4.south) -- (b2.north west);
+                \draw[hedge] (a5.south) -- (b2.north east);
+                \draw[hedge] (b2.south) -- (c1.north west);
+                \draw[hedge] (b3.south) -- (c1.north east);}
+            \end{tikzpicture}%
+            }
+            \caption{Every pair $\{x, -x\}$ (neighbouring cells, point written above the value) is folded into the cell of $x^2$ in the next layer. A query starting at $x_0 = 2$ climbs down one branch (orange): it reads $g_0(\pm 2)$, then $g_1(\pm 4)$, and compares the last fold with $c$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{A Cheating Prover}
+        \begin{example}
+            The prover tries to pass off $g_0 = \overline{T^5} = (1, 15, 4, 9, 16, 2, 13, 8)$, which is not in $\mathsf{RS}[\mathbb{F}_{17}, \Omega, 4]$, folding honestly with $\beta_0 = 2$, $\beta_1 = 5$.
+        \end{example}
+        \pause
+        \begin{itemize}
+            \item $T^5 = T \cdot (T^2)^2$, so $g_E = 0$, $g_O = \overline{T^2}$, and $g_1 = \overline{2T^2} = (2, 15, 2, 15)$: the excess degree survived the fold.\pause
+            \item $g_2 = \overline{2T} = (2, 15)$ on $\Omega_2 = \{1, -1\}$ is not constant: whatever $c$ is sent, each query catches it with probability $1/2$.\pause
+            \item Sending a $g_1$ that \textbf{is} a codeword instead makes $g_1$ inconsistent with $g_0$ on many pairs: caught by the first round consistency check.
+        \end{itemize}
+        \pause
+
+        \begin{questionblock}{Question \#2}
+            Why must the verifier send $\beta_i$ only \textbf{after} receiving $g_i$? Describe a cheating strategy if all challenges were known in advance.
+        \end{questionblock}
+    \end{frame}
+
+    \subsection{Efficiency and Soundness}
+
+    \begin{frame}{Efficiency}
+        \begin{itemize}
+            \item \textbf{Prover:} each fold is linear in the size of the current domain, so $O(n + n/2 + \dots) = O(n)$ field operations.\pause
+            \item \textbf{Proof length:} the oracles $g_1, \dots, g_{\ell-1}$ have total length $n/2 + n/4 + \dots < n$, less than the input.\pause
+            \item \textbf{Queries:} each repetition reads $2$ values in each of $\ell$ rounds, so $2\ell s = O(s \log n)$; the verifier's work is of the same order.
+        \end{itemize}
+        \pause
+
+        \begin{questionblock}{Question \#3}
+            Every query reads the pair $g_i(x_i), g_i(-x_i)$, and each value comes with a Merkle authentication path. How should the prover arrange the leaves of the Merkle tree of $g_i$ to halve the number of paths?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Soundness: Intuition}
+        Suppose $g_0$ is far from the code. In every round of the commit phase:
+        \begin{itemize}
+            \item if the prover folds honestly, then by the folding lemma the fold stays far, except with probability $\varepsilon_\delta$ over $\beta_i$;\pause
+            \item if the prover sends a $g_{i+1}$ that is close to the code, then $g_{i+1}$ differs from the true fold of $g_i$ on many points, and round consistency detects this at a random point.
+        \end{itemize}
+        \pause
+
+        \begin{remarkblock}{Either way}
+            A far input leaves a trace of inconsistencies of density about $\delta$ along the path of a random query.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Soundness}
+        \begin{theorem}[FRI soundness, informal]
+            Let $g_0$ be $\delta$-far from $\mathsf{RS}[\mathbb{F}, \Omega, k]$. For every prover, the FRI verifier with $s$ repetitions accepts with probability at most
+            \begin{equation*}
+                \ell \cdot \varepsilon_\delta + (1 - \delta)^s,
+            \end{equation*}
+            for every $\delta$ below the Johnson bound $1 - \sqrt{\rho}$.
+        \end{theorem}
+        \pause
+        \begin{itemize}
+            \item $\ell \cdot \varepsilon_\delta$: some $\beta_i$ is unlucky --- negligible for a large field.
+            \item $(1 - \delta)^s$: all $s$ query paths miss --- this determines the number of queries.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Soundness: History}
+        \begin{remark}
+            The original analysis gives a weaker bound: $3n/\#\mathbb{F} + (1 - \min\{\delta, \delta_0\})^s$, where $\delta_0 \approx (1 - 3\rho)/4$ lies below the unique decoding radius.
+        \end{remark}
+        \pause
+        \begin{itemize}
+            \item The improvement to the Johnson bound came with DEEP-FRI, and then with the proximity gap theorem (BCIKS20).\pause
+            \item The original FRI paper already conjectured that the bound holds up to the capacity $1 - \rho$.
+        \end{itemize}
+        \pause
+
+        \begin{questionblock}{Question \#4}
+            Let $\rho = 1/4$ and ignore $\ell \cdot \varepsilon_\delta$. Find the smallest $s$ with remaining term at most $2^{-100}$: (a) original bound, (b) $\delta$ approaching the Johnson bound, (c) $\delta$ approaching the capacity $1 - \rho$.
+        \end{questionblock}
+        \uncover<5->{\commentgray{Answer: $s \geq 100 / \log_2(1/(1-\delta))$, about $1074$, $100$ and $50$ repetitions.}}
+    \end{frame}
+
+    \subsection{FRI in the Big Picture}
+
+    \begin{frame}{FRI in the Big Picture}
+        \begin{itemize}
+            \item The input of the RS-IOPP is the \textbf{virtual} $h = \sum_j \alpha^j \mathsf{q}_j$. Whenever the verifier needs $h(\pm x_0)$, it queries every committed oracle at $\pm x_0$ and computes $h(\pm x_0)$ itself.\pause
+            \item The first layer of FRI comes for free: only $g_1, \dots, g_{\ell-1}$ and $c$ are new prover messages.\pause
+            \item \textbf{BCS transformation} (Ben-Sasson, Chiesa, Spooner) turns the IOP into a SNARK:
+            \begin{algoen}
+                \item every oracle is replaced by a Merkle root, every query is answered with an authentication path;
+                \item every challenge, including the query points $x_0$, is derived by hashing the transcript (Fiat--Shamir).
+            \end{algoen}
+        \end{itemize}
+        \pause
+
+        \begin{figure}
+            \centering
+            \resizebox{0.95\linewidth}{!}{%
+            \begin{tikzpicture}[
+                box/.style={draw=oc-gray-7, thick, rounded corners=3pt, fill=oc-gray-0, align=center, minimum height=1.2cm, text width=2.0cm, font=\small},
+                pipe/.style={-{Stealth[length=2.5mm]}, very thick, oc-blue-7},
+                lab/.style={font=\scriptsize, align=center, text=oc-blue-9},
+            ]
+                \node[box] (a) at (0, 0) {Poly-IOP\\(e.g., PlonK, AIR)};
+                \node[box] (b) at (4.4, 0) {IOP\\with one FRI run};
+                \node[box, fill=oc-blue-1] (c) at (8.8, 0) {SNARK\\(STARK)};
+                \draw[pipe] (a) -- node[lab, above] {bind, quotient,\\batch} node[lab, below] {previous lecture} (b);
+                \draw[pipe] (b) -- node[lab, above] {Merkle trees,\\Fiat--Shamir} node[lab, below] {BCS} (c);
+            \end{tikzpicture}%
+            }
+        \end{figure}
+    \end{frame}
+
+    \subsection{Variants and Newer Protocols}
+
+    \begin{frame}{Folding Factor}
+        \begin{itemize}
+            \item Fold whole cosets of size $2^\eta$ at once, using $x \mapsto x^{2^\eta}$: the degree drops by $2^\eta$ in one round.\pause
+            \item The fold is the value at $\beta_i$ of the polynomial of degree $< 2^\eta$ interpolating $g_i$ on the coset ($\eta = 1$ is the line $L$).\pause
+            \item A query reads slightly more values, but they all sit in \textbf{one Merkle leaf}. Typically $\eta \in \{2, 3, 4\}$.
+        \end{itemize}
+        \pause
+        \begin{figure}
+            \centering
+            \scalebox{0.85}{%
+            \begin{tikzpicture}[
+                dot/.style={circle, fill=oc-blue-6, inner sep=1.5pt},
+                hot/.style={circle, fill=oc-orange-7, inner sep=1.7pt},
+                edge/.style={oc-gray-5, thick},
+                lab/.style={font=\footnotesize, align=center},
+            ]
+                \foreach \j in {0,...,7} { \node[dot] (l0\j) at (0.5*\j, 0) {}; }
+                \foreach \j in {0,...,3} { \node[dot] (l1\j) at (1.0*\j+0.25, -0.8) {}; }
+                \foreach \j in {0,1} { \node[dot] (l2\j) at (2.0*\j+0.75, -1.6) {}; }
+                \node[hot] (l30) at (1.75, -2.4) {};
+                \foreach \j in {0,...,3} { \pgfmathtruncatemacro{\l}{2*\j}\pgfmathtruncatemacro{\r}{2*\j+1}
+                    \draw[edge] (l0\l) -- (l1\j); \draw[edge] (l0\r) -- (l1\j); }
+                \foreach \j in {0,1} { \pgfmathtruncatemacro{\l}{2*\j}\pgfmathtruncatemacro{\r}{2*\j+1}
+                    \draw[edge] (l1\l) -- (l2\j); \draw[edge] (l1\r) -- (l2\j); }
+                \draw[edge] (l20) -- (l30); \draw[edge] (l21) -- (l30);
+                \foreach \n in {l04, l05, l12, l13, l20, l21} { \node[hot] at (\n) {}; }
+                \draw[oc-orange-7, very thick] (l04) -- (l12) -- (l21) -- (l30) (l05) -- (l12) (l13) -- (l21) (l20) -- (l30);
+                \node[hot] at (l30) {};
+                \node[lab] at (1.75, -3.2) {$2$-to-$1$ folding, $3$ rounds:\\$6$ values in $3$ Merkle openings};
+                \foreach \j in {0,...,7} { \draw[oc-orange-7, very thick] (6.0+0.5*\j, 0) -- (7.75, -2.4); \node[hot] (r\j) at (6.0+0.5*\j, 0) {}; }
+                \node[hot] at (7.75, -2.4) {};
+                \node[lab] at (7.75, -3.2) {$8$-to-$1$ folding, $1$ round:\\$8$ values in $1$ Merkle opening};
+            \end{tikzpicture}%
+            }
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Other Variants}
+        \begin{itemize}
+            \item \textbf{Stop early:} stop folding before reaching a constant and send the remaining polynomial of small degree in full (as the original paper does).\pause
+            \item \textbf{Other domains:} the original FRI is stated for binary fields, with additive cosets and a subspace-vanishing polynomial instead of $x \mapsto x^2$.\pause
+            \item \textbf{Circle STARKs:} over $p = 2^{31} - 1$, where $p - 1$ has no large power of two; use the points of the circle $x^2 + y^2 = 1$, a group of order $p + 1 = 2^{31}$.\pause
+            \item \textbf{STIR:} lowers the rate in every round in addition to the degree, using out-of-domain sampling and quotienting inside every round.\pause
+            \item \textbf{WHIR} and \textbf{Basefold:} the same ideas for multilinear polynomials, combined with sum-check-based Poly-IOPs.
+        \end{itemize}
+    \end{frame}
+
+    \section{Arithmetic Intermediate Representation}
+
+    \subsection{Execution Trace and Constraints}
+
+    \begin{frame}{What is Still Missing?}
+        \begin{itemize}
+            \item We have a hash-based compiler: Poly-IOP $\to$ IOP with one FRI run $\to$ SNARK.\pause
+            \item Missing: the Poly-IOP itself, expressing ``this computation was performed correctly'' as claims about polynomials.\pause
+            \item PlonK did this for arithmetic circuits. STARKs target computations that \textbf{repeat the same step} many times: a virtual machine, rounds of a hash function.
+        \end{itemize}
+        \pause
+
+        \begin{definition}
+            The \textbf{arithmetic intermediate representation (AIR)} describes a computation in terms of an execution trace that satisfies constraints induced by the correct evolution of the state.
+        \end{definition}
+        \uncover<5->{Pipeline: AIR $\to$ Poly-IOP $\to$ IOP $\to$ SNARK.}
+    \end{frame}
+
+    \begin{frame}{Execution Trace}
+        \begin{definition}
+            Suppose the computation evolves a state of $w$ registers for $\tau$ cycles. The \textbf{algebraic execution trace (AET)} is the table $W \in \mathbb{F}^{\tau \times w}$: rows are states at given times, columns track registers.
+        \end{definition}
+        \pause
+
+        \begin{definition}
+            A \textbf{state transition function} $\phi: \mathbb{F}^{w} \to \mathbb{F}^{w}$ determines the next state from the previous one. A set of \textbf{boundary conditions}
+            \begin{equation*}
+                \mathcal{B} \subseteq [\tau] \times [w] \times \mathbb{F}
+            \end{equation*}
+            fixes some registers at some cycles: $(i, j, v) \in \mathcal{B}$ means that register $j$ holds $v$ at cycle $i$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Running Example: Fibonacci Squares}
+        \begin{example}
+            Over $\mathbb{F}_{17}$: $a_{i+2} = a_{i+1}^2 + a_i^2$ with $a_0 = 1$ and $a_1 = s$. The prover claims to know $s$ such that $a_4 = 13$.
+        \end{example}
+        \pause
+        Indeed, $s = 3$ works: $a_2 = 1^2 + 3^2 = 10$, $a_3 = 3^2 + 10^2 = 7$, $a_4 = 10^2 + 7^2 = 13$.
+        \pause
+
+        \begin{columns}[c]
+            \begin{column}{0.55\textwidth}
+                \centering
+                \scalebox{0.8}{%
+                \begin{tikzpicture}[
+                    x=1.1cm, y=0.85cm,
+                    cell/.style={draw=oc-gray-7, thick, minimum width=1.1cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+                    bnd/.style={cell, fill=oc-orange-1},
+                    wit/.style={cell, fill=oc-blue-1},
+                    lab/.style={font=\footnotesize},
+                    arr/.style={-stealth, thick, oc-gray-6},
+                ]
+                    \node[lab] at (0, 0.7) {$a_i$};
+                    \node[lab] at (1, 0.7) {$a_{i+1}$};
+                    \foreach \l/\r/\ls/\rs [count=\i from 0] in {1/3/bnd/wit, 3/10/cell/cell, 10/7/cell/cell, 7/13/cell/bnd} {
+                        \node[lab, left=8pt] at (-0.5, -\i) {$i = \i$};
+                        \node[\ls] (l\i) at (0, -\i) {\l};
+                        \node[\rs] (r\i) at (1, -\i) {\r};
+                    }
+                    \foreach \i [evaluate=\i as \j using int(\i+1)] in {0,1,2} {
+                        \draw[arr] ([xshift=-0.3cm]r\i.south) -- ([xshift=0.3cm]l\j.north);
+                    }
+                    \node[bnd, minimum width=0.5cm] (lb) at (2.1, -0.5) {};
+                    \node[lab, right=3pt of lb] {boundary};
+                    \node[wit, minimum width=0.5cm] (lw) at (2.1, -1.5) {};
+                    \node[lab, right=3pt of lw] {witness $s$};
+                    \draw[arr] (2.25, -2.3) -- (1.95, -2.7);
+                    \node[lab, anchor=west] at (2.35, -2.5) {copied};
+                \end{tikzpicture}%
+                }
+            \end{column}
+            \begin{column}{0.43\textwidth}
+                \small
+                $w = 2$ registers, $\tau = 4$ cycles: $W_{[i,0]} = a_i$, $W_{[i,1]} = a_{i+1}$.
+                \pause
+
+                $\phi(x_0, x_1) = (x_1, x_0^2 + x_1^2)$,
+
+                $\mathcal{B} = \{(0, 0, 1), (3, 1, 13)\}$.
+            \end{column}
+        \end{columns}
+    \end{frame}
+
+    \begin{frame}{Computational Integrity Claim}
+        The claim consists of $\phi$ and $\mathcal{B}$; the witness is $W$. The claim is \textbf{true} if there is $W \in \mathbb{F}^{\tau \times w}$ such that:
+        \begin{itemize}
+            \item $\phi(W_{[i, :]}) = W_{[i+1, :]}$ for all $i \in [\tau - 1]$;
+            \item $W_{[i, j]} = v$ for all $(i, j, v) \in \mathcal{B}$.
+        \end{itemize}
+        \pause
+
+        $\phi$ must be described by low-degree polynomials independent of the cycle, which only need to \textbf{distinguish} correct evolutions from incorrect ones:
+        \pause
+        \begin{definition}
+            \textbf{Transition verification polynomials} $p_u(X_0, \ldots, X_{w-1}, Y_0, \ldots, Y_{w-1})$, $u \in [\kappa]$, satisfy $\phi(\mathbf{x}) = \mathbf{y}$ iff $p_u(\mathbf{x}, \mathbf{y}) = 0$ for all $u \in [\kappa]$.
+        \end{definition}
+        \pause
+        \textbf{Transition constraints:} for all $i \in [\tau - 1]$ and $u \in [\kappa]$,
+        \begin{equation*}
+            p_u(W_{[i, 0]}, \ldots, W_{[i, w-1]}, W_{[i+1, 0]}, \ldots, W_{[i+1, w-1]}) = 0.
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Transition Constraints: Example}
+        \begin{example}
+            The transition is verified by $\kappa = 2$ polynomials
+            \begin{equation*}
+                p_0 = Y_0 - X_1, \qquad p_1 = Y_1 - X_0^2 - X_1^2:
+            \end{equation*}
+            $a_{i+1}$ is copied to the next row, and the recurrence itself. At cycle $i = 0$:
+            \begin{align*}
+                p_0(W_{[0, 0]}, W_{[0, 1]}, W_{[1, 0]}, W_{[1, 1]}) &= 3 - 3 = 0, \\
+                p_1(W_{[0, 0]}, W_{[0, 1]}, W_{[1, 0]}, W_{[1, 1]}) &= 10 - 1^2 - 3^2 = 0.
+            \end{align*}
+        \end{example}
+        \pause
+
+        \textbf{Non-determinism:} $y = x^{-1}$ requires computing $x^{\#\mathbb{F} - 2}$, but it is verified by the degree-$2$ polynomial $XY - 1$.
+    \end{frame}
+
+    \begin{frame}{AIR vs Arithmetic Circuits}
+        \begin{itemize}
+            \item A circuit can describe an arbitrary computation, but every gate needs its own constraint.\pause
+            \item An AIR describes only computations that repeat one step, but the same $\kappa$ polynomials describe all $\tau - 1$ steps: the description of the computation does not grow with $\tau$.
+        \end{itemize}
+        \pause
+
+        \begin{remark}
+            This uniformity matches the cyclic structure of the evaluation domains perfectly: moving to the next row will become multiplication of the argument by a root of unity.
+        \end{remark}
+    \end{frame}
+
+    \subsection{Trace Interpolation}
+
+    \begin{frame}{Trace Interpolation}
+        To get a Poly-IOP, represent the \textbf{witness} by polynomials as well.
+        \begin{itemize}
+            \item<2-> Let $\omega_\tau$ be a primitive $\tau$th root of unity and $H := \langle \omega_\tau \rangle$ the \textbf{trace domain} ($\tau$ a power of two, otherwise pad).
+            \item<3-> The \textbf{trace polynomial} $t_j \in \mathbb{F}[T]^{<\tau}$ of register $j \in [w]$ is the unique polynomial with
+            \begin{equation*}
+                t_j(\omega_\tau^i) = W_{[i,j]} \quad \text{for all} \; i \in [\tau],
+            \end{equation*}
+            computed with the inverse NTT: the $j$th column of $W$ is the restriction of $t_j$ to $H$.
+        \end{itemize}
+        \uncover<4->{
+        \begin{example}
+            $H = \langle 13 \rangle = \{1, 13, 16, 4\}$, $\tau = 4$, $\omega_\tau = 13$. Interpolating the columns:
+            \begin{equation*}
+                t_0(T) = 1 + 15T + 13T^2 + 6T^3, \qquad t_1(T) = 4 + 13T + T^2 + 2T^3.
+            \end{equation*}
+            For instance, $t_0(\omega_\tau^2) = t_0(-1) = 1 - 15 + 13 - 6 = 10 = W_{[2,0]}$.
+        \end{example}}
+    \end{frame}
+
+    \begin{frame}{Constraint Polynomials}
+        On the trace polynomials, the claim becomes:
+        \begin{itemize}
+            \item boundary: $t_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$;
+            \item transition: for all $i \in [\tau - 1]$ and $u \in [\kappa]$,
+            \begin{equation*}
+                p_u\big(t_0(\omega_\tau^i), \ldots, t_{w-1}(\omega_\tau^i), t_0(\omega_\tau^{i+1}), \ldots, t_{w-1}(\omega_\tau^{i+1})\big) = 0.
+            \end{equation*}
+        \end{itemize}
+        \pause
+
+        \begin{remarkblock}{The structure of $H$ pays off}
+            The next row is reached by multiplying the argument by $\omega_\tau$: $\omega_\tau^{i+1} = \omega_\tau \cdot \omega_\tau^i$.
+        \end{remarkblock}
+        \pause
+
+        So the transition constraint is the \textbf{constraint polynomial}
+        \begin{equation*}
+            c_u(T) := p_u\big(t_0(T), \ldots, t_{w-1}(T), t_0(\omega_\tau T), \ldots, t_{w-1}(\omega_\tau T)\big)
+        \end{equation*}
+        vanishing on $\{\omega_\tau^i : i \in [\tau - 1]\}$: all of $H$ except the last point.
+    \end{frame}
+
+    \subsection{Constraints as Divisibility}
+
+    \begin{frame}{Generalized AIR Constraint}
+        A polynomial vanishes on a set $S$ iff it is divisible by $\prod_{x \in S}(T - x)$: exactly the idea behind quotienting.
+        \pause
+
+        \begin{definition}[Generalized AIR constraint]
+            A \textbf{generalized AIR constraint} is given by two polynomials:
+            \begin{itemize}
+                \item the \textbf{numerator}: which equation between trace elements holds, independently of the cycle (transition: $c_u$; boundary of register $j$: $t_j - \iota_j$, where $\iota_j$ interpolates the boundary values);
+                \item the \textbf{denominator}: a vanishing polynomial of the points where it must hold (transition: $H$ without the last point; boundary: the boundary points).
+            \end{itemize}
+            The constraint is satisfied iff the numerator is divisible by the denominator, that is, the \textbf{quotient} is a polynomial.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Boundary and Transition Quotients}
+        For every register $j \in [w]$ (the $\iota$ and $\nu$ of multiple quotienting, for the points $\mathcal{B}_j$):
+        \begin{itemize}
+            \item $\mathcal{B}_j := \{\omega_\tau^i : (i, j, v) \in \mathcal{B}\}$, the boundary points;
+            \item the \textbf{boundary interpolant} $\iota_j$, $\deg \iota_j < \#\mathcal{B}_j$, with $\iota_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$;
+            \item $\nu_j(T) := \prod_{x \in \mathcal{B}_j} (T - x)$.
+        \end{itemize}
+        \pause
+
+        The \textbf{transition vanishing polynomial} is
+        \begin{equation*}
+            \nu_{\mathcal{T}}(T) := \prod_{i \in [\tau - 1]} (T - \omega_\tau^i) = \frac{T^\tau - 1}{T - \omega_\tau^{\tau - 1}}.
+        \end{equation*}
+        \pause
+        \vspace{-5pt}
+
+        The \textbf{quotients} are
+        \begin{equation*}
+            q^{\mathcal{B}}_j := \frac{t_j - \iota_j}{\nu_j}, \quad j \in [w], \qquad q^{\mathcal{T}}_u := \frac{c_u}{\nu_{\mathcal{T}}}, \quad u \in [\kappa].
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{Constraints as Divisibility}
+        \begin{proposition}
+            The trace $W$ satisfies all boundary and transition constraints if and only if all boundary quotients $q^{\mathcal{B}}_j$ and all transition quotients $q^{\mathcal{T}}_u$ are polynomials.
+        \end{proposition}
+        \pause
+
+        \textbf{Proof.} A quotient is a polynomial iff its numerator vanishes at every root of its denominator:
+        \begin{itemize}
+            \item boundary: $t_j(\omega_\tau^i) = v$ for all $(i, j, v) \in \mathcal{B}$;
+            \item transition: $c_u(\omega_\tau^i) = 0$ for all $i \in [\tau - 1]$,
+        \end{itemize}
+        which are exactly the constraints. \qed
+        \pause
+
+        \begin{remarkblock}{Degrees}
+            If $p_u$ has total degree $d_u$, then $\deg c_u \leq d_u(\tau - 1)$, so a valid trace gives $\deg q^{\mathcal{T}}_u \leq (d_u - 1)(\tau - 1)$ and $\deg q^{\mathcal{B}}_j < \tau - \#\mathcal{B}_j$.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Constraints as Divisibility: Example}
+        Substituting $X_j \mapsto t_j(T)$ and $Y_j \mapsto t_j(\omega_\tau T)$:
+        \begin{align*}
+            c_0(T) &= t_0(\omega_\tau T) - t_1(T) = 14 + 12T + 3T^2 + 5T^3, \\
+            c_1(T) &= t_1(\omega_\tau T) - t_0(T)^2 - t_1(T)^2 \\
+                   &= 4 + T + 13T^2 + 6T^3 + 6T^4 + 10T^5 + 11T^6.
+        \end{align*}
+        \pause
+        \begin{figure}
+            \centering
+            \begin{tikzpicture}[
+                x=0.8cm, y=0.6cm,
+                cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+                dom/.style={cell, fill=oc-gray-1},
+                zero/.style={cell, fill=oc-green-1},
+                bad/.style={cell, fill=oc-red-1, draw=oc-red-8},
+                lab/.style={font=\footnotesize},
+            ]
+                \foreach \x/\a/\b/\s [count=\i from 0] in {1/0/0/zero, 13/0/0/zero, 16/0/0/zero, 4/5/6/bad} {
+                    \node[dom] at (\i, 0) {\x};
+                    \node[\s] at (\i, -1) {\a};
+                    \node[\s] at (\i, -2) {\b};
+                }
+                \node[lab, left=6pt] at (-0.5, 0) {$x \in H$};
+                \node[lab, left=6pt] at (-0.5, -1) {$c_0(x)$};
+                \node[lab, left=6pt] at (-0.5, -2) {$c_1(x)$};
+                \draw[decorate, decoration={brace, amplitude=4pt, mirror}, thick, oc-gray-7] (-0.45, -2.5) -- node[lab, below=4pt] {$\{\omega_\tau^i : i \in [\tau - 1]\}$} (2.45, -2.5);
+                \node[lab, right=6pt, align=left, text=oc-red-8] at (3.5, -1.5) {at $\omega_\tau^3$:\\non-zero,\\no transition};
+            \end{tikzpicture}
+        \end{figure}
+        Both vanish on $\omega_\tau^0, \omega_\tau^1, \omega_\tau^2$, but not on $\omega_\tau^3$: there is no next row to compare with.
+    \end{frame}
+
+    \begin{frame}{Constraints as Divisibility: Example}
+        \begin{itemize}
+            \item Boundary conditions $(0, 0, 1)$ and $(3, 1, 13)$; $\omega_\tau^0 = 1$, $\omega_\tau^3 = 4$, so $\mathcal{B}_0 = \{1\}$, $\mathcal{B}_1 = \{4\}$, and
+            \begin{equation*}
+                \iota_0 = 1, \quad \iota_1 = 13, \quad \nu_0 = T - 1, \quad \nu_1 = T - 4.
+            \end{equation*}
+            \pause
+            \vspace{-10pt}
+            \item The transition vanishing polynomial:
+            \begin{equation*}
+                \nu_{\mathcal{T}}(T) = (T - 1)(T - 13)(T - 16) = \frac{T^4 - 1}{T - 4} = T^3 + 4T^2 + 16T + 13.
+            \end{equation*}
+        \end{itemize}
+        \pause
+        All four divisions are exact:
+        \begin{gather*}
+            q^{\mathcal{B}}_0 = \frac{t_0 - 1}{T - 1} = 2T + 6T^2, \qquad
+            q^{\mathcal{B}}_1 = \frac{t_1 - 13}{T - 4} = 15 + 9T + 2T^2, \\
+            q^{\mathcal{T}}_0 = \frac{c_0}{\nu_{\mathcal{T}}} = 5, \qquad
+            q^{\mathcal{T}}_1 = \frac{c_1}{\nu_{\mathcal{T}}} = 16 + 11T^3.
+        \end{gather*}
+    \end{frame}
+
+    \subsection{AIR as a Poly-IOP}
+
+    \begin{frame}{AIR as a Poly-IOP}
+        Batch all quotients with a random challenge and check the identity at a random point. Assume $\deg p_u \leq 2$: all quotients have degree $< \tau$.
+        \pause
+
+        \begin{definition}[AIR Poly-IOP]
+            \small
+            The AIR $\big(\tau, w, \{p_u\}_{u \in [\kappa]}, \mathcal{B}\big)$ is public; the prover knows $W$. We write $\mathbf{t}(x) := (t_0(x), \ldots, t_{w-1}(x))$.
+            \begin{algoen}
+                \item<2-> $\mathcal{P}$ sends the trace polynomials $t_0, \ldots, t_{w-1} \in \mathbb{F}[T]^{<\tau}$.
+                \item<3-> $\mathcal{V}$ samples $\gamma \leftarrowS \mathbb{F}$; $\mathcal{P}$ sends the \textbf{composition polynomial}
+                \begin{equation*}
+                    \psi := \sum_{u \in [\kappa]} \gamma^u \cdot q^{\mathcal{T}}_u + \sum_{j \in [w]} \gamma^{\kappa + j} \cdot q^{\mathcal{B}}_j \in \mathbb{F}[T]^{<\tau}.
+                \end{equation*}
+                \item<4-> $\mathcal{V}$ samples $r_0 \leftarrowS \mathbb{F}$, queries $t_j(r_0)$, $t_j(\omega_\tau r_0)$ for all $j \in [w]$, and $\psi(r_0)$, and checks
+                \begin{equation*}
+                    \psi(r_0) = \sum_{u \in [\kappa]} \gamma^u \frac{p_u\big(\mathbf{t}(r_0), \mathbf{t}(\omega_\tau r_0)\big)}{\nu_{\mathcal{T}}(r_0)} + \sum_{j \in [w]} \gamma^{\kappa + j} \frac{t_j(r_0) - \iota_j(r_0)}{\nu_j(r_0)},
+                \end{equation*}
+            \end{algoen}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{AIR Poly-IOP: Why it Works}
+        \begin{itemize}
+            \item The right-hand side is computed by $\mathcal{V}$ from the queried values and the public $p_u$, $\iota_j$, $\nu_j$, $\nu_{\mathcal{T}}$.\pause
+            \item \textbf{Completeness:} for a valid trace, the right-hand side is the evaluation of the polynomial $\psi$ at $r_0$.\pause
+            \item \textbf{Soundness:} if some constraint fails, some quotient is not a polynomial, and with high probability over $\gamma$ neither is their combination; no polynomial $\psi$ agrees with it at a random $r_0$, except with probability about $2\tau/\#\mathbb{F}$ (Schwartz--Zippel).
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{AIR Poly-IOP: Example}
+        \begin{example}
+            With $\gamma = 2$: $\psi = q^{\mathcal{T}}_0 + 2 q^{\mathcal{T}}_1 + 4 q^{\mathcal{B}}_0 + 8 q^{\mathcal{B}}_1 = 4 + 12T + 6T^2 + 5T^3$. For $r_0 = 2$ ($\omega_\tau r_0 = 9$), $\mathcal{V}$ learns $t_0(2) = 12$, $t_0(9) = 4$, $t_1(2) = 16$, $t_1(9) = 11$, $\psi(2) = 7$; it computes $p_0 = 5$, $p_1 = 2$, $\nu_{\mathcal{T}}(2) = 1$ and checks
+            \begin{equation*}
+                5 + 2 \cdot 2 + 4 \cdot \frac{12 - 1}{2 - 1} + 8 \cdot \frac{16 - 13}{2 - 4} = 7 = \psi(2).
+            \end{equation*}
+        \end{example}
+        \pause
+
+        \begin{questionblock}{Question \#5}
+            Check that $q^{\mathcal{B}}_1 = 15 + 9T + 2T^2$ is consistent with the check above: compute $q^{\mathcal{B}}_1(2)$ and compare it with $(t_1(2) - 13)/(2 - 4)$.
+        \end{questionblock}
+    \end{frame}
+
+    \subsection{Compiling the AIR Poly-IOP}
+
+    \begin{frame}{Compiling the AIR Poly-IOP}
+        $w + 1$ polynomials of degree $< \tau$, queried at $r_0$ and $\omega_\tau r_0$: the input of the previous lecture's compilation with $m = w + 1$ and $t = 1$.
+        \begin{algoen}
+            \item<2-> \textbf{Commit.} $\mathcal{P}$ sends $\overline{t_0}, \ldots, \overline{t_{w-1}}$ and $\overline{\psi}$ on $\Omega$ of size $n = \tau / \rho$.
+            \item<3-> \textbf{Bind and query.} $r_0$ is already random, so it doubles as the binding point; we only need $r_0 \notin \Omega$. $\mathcal{P}$ sends the claimed values at $r_0$ and $\omega_\tau r_0$.
+            \item<4-> \textbf{Quotient and batch.} Virtual quotients $\mathsf{q}_j := (g_j - \iota'_j)/\nu'$ with $\nu' := (T - r_0)(T - \omega_\tau r_0)$, where $g_j$ runs over the committed oracles and $\iota'_j$ interpolates the claimed values; batch into $h := \sum_j \alpha^j \mathsf{q}_j$.
+            \item<5-> \textbf{Test.} Run FRI on $h$ against $\mathsf{RS}[\mathbb{F}, \Omega, \tau - 2]$.
+        \end{algoen}
+        \uncover<6->{After BCS, this is a \textbf{STARK}: essentially the DEEP-ALI protocol used by deployed STARKs.}
+    \end{frame}
+
+    \begin{frame}{The Evaluation Domain}
+        The verifier divides by $\nu_{\mathcal{T}}$, $\nu_j$ (vanish on $H$) and $\nu'$ (vanishes at $r_0$, $\omega_\tau r_0$); FRI needs $-x \in \Omega$ for every $x \in \Omega$.
+        \pause
+
+        \begin{remark}
+            Let $\omega$ be a primitive $n$th root of unity with $\omega^{n/\tau} = \omega_\tau$, so $H \subseteq \langle \omega \rangle$, and take the \textbf{coset} $\Omega := c \cdot \langle \omega \rangle$ for some $c \notin \langle \omega \rangle$. Then $\Omega \cap H = \emptyset$, $-x \in \Omega$ for every $x \in \Omega$, and squaring maps $\Omega$ onto $c^2 \cdot \langle \omega^2 \rangle$.
+        \end{remark}
+        \pause
+
+        \begin{example}
+            $\rho = 1/2$, $n = 8$, $\omega = 9$ of order $8$ in $\mathbb{F}_{17}^\times$, $\omega^2 = 13 = \omega_\tau$:
+            \begin{equation*}
+                \langle \omega \rangle = \{1, 9, 13, 15, 16, 8, 4, 2\} \supseteq H.
+            \end{equation*}
+            $c = 3 \notin \langle \omega \rangle$, so $\Omega = 3 \cdot \langle \omega \rangle = \{3, 10, 5, 11, 14, 7, 12, 6\}$. Indeed $\Omega \cap H = \emptyset$, and $r_0 = 2$, $\omega_\tau r_0 = 9$ lie outside $\Omega$.
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Example: Commit, Quotient, Batch}
+        The prover commits to three codewords:
+        \begin{figure}
+            \centering
+            \begin{tikzpicture}[
+                x=0.8cm, y=0.6cm,
+                cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+                dom/.style={cell, fill=oc-gray-1},
+                lab/.style={font=\footnotesize},
+            ]
+                \foreach \x/\a/\b/\c [count=\i from 0] in {3/2/4/8, 10/5/7/12, 5/12/4/6, 11/1/6/3, 14/13/5/6, 7/13/14/6, 12/11/3/13, 6/2/6/12} {
+                    \node[dom] at (\i, 0) {\x};
+                    \node[cell, fill=oc-blue-1] at (\i, -1) {\a};
+                    \node[cell, fill=oc-blue-1] at (\i, -2) {\b};
+                    \node[cell, fill=oc-blue-1] at (\i, -3) {\c};
+                }
+                \node[lab, left=6pt] at (-0.5, 0) {$x \in \Omega$};
+                \node[lab, left=6pt] at (-0.5, -1) {$\overline{t_0}(x)$};
+                \node[lab, left=6pt] at (-0.5, -2) {$\overline{t_1}(x)$};
+                \node[lab, left=6pt] at (-0.5, -3) {$\overline{\psi}(x)$};
+            \end{tikzpicture}
+        \end{figure}
+        \pause
+        \begin{itemize}
+            \item Besides the values at $r_0 = 2$, $\mathcal{P}$ sends $t_0(9) = 4$, $t_1(9) = 11$, $\psi(9) = 10$.\pause
+            \item With $\nu' = (T - 2)(T - 9)$: $\mathsf{q}_0 = 11 + 6T$, $\mathsf{q}_1 = 6 + 2T$, $\mathsf{q}_2 = 10 + 5T$.\pause
+            \item With $\alpha = 3$: $h = \mathsf{q}_0 + 3 \mathsf{q}_1 + 9 \mathsf{q}_2 = 6T \in \mathsf{RS}[\mathbb{F}_{17}, \Omega, 2]$.\pause
+            \item FRI needs a single fold: with $\beta_0 = 5$, the fold of $\overline{h}$ is the constant $13$ on $\Omega^2 = \{9, 15, 8, 2\}$.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Example: the Verifier}
+        $\mathcal{V}$ samples $x_0 = 3$, so it needs $h(3)$ and $h(-3) = h(14)$, and opens the committed codewords at $3$ and $14$:
+        \begin{figure}
+            \centering
+            \scalebox{0.85}{%
+            \begin{tikzpicture}[
+                x=0.8cm, y=0.6cm,
+                cell/.style={draw=oc-gray-7, thick, minimum width=0.8cm, minimum height=0.5cm, inner sep=0pt, font=\small\ttfamily},
+                dom/.style={cell, fill=oc-gray-1},
+                com/.style={cell, fill=oc-blue-1},
+                vir/.style={cell, draw=oc-teal-7, densely dashed, fill=oc-teal-1},
+                qry/.style={draw=oc-orange-8, very thick, fill=oc-orange-2},
+                lab/.style={font=\footnotesize},
+                arr/.style={-stealth, thick, oc-orange-8},
+            ]
+                \foreach \x/\a/\b/\c/\h [count=\i from 0] in {3/2/4/8/1, 10/5/7/12/9, 5/12/4/6/13, 11/1/6/3/15, 14/13/5/6/16, 7/13/14/6/8, 12/11/3/13/4, 6/2/6/12/2} {
+                    \node[dom] at (\i, 0) {\x};
+                    \node[com] (t\i) at (\i, -1) {\a};
+                    \node[com] (u\i) at (\i, -2) {\b};
+                    \node[com] (p\i) at (\i, -3) {\c};
+                    \node[vir] (h\i) at (\i, -4) {\h};
+                }
+                \foreach \i/\a/\b/\c/\h in {0/2/4/8/1, 4/13/5/6/16} {
+                    \node[com, qry] at (t\i) {\a};
+                    \node[com, qry] at (u\i) {\b};
+                    \node[com, qry] at (p\i) {\c};
+                    \node[vir, qry] at (h\i) {\h};
+                }
+                \node[lab, left=6pt] at (-0.5, 0) {$x \in \Omega$};
+                \node[lab, left=6pt] at (-0.5, -1) {$\overline{t_0}(x)$};
+                \node[lab, left=6pt] at (-0.5, -2) {$\overline{t_1}(x)$};
+                \node[lab, left=6pt] at (-0.5, -3) {$\overline{\psi}(x)$};
+                \node[lab, left=6pt] at (-0.5, -4) {$h(x)$};
+                \node[cell, qry] (c) at (2, -6) {13};
+                \node[lab, left=6pt] at (1.5, -6) {$c$};
+                \draw[arr] (h0.south) to[out=-90, in=150] (c.north west);
+                \draw[arr] (h4.south) to[out=-90, in=30] (c.north east);
+                \node[lab, text=oc-orange-9, right] at (4.2, -5.8) {fold, $\beta_0 = 5$};
+            \end{tikzpicture}%
+            }
+        \end{figure}
+        \vspace{-5pt}
+        The last row is \textbf{not} committed: $\mathcal{V}$ computes it from the claimed values at $r_0 = 2$ and $\omega_\tau r_0 = 9$.
+    \end{frame}
+
+    \begin{frame}{Example: the Verifier}
+        \begin{itemize}
+            \item $\nu'(3) = (3 - 2)(3 - 9) = 11$, and the interpolant of the claimed values of $t_0$ is $\iota'_0 = 7 + 11T$, so $\mathsf{q}_0(3) = (2 - 6)/11 = 12$.\pause
+            \item In the same way, $\mathsf{q}_1(3) = 12$ and $\mathsf{q}_2(3) = 8$, hence
+            \begin{equation*}
+                h(3) = 12 + 3 \cdot 12 + 9 \cdot 8 = 1.
+            \end{equation*}
+            \pause
+            \vspace{-10pt}
+            \item Together with $h(14) = 16$, the round consistency check gives
+            \begin{equation*}
+                \frac{1 + 16}{2} + 5 \cdot \frac{1 - 16}{2 \cdot 3} = 0 + 13 = 13 = c, \quad \text{so } \mathcal{V} \text{ accepts.}
+            \end{equation*}
+        \end{itemize}
+        \pause
+
+        \begin{alertblock}{Toy parameters}
+            Over $\mathbb{F}_{17}$ the soundness error is far from negligible, and the opened values reveal a lot about the trace; real STARKs use large fields, many queries and randomization of the trace.
+        \end{alertblock}
+        \pause
+
+        \begin{questionblock}{Question \#6}
+            Compute $h(14)$ from the opened values, as the verifier does.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Overview of the STARK Protocol}
+        \begin{figure}
+            \centering
+            \resizebox{\linewidth}{!}{%
+            \begin{tikzpicture}[
+                arr/.style   = {-{Stealth[length=2.5mm]}, line width=0.4mm},
+                act/.style   = {draw=oc-blue-7, fill=oc-blue-1, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+                data/.style  = {draw=oc-gray-6, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+                lbl/.style   = {font=\scriptsize, inner sep=2pt},
+                phase/.style = {draw=oc-gray-6, dashed, rounded corners=8pt, line width=0.4mm},
+                proc/.style  = {draw=oc-gray-6, fill=oc-gray-2, rounded corners=2pt, line width=0.4mm, inner sep=4pt, font=\small},
+                check/.style = {draw=black, rounded corners=2pt, line width=0.6mm, inner sep=4pt, font=\small},
+            ]
+                \draw[phase] (-0.8,1.05) rectangle (13.1,-2.3);
+                \node[font=\scriptsize\scshape, text=oc-gray-6, anchor=north east] at (13.0,0.95) {Prover};
+                \node[inner sep=0pt, align=center] at (-1.6,-0.6) {\includegraphics[width=1.0cm]{images/common/prover.png}\\ $\mathcal{P}$};
+                \node[data] (W)   at (-0.15,0)   {$W$};
+                \node[act]  (tj)  at (2.3,0)     {$\overline{t_j}$};
+                \node[data] (cu)  at (2.3,-1.55) {$q^{\mathcal{T}}_u, q^{\mathcal{B}}_j$};
+                \node[act]  (psi) at (5.0,-1.55) {$\overline{\psi}$};
+                \node[data] (qj)  at (7.3,-0.78) {$\mathsf{q}_j$};
+                \node[data] (h)   at (9.2,-0.78) {$h$};
+                \node[proc] (fri) at (11.8,-0.78) {FRI};
+                \draw[arr] (W) -- node[lbl, above] {inverse NTT} (tj);
+                \draw[arr] (tj) -- node[lbl, right] {$p_u$, $\iota_j$} (cu);
+                \draw[arr] (cu) -- node[lbl, above] {$\gamma$} (psi);
+                \draw[arr] (tj.east) -- node[lbl, above, pos=0.6] {$r_0, \omega_\tau r_0$} (qj.north west);
+                \draw[arr] (psi.east) -- (qj.south west);
+                \draw[arr] (qj) -- node[lbl, above] {$\alpha$} (h);
+                \draw[arr] (h) -- (fri);
+                \uncover<2->{
+                \draw[phase] (-0.8,-2.75) rectangle (13.1,-5.35);
+                \node[font=\scriptsize\scshape, text=oc-gray-6, anchor=north east] at (13.0,-2.85) {Verifier};
+                \node[inner sep=0pt, align=center] at (-1.6,-4.05) {\includegraphics[width=1.0cm]{images/common/verifier.png}\\ $\mathcal{V}$};
+                \node[check] (v0) at (2.6,-3.9) {identity of $\psi$ at $r_0$};
+                \node[data]  (v1) at (6.1,-3.9) {$\overline{t_j}(x), \overline{\psi}(x)$};
+                \node[data]  (v2) at (8.6,-3.9) {$\mathsf{q}_j(x)$, $h(x)$};
+                \node[check] (v3) at (11.5,-3.9) {FRI checks};
+                \draw[arr] (v1) -- (v2);
+                \draw[arr] (v2) -- (v3);
+                \node[lbl, below=1mm of v1] {at every point $x$ queried by FRI};}
+            \end{tikzpicture}%
+            }
+            \caption{The prover commits only to $\overline{t_j}$, $\overline{\psi}$ (highlighted) and the FRI layers; $\mathsf{q}_j$ and $h$ are virtual.}
+        \end{figure}
+        \pause[3]
+        If the trace is wrong, some quotient is not a polynomial, so the identity of $\psi$ fails at a random $r_0$; quotienting and FRI bind the values at $r_0$ to the committed codewords.
+    \end{frame}
+
+    \begin{frame}{Final Remarks}
+        \begin{remark}
+            An alternative avoids the out-of-domain point: commit to the boundary quotients instead of the trace, and run FRI on a random combination of all quotients, each multiplied by $T^{\,k - 1 - d_q}$ (\textbf{degree correction}). The known soundness bounds are weaker, so deployed STARKs use the protocol above.
+        \end{remark}
+        \pause
+
+        \begin{remark}
+            This protocol is \textbf{not} zero-knowledge: opened values of $t_j$ and $\psi$ reveal information about the trace. The original construction randomizes the trace polynomials outside of $H$ and masks the input of FRI with a random polynomial. Many applications (e.g., validity rollups) only need succinctness.
+        \end{remark}
+        \pause
+
+        \begin{remark}
+            As with FRI, the whole protocol is made non-interactive using the Fiat--Shamir transformation.
+        \end{remark}
+    \end{frame}
+
+    \begin{frame}{Summary}
+        \begin{itemize}
+            \item \textbf{FRI}: fold $g_i \mapsto g_{i+1} = \mathsf{Fold}(g_i, \beta_i)$ over $\Omega_i = \Omega^{2^i}$ until a constant; check round consistency along $s$ random query paths.\pause
+            \item Folding is \textbf{local}: one value of the fold needs only $g_i(\pm x_i)$; $O(n)$ prover, $O(s \log n)$ queries, soundness error $\ell \cdot \varepsilon_\delta + (1 - \delta)^s$.\pause
+            \item \textbf{AIR}: execution trace $W \in \mathbb{F}^{\tau \times w}$, transition verification polynomials $p_u$ and boundary conditions $\mathcal{B}$.\pause
+            \item Interpolate the trace over $H = \langle \omega_\tau \rangle$; constraints become \textbf{divisibility}: $q^{\mathcal{T}}_u = c_u / \nu_{\mathcal{T}}$ and $q^{\mathcal{B}}_j = (t_j - \iota_j)/\nu_j$ are polynomials.\pause
+            \item Batch them into $\psi$, check at a random $r_0$, compile with quotienting + FRI on a coset $\Omega$, then BCS: a \textbf{STARK}.
+        \end{itemize}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

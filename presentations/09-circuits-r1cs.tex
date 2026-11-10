@@ -1,0 +1,769 @@
+\documentclass{zkdl-presentation-template}
+
+% Circuit diagrams: inputs gray, gates indigo (+), orange (x), blue (-), wires gray
+\colorlet{circle edge}{oc-gray-7}
+\colorlet{circle area}{oc-gray-2}
+\colorlet{gate1 edge}{oc-indigo-7}
+\colorlet{gate1 area}{oc-indigo-1}
+\colorlet{gate2 edge}{oc-orange-7}
+\colorlet{gate2 area}{oc-orange-1}
+\colorlet{gate3 edge}{oc-blue-7}
+\colorlet{gate3 area}{oc-blue-1}
+\colorlet{wire}{oc-gray-5}
+\colorlet{wire out}{oc-gray-7}
+\tikzset{
+    var/.style={circle, draw=circle edge, fill=circle area, very thick, minimum size=0.7cm, text centered},
+    gate1/.style={circle, draw=gate1 edge, fill=gate1 area, ultra thick, minimum size=1cm, text centered},
+    gate2/.style={circle, draw=gate2 edge, fill=gate2 area, ultra thick, minimum size=1cm, text centered},
+    gate3/.style={circle, draw=gate3 edge, fill=gate3 area, ultra thick, minimum size=1cm, text centered},
+    arrow/.style={-Stealth, ultra thick}
+}
+
+\title[zk-SNARK: Part I]{\textbf{Introduction to zk-SNARKs. R1CS}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+        \tableofcontents
+    \end{frame}
+
+    \section{What is zk-SNARK?}
+
+    \begin{frame}{What Is zk-SNARK?}
+        \begin{definition}
+            \begin{center}
+                \textbf{zk-SNARK} \\
+                \small\textbf{Z}ero-\textbf{K}nowledge \textbf{S}uccinct \textbf{N}on-interactive \textbf{AR}gument of \textbf{K}nowledge.
+            \end{center}
+        \end{definition}
+
+        \pause
+
+        \begin{itemize}
+            \item \textbf{Argument of Knowledge} --- a proof that the prover knows the data (witness) that resolves a certain
+            problem, and this knowledge can be ``extracted''. \pause
+            \item \textbf{Succinctness} --- the proof size and verification time is relatively small to the computation size and typically does not depend on the size of 
+            the data or statement. \pause
+            \item \textbf{Non-interactiveness} --- to produce the proof, the prover does not need any interaction
+            with the verifier. \pause
+            \item \textbf{Zero-Knowledge} --- the verifier learns nothing about the data used to produce the
+            proof, despite knowing that this data resolves the given problem and that the prover possesses it.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Still don't get who is SNARK...}
+        Well... Let's take a look at some example. \pause
+
+        \begin{columns}
+            \begin{column}{0.2\textwidth}
+                \includegraphics[width=\linewidth]{images/lecture_8/urtreasurehunter.png}
+            \end{column}
+    
+            \begin{column}{0.7\textwidth}
+                Imagine you're part of a treasure hunt...
+            \end{column}
+        \end{columns}
+
+        \pause
+
+        \begin{columns}
+            \begin{column}{0.7\textwidth}
+                ...and you've found a hidden treasure chest...
+            \end{column}
+
+            \begin{column}{0.2\textwidth}
+                \includegraphics[width=\linewidth]{images/lecture_8/uvefoundtreasure.png}
+            \end{column}
+        \end{columns}
+
+        \pause
+
+        \begin{columns}
+            \begin{column}{0.2\textwidth}
+                \includegraphics[width=\linewidth]{images/lecture_8/howtomakeaproof.png}
+            \end{column}
+
+            \begin{column}{0.7\textwidth}
+                ...but how to prove that without revealing the chest location?
+            \end{column}
+        \end{columns}
+    \end{frame}
+
+    \begin{frame}{Still don't get who is SNARK...}
+        \begin{columns}
+            \begin{column}{0.65\textwidth}
+                \begin{block}{The Problem}
+                You have found a hidden treasure chest, and you want to 
+                prove to the organizer that you know its location without actually revealing that.
+                \end{block}
+            \end{column}
+
+            \begin{column}{0.3\textwidth}
+                \includegraphics[width=\textwidth]{images/lecture_8/treasurelocation.png}
+            \end{column}
+        \end{columns}
+
+        \pause
+
+        We can retrieve some information from that:
+
+        \vspace{0.1cm}
+        \textbf{The Secret Data}: the exact treasure location.
+
+        \vspace{0.1cm}
+        \textbf{The Prover}: you.
+
+        \vspace{0.1cm}
+        \textbf{The Verifier}: the treasure hunt organizer.
+    \end{frame}
+
+    \begin{frame}{Ohh... Got it!}
+        Here is how we can apply the zk-SNARK to our problem:
+
+        \begin{itemize} 
+            \item \textbf{Argument of Knowledge}: You need to create a proof that demonstrates you know where the
+            chest is. \pause
+            \item \textbf{Succinct}: The proof you provide is very small and concise. It doesn't matter how
+            large the treasure map is or how many steps it took you to find the chest. \pause
+            \item \textbf{Non-interactive}: You don't need to have a back-and-forth conversation with the 
+            organizer to create this proof. \pause
+            \item \textbf{Zero-Knowledge}: The proof doesn't reveal any information about the actual 
+            location of the treasure chest.
+        \end{itemize}
+        \pause
+        \vspace{-10pt}
+        \begin{columns}
+            \begin{column}{0.3\textwidth}
+                \includegraphics[width=0.8\textwidth]{images/lecture_8/treasure.png}
+            \end{column}
+
+            \begin{column}{0.65\textwidth}
+                Well... The golden coin where the pirates' sign is engraved is our zk-SNARK proof!
+            \end{column}
+        \end{columns}
+    \end{frame}
+
+    \begin{frame}{The First Question To Resolve}
+        But the problems that we usually want to solve are in a slightly different format.
+        \pause
+
+        \vspace{0.1cm}
+        When we need to prove that some element is in a merkle tree, we can't come
+        to a verifier and give them a "coin"...
+        
+        \pause
+        \begin{questionblock}{Question}
+            How do we convert a program into a mathematical language?
+        \end{questionblock}
+
+        \center
+        \includegraphics[width=8cm]{images/lecture_8/exactcodetomathflow.png}
+    \end{frame}
+
+    \section{Boolean Circuits}
+
+    \begin{frame}{Boolean Circuits}
+        We can do that in a way like the computer does it --- \textbf{Boolean Circuits}.
+
+
+        \begin{columns}
+            % Description
+            \begin{column}{0.7\textwidth}
+            \centering
+                \begin{minipage}{0.8\textwidth}
+                \centering
+                % Boolean AND and OR gates
+                \begin{tabular}{cc}
+                    \begin{tikzpicture}
+                        % Nodes
+                        \node[var] (a) at (0, -1.5) {$a$};
+                        \node[var] (b) at (2, -1.5) {$b$};
+                        \node[gate1] (and) at (1, 0) {\texttt{AND}};
+                        \node[var] (c) at (1, 1.75) {$c$};
+        
+                        % Arrows
+                        \draw[arrow,wire] (a) -- (and);
+                        \draw[arrow,wire] (b) -- (and);
+                        \draw[arrow,wire out] (and) -- (c);
+                    \end{tikzpicture}
+                    &
+                    \begin{tikzpicture}
+                        % Nodes
+                        \node[var] (a) at (0, -1.5) {$a$};
+                        \node[var] (b) at (2, -1.5) {$b$};
+                        \node[gate2] (or) at (1, 0) {\texttt{OR}};
+                        \node[var] (c) at (1, 1.75) {$c$};
+        
+                        % Arrows
+                        \draw[arrow,wire] (a) -- (or);
+                        \draw[arrow,wire] (b) -- (or);
+                        \draw[arrow,wire out] (or) -- (c);
+                    \end{tikzpicture}
+                \end{tabular}
+                    %\centering
+                    %\caption{Boolean \texttt{AND} and \texttt{OR} Gates}
+            \end{minipage}
+            \end{column}
+            \pause
+            % Column 2    
+            \begin{column}{0.3\textwidth}
+                \begin{minipage}{\textwidth}
+                \centering
+                \begin{tabular}{|c|c|c|}
+                    \hline
+                    \textbf{A} & \textbf{B} & \textbf{A AND B} \\
+                    \hline
+                    0 & 0 & 0 \\
+                    \hline
+                    0 & 1 & 0 \\
+                    \hline
+                    1 & 0 & 0 \\
+                    \hline
+                    1 & 1 & 1 \\
+                    \hline
+                \end{tabular}
+                %\caption{\texttt{AND} Gate Truth Table}
+            \end{minipage}
+        \end{column}
+        \end{columns}
+
+        \begin{remarkblock}{Note}
+        With any of \{\texttt{AND}, \texttt{NOT}\} or \{\texttt{OR}, \texttt{NOT}\} gates sets one can
+        build any possible logical circuit, they are called \textbf{functionally complete} sets.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Boolean Circuit Example}
+
+        \begin{figure}[h!]
+            \centering
+            \begin{tikzpicture}
+                % Nodes
+                \node[var] (a) at (0, -1.5) {$a$};
+                \node[var] (b) at (2, -1.5) {$b$};
+                \node[var] (c) at (4, -1.5) {$c$};
+                \node[gate1] (and) at (1, 0) {\texttt{AND}};
+                \node[gate2] (or) at (3, 1.5) {\texttt{OR}};
+                \node[var] (d) at (5, 1.5) {$d$};
+        
+                % Arrows
+                \draw[arrow,wire] (a) -- (and);
+                \draw[arrow,wire] (b) -- (and);
+                \draw[arrow,wire] (c) -- (or);
+                \draw[arrow,wire] (and) -- (or);
+                \draw[arrow,wire out] (or) -- (d);
+            \end{tikzpicture}
+            \vspace{-5pt}
+            \caption{Example of a circuit evaluating $d = (a \;\texttt{AND}\; b) \,\texttt{OR}\; c$.}
+        \end{figure}\pause
+        \vspace{-5pt}
+        Boolean circuits receive an input vector of $\{0, 1\}$ and resolve to true (1) or false (0);\\
+        \vspace{5pt}
+        The above circuit can be satisfied with the next values:
+        \vspace{-5pt}
+        \begin{equation*}
+            a = 1, \quad b = 1, \quad c = 0, \quad d = 1
+        \end{equation*}
+    \end{frame}
+
+    \begin{frame}{SHA-256 Boolean circuit}
+        \begin{figure}[h!]
+            \centering
+            \includegraphics[width=8cm]{images/lecture_8/sha256booleancircuit.jpg}
+            \caption{Stats of a SHA256 boolean circuit implementation.}
+        \end{figure}
+        More than $100000$ gates. Impressive, isn't it? \\
+        \vspace{5pt }
+        But it also shows how inconvenient the boolean circuits are. 
+    \end{frame}
+
+    \section{Arithmetic Circuits}
+
+    \begin{frame}{Arithmetic Circuits}
+        Similar to Boolean Circuits, the \textbf{Arithmetic Circuits} consist of gates and
+        wires. 
+        \begin{itemize}
+            \item \textbf{Wires}: elements of some finite field $\mathbb{F}$.
+            \item \textbf{Gates}: field addition ($+$) and multiplication ($\times$).
+        \end{itemize} 
+
+
+        \begin{figure}[h!]
+            \centering
+            % Addition and Multiplication gates
+            \begin{tabular}{cc}
+                \begin{tikzpicture}
+                    % Nodes
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate1] (add) at (1, 0) {$+$};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    % Arrows
+                    \draw[arrow,wire] (a) -- (add);
+                    \draw[arrow,wire] (b) -- (add);
+                    \draw[arrow,wire out] (add) -- (c);
+                \end{tikzpicture}
+                &
+                \begin{tikzpicture}
+                    % Nodes
+                    \node[var] (a) at (0, -1.5) {$a$};
+                    \node[var] (b) at (2, -1.5) {$b$};
+                    \node[gate2] (mul) at (1, 0) {$\times$};
+                    \node[var] (c) at (1, 1.75) {$c$};
+
+                    % Arrows
+                    \draw[arrow,wire] (a) -- (mul);
+                    \draw[arrow,wire] (b) -- (mul);
+                    \draw[arrow,wire out] (mul) -- (c);
+                \end{tikzpicture}
+            \end{tabular}
+            \caption{Addition and Multiplication Gates}
+        \end{figure}
+    \end{frame}
+ 
+    \begin{frame}[fragile]{Arithmetic Circuits Example I}
+        \begin{example}
+            \begin{lstlisting}[language=Python, numbers=none, autogobble=true, xleftmargin=10pt]
+                def multiply(a: F, b: F) -> F:
+                    return a * b
+            \end{lstlisting}
+            \pause
+            This can be represented as a circuit with only one (multiplication) gate:
+            \begin{equation*}
+                r = a \times b
+            \end{equation*}    
+            \pause
+            The witness vector (essentially, our solution vector) is $\mathbf{z} = (r, a, b)$, for
+            example: $(6, 2, 3)$. \\
+            \vspace{5pt}
+            We assume that the $a$ and $b$ are input values.
+        \end{example}
+
+        \pause
+
+        \begin{remarkblock}{Note}
+            We can think of the ``=`` in the gate as an assertion.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}[fragile]{Arithmetic Circuits Example II}
+        \begin{example}
+            Now, suppose we want to implement the evaluation of the polynomial
+            $Q(x_1,x_2) = x_1^3 + x_2^2 \in \mathbb{F}[x_1,x_2]$ using arithmetic circuits.
+            \begin{lstlisting}[language=Python, numbers=none, autogobble=true, xleftmargin=10pt]
+                def evaluate(x1: F, x2: F) -> F:
+                    return x1**3 + x2**2
+            \end{lstlisting}
+            Looks easy, right? \pause But the circuit is now much less trivial.
+            \vspace{-8pt}
+            \begin{equation*}
+                \begin{array}{c c c}
+                    \begin{aligned}
+                        x_1^2 &= x_1 \times x_1 \\
+                        x_1^3 &= x_1^2 \times x_1 \\
+                        x_2^2 &= x_2 \times x_2 \\
+                        Q &= x_1^3 + x_2^2 
+                    \end{aligned}
+                    & \text{or} &
+                    \begin{aligned}
+                        r_1 &= x_1 \times x_1 \\
+                        r_2 &= r_1 \times x_1 \\
+                        r_3 &= x_2 \times x_2 \\
+                        Q &= r_2 + r_3 
+                    \end{aligned}
+                \end{array}
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}[fragile]{Arithmetic Circuits Example II}
+        
+        \begin{figure}[h!]
+            \centering
+            \begin{tikzpicture}
+                % Nodes
+                \node[var] (x1) at (0, 1) {$x_1$};
+                \node[gate2] (x1_x1) at (2, 1) {$\times$};
+                \node[gate2] (x1_x1_x1) at (4, 1) {$\times$};
+        
+                \node[var] (x2) at (0, -1) {$x_2$};
+                \node[gate2] (x2_x2) at (2, -1) {$\times$};
+        
+                \node[gate1] (plus) at (5.0, -0.5) {$+$};
+        
+                % x1**3
+                \draw[arrow,wire] (x1) to [bend left=45] (x1_x1);
+                \draw[arrow,wire] (x1) to [bend right=15] (x1_x1);
+                \draw[arrow,wire] (x1_x1) -- node[midway, above] {$x_1^2$} (x1_x1_x1);
+                \draw[arrow,wire] (x1) to [bend right=45] node[midway, above] {$x_1$} (x1_x1_x1);
+        
+                % x2**2
+                \draw[arrow,wire] (x2) to [bend left=30] (x2_x2);
+                \draw[arrow,wire] (x2) to [bend right=30] (x2_x2);
+        
+                % Summation
+                \draw[arrow,wire] (x1_x1_x1) -- node[midway, above right] {$x_1^3$} (plus);
+                \draw[arrow,wire] (x2_x2) -- node[midway, above] {$x_2^2$} (plus);
+        
+                % Result
+                \node[var] (q) at (7.0, -0.5) {$Q$};
+                \draw[arrow,wire out] (plus) -- (q);
+            \end{tikzpicture}
+            \caption{Example of a circuit evaluating $x_1^3 + x_2^2$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}[fragile]{Arithmetic Circuits Example III}
+        \begin{example}
+            Well, it is quite clear how to represent any polynomial-like expressions. But how can we
+            translate \texttt{if} statements?
+            \begin{lstlisting}[language=Python, numbers=none, autogobble=true, xleftmargin=8pt]
+                def example(a: bool, b: F, c: F) -> F:
+                    if a:
+                        return b * c 
+                    else:
+                        return b + c
+            \end{lstlisting}
+            \pause
+            We can transform such a function into the next expression:
+            \vspace{-8pt}
+            \begin{equation*}
+                r = a \times (b \times c) + (1 - a) \times (b + c)    
+                \vspace{-8pt}
+            \end{equation*}
+            \pause
+            Corresponding equations for the circuit are:
+            \vspace{-8pt}
+            \begin{equation*}
+                \begin{aligned}
+                    r_1 &= b \times c, \quad &r_3 &= 1 - a, \quad &r_5 &= r_3 \times r_2 \\
+                    r_2 &= b + c, \quad &r_4 &= a \times r_1, \quad &r &= r_4 + r_5
+                \end{aligned}
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}[fragile]{Arithmetic Circuits Example III}
+
+        \begin{figure}[h!]
+            \centering
+            \begin{tikzpicture}
+                % Nodes
+                \node[var] (c) at (0.5, -3) {$c$};
+                \node[var] (b) at (0.5, -1.5) {$b$};
+                \node[var] (a) at (0.5, 0) {$a$};
+                \node[var] (one) at (0.5, 1.5) {$1$};
+        
+                % b+c and b*c gates
+                \node[gate1] (b_plus_c) at (3, -1.5) {$+$};
+                \node[gate2] (b_times_c) at (3, -3.0) {$\times$};
+        
+                \node[gate3] (one_minus_a) at (3, 0.75) {$-$};
+        
+                % a*b*c and (1-a)(b+c) gates
+                \node[gate2] (a_times_b_times_c) at (6, -2.0) {$\times$};
+                \node[gate2] (one_minus_a_times_b_plus_c) at (6, -0.5) {$\times$};
+        
+                % a*b*c + (1-a)(b+c) gate
+                \node[gate1] (r) at (9, -1.25) {$+$};
+        
+                % Result node
+                \node[var] (result) at (11.5, -1.25) {$r$};
+        
+                % b+c and b*c arrows
+                \draw[arrow,wire] (b) to (b_plus_c);
+                \draw[arrow,wire] (b) to (b_times_c);
+                \draw[arrow,wire] (c) to (b_plus_c);
+                \draw[arrow,wire] (c) to (b_times_c);
+        
+                % 1 - c arrow
+                \draw[arrow,wire] (one) to (one_minus_a);
+                \draw[arrow,wire] (a) to (one_minus_a);
+        
+                % a*b*c and (1-a)(b+c) arrows
+                \draw[arrow,wire] (a) to [bend left=20] (a_times_b_times_c);
+                \draw[arrow,wire] (b_times_c) to node[midway, above] {$r_1$} (a_times_b_times_c);
+                \draw[arrow,wire] (one_minus_a) to node[midway, above] {$r_3$} (one_minus_a_times_b_plus_c);
+                \draw[arrow,wire] (b_plus_c) to node[midway, above] {$r_2$} (one_minus_a_times_b_plus_c);
+        
+                % a*b*c + (1-a)(b+c) arrows
+                \draw[arrow,wire] (a_times_b_times_c) to [bend right=20] node[midway, above] {$r_4$} (r);
+                \draw[arrow,wire] (one_minus_a_times_b_plus_c) to [bend left=20] node[midway, above] {$r_5$} (r);
+        
+                % Result arrow
+                \draw[arrow,wire out] (r) to (result);
+        
+            \end{tikzpicture}
+            \caption{Example of a circuit evaluating the \texttt{if} statement logic.}
+            \label{fig:multivariate-polynomial-circuit}
+        \end{figure}
+    \end{frame}
+
+    \section{Linear Algebra Recap}
+
+    \begin{frame}{Linear Algebra Recap}
+        We will need a few operations from the Linear Algebra lecture (Lecture 3). For $\mathbf{u}, \mathbf{v} \in \mathbb{F}^n$ and matrices $A, B$:
+        \begin{itemize}
+            \item \textbf{Matrix-vector product:} $A\mathbf{x}$ for $A \in \mathbb{F}^{m \times n}$, $\mathbf{x} \in \mathbb{F}^n$; vectors are columns, $\mathbf{x}^{\top}$ is a row.\pause
+            \item \textbf{Dot (inner) product:} $\langle \mathbf{u}, \mathbf{v} \rangle := \mathbf{u}^{\top}\mathbf{v} = \sum_{i=1}^{n} u_iv_i$.\pause
+            \item \textbf{Hadamard product:} $(A \odot B)_{i,j} = A_{i,j}B_{i,j}$ (element-wise).\pause
+            \item \textbf{Outer product:} $\mathbf{u} \otimes \mathbf{v} := \mathbf{u}\mathbf{v}^{\top}$, a rank-1 matrix for non-zero $\mathbf{u},\mathbf{v}$.
+        \end{itemize}
+        \pause
+
+        \begin{example}
+            For $\mathbf{u} = (1,2,3)$ and $\mathbf{v} = (2,4,3)$: $\langle \mathbf{u}, \mathbf{v} \rangle = 2 + 8 + 9 = 19$ and $\mathbf{u} \odot \mathbf{v} = (2, 8, 9)$.
+        \end{example}
+    \end{frame}
+
+    \section{Rank-1 Constraint System}
+
+    \begin{frame}{Constraint Definition}
+        \begin{definition}
+            Each \textbf{constraint} in the Rank-1 Constraint System must be in the form:
+            \begin{equation*}
+                \langle \boldsymbol{\ell}, \mathbf{z}\rangle \times \langle \boldsymbol{r}, \mathbf{z}\rangle = \langle \boldsymbol{o}, \mathbf{z}\rangle
+            \end{equation*}
+            Where $\mathbf{z}$ is a vector containing all the \textit{input}, \textit{output}, and 
+            \textit{intermediate} variables involved in the computation. The vectors $\boldsymbol{\ell}$, 
+            $\boldsymbol{r}$, and $\boldsymbol{o}$ are vectors of coefficients corresponding to these variables, 
+            and they define the relationship between the linear combinations of $\mathbf{z}$ on the 
+            left-hand side and the right-hand side of the equation.
+        \end{definition}        
+    \end{frame}
+
+    \begin{frame}{Constraint Example}
+        \begin{example}
+            Consider the most basic circuit with one multiplication gate: $x_1 \times x_2 = r$.
+            The witness vector $\mathbf{z} = (r, x_1, x_2)$. So
+            \vspace{-5pt}
+            \begin{align*}
+                z_2 &\times z_3 = z_1 \\
+                (0 + z_2 + 0) &\times (0 + 0 + z_3) = z_1 + 0 + 0 \\
+                (0z_1 + 1z_2 + 0z_3) &\times (0z_1 + 0z_2 + 1z_3) = 1z_1 + 0z_2 + 0z_3
+            \end{align*}
+            Therefore the coefficients vectors are:
+            \vspace{-5pt}
+            \begin{equation*}
+                \boldsymbol{\ell} = (0, 1, 0), \quad \boldsymbol{r} = (0, 0, 1), \quad \boldsymbol{o} = (1, 0, 0). 
+                \vspace{-5pt}
+            \end{equation*}
+            The general form of our constraint is:
+            \vspace{-5pt}
+            \begin{equation*}
+                (\ell_1z_1 + \ell_2z_2 + \ell_3z_3)(r_1z_1 + r_2z_2 + r_3z_3) = o_1z_1 + o_2z_2 + o_3z_3
+            \end{equation*}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}[fragile]{Constraint System Example}
+        Now, let us consider a more complex example.
+        \begin{lstlisting}[language=Python,numbers=none]
+        def r(x1: F, x2: F, x3: F) -> F:
+            return x2 * x3 if x1 else x2 + x3
+        \end{lstlisting}
+
+        \vspace{-10pt}
+
+        That can be expressed as:
+        \begin{equation*}
+            r = x_1 \times (x_2 \times x_3) + (1 - x_1) \times (x_2 + x_3)
+        \end{equation*}
+        
+        \pause
+        \begin{alertblock}{Note}
+            We need a boolean restriction for $x_1$: that is, $x_1 \times (1 - x_1) = 0$.
+        \end{alertblock}
+
+        \pause
+        Thus, the next constraints can be built:
+        \vspace{-5pt}
+        \begin{align*}
+            x_1 \times x_1 &= x_1 \quad \text{(binary check)} \tag{1} \\
+            x_2 \times x_3 &= \mathsf{mult} \tag{2} \\
+            x_1 \times \mathsf{mult} &= \mathsf{selectMult} \tag{3} \\
+            (1 - x_1) \times (x_2 + x_3) &= r - \mathsf{selectMult} \tag{4}
+        \end{align*}
+    \end{frame}
+
+    \begin{frame}[fragile]{Constraint System Example}
+        The witness vector: $\mathbf{z} = (1, r, x_1, x_2, x_3, \mathsf{mult}, \mathsf{selectMult})$. The coefficients vectors:
+
+        \vspace{-20pt}\small
+
+        \begin{align*}
+            \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_1 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{o}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+            \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0), & \boldsymbol{r}_2 &= (0, 0, 0, 0, 1, 0, 0), & \boldsymbol{o}_2 &= (0, 0, 0, 0, 0, 1, 0) \\
+            \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0), & \boldsymbol{r}_3 &= (0, 0, 0, 0, 0, 1, 0), & \boldsymbol{o}_3 &= (0, 0, 0, 0, 0, 0, 1) \\
+            \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0), & \boldsymbol{r}_4 &= (0, 0, 0, 1, 1, 0, 0), & \boldsymbol{o}_4 &= (0, 1, 0, 0, 0, 0, -1)
+        \end{align*}\normalsize
+
+        \vspace{-10pt}
+
+        Using the arithmetic in a large $\mathbb{F}_p$, consider the following values:
+        
+        \vspace{-15pt}
+        \begin{equation*}
+            x_1 = 1, \quad x_2 = 3, \quad x_3 = 4
+            \vspace{-5pt}
+        \end{equation*}
+    
+        Verifying the constraints:
+        \begin{enumerate}
+            \item \( x_1 \times x_1 = x_1 \quad (1 \times 1 = 1) \)
+            \item \( x_2 \times x_3 = \mathsf{mult} \quad (3 \times 4 = 12) \)
+            \item \( x_1 \times \mathsf{mult} = \mathsf{selectMult} \quad (1 \times 12 = 12) \)
+            \item \( (1 - x_1) \times (x_2 + x_3) = r - \mathsf{selectMult} \quad (0 \times 7 = 12 - 12) \)
+        \end{enumerate}
+    \end{frame}
+
+    \begin{frame}{R1CS In Matrix Form}
+        \begin{theorem} 
+            Consider a \textbf{Rank-1 Constraint System} (\textbf{R1CS}) defined over $m$ constraints. Each constraint in such system is
+            associated with coefficient vectors $\boldsymbol{\ell}_i$, $\boldsymbol{r}_i$, and $\boldsymbol{o}_i$, where $i \in \{1, 2, \dots, m\}$ and
+            also a witness vector $\mathbf{z}$ consisting of $n$ elements.
+        
+            Then this system can also be represented using the corresponding matrices $L$, $R$, and $O$.
+            \begin{align*}
+                L = \begin{bmatrix}
+                    \ell_{1,1} & \ell_{1,2} & \dots & \ell_{1,n} \\
+                    \ell_{2,1} & \ell_{2,2} & \dots & \ell_{2,n} \\
+                    \vdots & \vdots & \ddots & \vdots \\
+                    \ell_{m,1} & \ell_{m,2} & \dots & \ell_{m,n}
+                \end{bmatrix}, \; \text{same for $R$ and $O$,}
+            \end{align*}
+            such that all constraints can be reduced to the single equation:
+            \begin{equation*}
+                L\mathbf{z} \odot R\mathbf{z} = O\mathbf{z}
+            \end{equation*}
+        \end{theorem}
+    \end{frame}
+
+    \begin{frame}{R1CS In Matrix Form}
+        \textbf{Proof.} Matrices defined this way can be expressed as
+        \vspace{-5pt}
+        {\scriptsize \begin{equation*}
+            L = \begin{bmatrix}
+                \boldsymbol{\ell}_1^{\top} \\ \boldsymbol{\ell}_2^{\top} \\ \vdots \\ \boldsymbol{\ell}_m^{\top}
+            \end{bmatrix}, \quad R = \begin{bmatrix}
+                \boldsymbol{r}_1^{\top} \\ \boldsymbol{r}_2^{\top} \\ \vdots \\ \boldsymbol{r}_m^{\top}
+            \end{bmatrix}, \quad O = \begin{bmatrix}
+                \boldsymbol{o}_1^{\top} \\ \boldsymbol{o}_2^{\top} \\ \vdots \\ \boldsymbol{o}_m^{\top}
+            \end{bmatrix}
+            \vspace{-5pt}
+        \end{equation*}}
+        \pause
+        Consider an expression $L\mathbf{z}$:
+        \vspace{-5pt}
+        {\scriptsize \begin{equation*}
+            L\mathbf{z} = \begin{bmatrix}
+                \boldsymbol{\ell}_1^{\top} \\ \boldsymbol{\ell}_2^{\top} \\ \vdots \\ \boldsymbol{\ell}_m^{\top}
+            \end{bmatrix}\begin{bmatrix}
+                z_1 \\ z_2 \\ \vdots \\ z_n
+            \end{bmatrix} = \begin{bmatrix}
+                \boldsymbol{\ell}_1^{\top}\mathbf{z} \\ \boldsymbol{\ell}_2^{\top}\mathbf{z} \\ \vdots \\ \boldsymbol{\ell}_m^{\top}\mathbf{z}
+            \end{bmatrix} = \begin{bmatrix}
+                \sum_{i=1}^{n}\ell_{1,i}z_i \\ \sum_{i=1}^{n}\ell_{2,i}z_i \\ \vdots \\ \sum_{i=1}^{n}\ell_{m,i}z_i
+            \end{bmatrix} = \begin{bmatrix}
+                \langle \boldsymbol{\ell}_1, \mathbf{z}\rangle \\
+                \langle \boldsymbol{\ell}_2, \mathbf{z}\rangle \\
+                \vdots \\
+                \langle \boldsymbol{\ell}_m, \mathbf{z}\rangle 
+            \end{bmatrix}
+            \vspace{-5pt}
+        \end{equation*}}
+        \pause
+        Therefore, we have:
+        \vspace{-5pt}
+        {\scriptsize \begin{equation*}
+            L\mathbf{z} = \begin{bmatrix}
+                \langle \boldsymbol{\ell}_1, \mathbf{z}\rangle \\
+                \langle \boldsymbol{\ell}_2, \mathbf{z}\rangle \\
+                \vdots \\
+                \langle \boldsymbol{\ell}_m, \mathbf{z}\rangle 
+            \end{bmatrix}, \quad
+            R\mathbf{z} = \begin{bmatrix}
+                \langle \boldsymbol{r}_1, \mathbf{z}\rangle \\
+                \langle \boldsymbol{r}_2, \mathbf{z}\rangle \\
+                \vdots \\
+                \langle \boldsymbol{r}_m, \mathbf{z}\rangle 
+            \end{bmatrix}, \quad
+            O\mathbf{z} = \begin{bmatrix}
+                \langle \boldsymbol{o}_1, \mathbf{z}\rangle \\
+                \langle \boldsymbol{o}_2, \mathbf{z}\rangle \\
+                \vdots \\
+                \langle \boldsymbol{o}_m, \mathbf{z}\rangle 
+            \end{bmatrix}
+            \vspace{-5pt}
+        \end{equation*}}
+        \pause
+        Thus, {\small $L\mathbf{z} \odot R\mathbf{z} = O\mathbf{z}$} is equivalent to the system of $m$ constraints:
+        \vspace{-5pt}
+        {\small \begin{equation*}
+            \langle \boldsymbol{\ell}_j, \mathbf{z}\rangle \times \langle \boldsymbol{r}_j, \mathbf{z} \rangle = \langle \boldsymbol{o}_j, \mathbf{z} \rangle, \; j \in \{1,\dots,m\}.
+        \end{equation*}}
+    \end{frame}
+
+    \begin{frame}{R1CS In Matrix Form}
+        \begin{example}
+            The vectors $\boldsymbol{\ell}_i$ from the previous examples have the form:
+            {\begin{align*}
+                \boldsymbol{\ell}_1 &= (0, 0, 1, 0, 0, 0, 0) \\
+                \boldsymbol{\ell}_2 &= (0, 0, 0, 1, 0, 0, 0) \\
+                \boldsymbol{\ell}_3 &= (0, 0, 1, 0, 0, 0, 0) \\
+                \boldsymbol{\ell}_4 &= (1, 0, -1, 0, 0, 0, 0)
+            \end{align*}}
+            This corresponds to $n = 7, m = 4$, so the matrix $L$ becomes:
+            {\footnotesize \begin{equation*}
+                \begin{bmatrix}
+                    \ell_{1,1} & \ell_{1,2} & \ell_{1,3} & \ell_{1,4} & \ell_{1,5} & \ell_{1,6} & \ell_{1,7} \\
+                    \ell_{2,1} & \ell_{2,2} & \ell_{2,3} & \ell_{2,4} & \ell_{2,5} & \ell_{2,6} & \ell_{2,7} \\
+                    \ell_{3,1} & \ell_{3,2} & \ell_{3,3} & \ell_{3,4} & \ell_{3,5} & \ell_{3,6} & \ell_{3,7} \\
+                    \ell_{4,1} & \ell_{4,2} & \ell_{4,3} & \ell_{4,4} & \ell_{4,5} & \ell_{4,6} & \ell_{4,7}
+                \end{bmatrix} = \begin{bmatrix}
+                    0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+                    0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+                    0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+                    1 & 0 & -1 & 0 & 0 & 0 & 0 
+                \end{bmatrix}
+            \end{equation*}}
+        \end{example}
+    \end{frame}
+
+    \begin{frame}{Why Rank-1?}
+        \begin{lemma}
+            Suppose we have a constraint $\langle \boldsymbol{\ell}, \mathbf{z}\rangle \times \langle \boldsymbol{r}, \mathbf{z}\rangle = \langle \boldsymbol{o}, \mathbf{z} \rangle$ 
+            with coefficient vectors $\boldsymbol{\ell}$, $\boldsymbol{r}$, $\boldsymbol{o}$ and witness vector 
+            $\mathbf{z}$ (all from $\mathbb{F}^n$). Then it can be expressed in the form:
+            \vspace{-5pt}
+            \begin{equation*}
+                 \mathbf{z}^{\top} T \mathbf{z} - \boldsymbol{o}^{\top} \mathbf{z} = 0
+                 \vspace{-5pt}
+            \end{equation*}
+            Where $T = \boldsymbol{\ell} \otimes \boldsymbol{r}$ --- \textbf{rank-1} matrix.
+        \end{lemma}
+        \vspace{-10pt}
+        \pause
+        \textbf{Lemma proof.} Consider $\boldsymbol{\ell}, \boldsymbol{r}, \boldsymbol{o}, \mathbf{z} \in \mathbb{F}^n$.
+        \vspace{-5pt}
+        \begin{equation*}
+            \left(\sum_{i=1}^{n} \ell_i z_i\right) \times \left(\sum_{j=1}^{n} r_j z_j\right) = \sum_{k=1}^{n} o_k z_k
+            \vspace{-5pt}
+        \end{equation*}
+        Combine the products into a double sum on the left side:
+        \vspace{-5pt}
+        \begin{equation*}
+            \sum_{i=1}^{n} \sum_{j=1}^{n} \ell_i r_j z_i z_j = \mathbf{z}^{\top} (\boldsymbol{\ell} \otimes \boldsymbol{r}) \mathbf{z} = \mathbf{z}^{\top} T \mathbf{z}
+            \vspace{-5pt}
+        \end{equation*}
+        Thus, the constraint can be written as $\mathbf{z}^{\top} T \mathbf{z} - \boldsymbol{o}^{\top} \mathbf{z} = 0$.
+    \end{frame}
+
+    \makeclosingframe
+\end{document}

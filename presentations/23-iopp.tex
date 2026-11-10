@@ -1,0 +1,710 @@
+\documentclass{zkdl-presentation-template}
+% \mathbbm{x}, \mathbbm{y}, \mathbbm{w}: statement, input oracle and witness, as in the
+% book (bbm font inside \text, so that no extra math alphabet is allocated and
+% the symbol still scales in superscripts)
+
+\title[IOPs of Proximity]{\textbf{Interactive Oracle Proofs of Proximity}}
+\author{Blockstream Research}
+\date{\today}
+\homepage{research.blockstream.com}
+\github{BlockstreamResearch/zk-book}
+
+% Prover/verifier diagrams (macros must live outside frames)
+% a strip of 10 oracle cells: #1 = centre, #2 = name, #3 = cell style
+\newcommand{\oraclestrip}[3]{%
+    \foreach \i in {0,...,9} {
+        \node[#3] at ([xshift=-1.1cm+0.36cm*\i]#1) {};
+    }
+    \node[left] at ([xshift=-1.3cm]#1) {#2 $=$};
+}
+% a strip with queried cells: #1 = centre, #2 = name, #3 = queried cells, #4 = fill
+\newcommand{\queriedstrip}[4]{%
+    \foreach \i in {0,...,9} {
+        \node[cell, fill=#4] at ([xshift=-1.1cm+0.36cm*\i]#1) {};
+    }
+    \foreach \i in {#3} {
+        \node[cell, fill=oc-orange-3, draw=oc-orange-8, thick] at ([xshift=-1.1cm+0.36cm*\i]#1) {};
+    }
+    \node[left] at ([xshift=-1.3cm]#1) {#2 $=$};
+}
+% an oracle sent by the prover: #1 = yshift, #2 = name, #3 = queried cells
+\newcommand{\sendoracle}[3]{%
+    \draw[send] ([yshift=#1]prover.south) coordinate (l) -- (l-|verifier) coordinate[midway] (m);
+    \coordinate (s) at ([yshift=0.35cm]m);
+    \queriedstrip{s}{#2}{#3}{oc-blue-1}
+}
+% a challenge sent by the verifier: #1 = arrow yshift, #2 = name
+\newcommand{\sendchallenge}[2]{%
+    \draw[send] ([yshift=#1]verifier.south) coordinate (l) -- (l-|prover) node[midway, above=0mm]{Sample challenge #2};
+}
+% one evaluation query: #1 = index, #2..#5 = yshifts of challenge, answer, virtual oracle, IOPP
+\newcommand{\evalquery}[5]{%
+    \draw[send] ([yshift=#2]verifier.south) coordinate (l) -- (l-|prover) node[midway, above=0mm]{Sample point $r_{#1} \in \mathbb{F} \setminus \Omega$};
+    \draw[send] ([yshift=#3]prover.south) coordinate (l) -- (l-|verifier) node[midway, above=0mm]{Send claimed value $y_{#1}$};
+    \coordinate (s) at ([yshift=#4]c);
+    \oraclestrip{s}{$\mathsf{q}_{#1}(g)$}{vcell}
+    \draw[iopp] ([yshift=#5]prover.south) coordinate (l) -- (l-|verifier) node[midway, above=1mm, text=black]{$\delta$-RS-IOPP: is $\mathsf{q}_{#1}(g)$ close to $\mathsf{RS}[\mathbb{F}, \Omega, k-1]$?};
+}
+\newcommand{\fromverifier}[2]{%
+    \draw[send] ([yshift=#1]vs) -- ([yshift=#1]ps) node[midway, above=0mm]{#2};
+}
+\newcommand{\fromprover}[2]{%
+    \draw[send] ([yshift=#1]ps) -- ([yshift=#1]vs) node[midway, above=0mm]{#2};
+}
+% a circle of domain points: #1 = centre x, #2 = list of value/angle/colour, #3 = caption
+\newcommand{\domain}[3]{%
+    \draw[oc-gray-4, thick] (#1, 0) circle (1.0);
+    \foreach \v/\a/\c in {#2} {
+        \node[pt, fill=\c] at ($(#1, 0) + (\a:1.0)$) {};
+        \node[lab] at ($(#1, 0) + (\a:1.32)$) {$\v$};
+    }
+    \node[lab] at (#1, -1.75) {#3};
+}
+
+\begin{document}
+    \maketitleframe
+
+    \begin{frame}{Plan}
+      \tableofcontents[hideallsubsections]
+    \end{frame}
+
+    \begin{frame}{What will we learn today?}
+        \begin{itemize}
+            \item Recall: a \textbf{Poly-IOP} becomes a SNARK by (1) replacing polynomials with \textbf{polynomial commitments} and (2) applying \textbf{Fiat--Shamir}.\pause
+            \item PlonK = Poly-IOP + KZG. Replacing KZG with Bulletproofs gives Halo2.\pause
+            \item Today: commitments that need only \textbf{hash functions}, based on Reed--Solomon codes.
+        \end{itemize}
+        \pause
+
+        \begin{remarkblock}{Key idea}
+            An RS-IOPP (Reed--Solomon IOP of Proximity) can be used as a polynomial commitment scheme, which turns a Poly-IOP into an IOP.
+        \end{remarkblock}
+        \pause
+
+        \begin{remarkblock}{Recall from the previous lecture}
+            $\mathsf{RS}[\mathbb{F},\Omega,k] := \{\overline{f}: \Omega \to \mathbb{F}, \; f \in \mathbb{F}[T]^{<k}\}$, rate $\rho = k/n$, and the list $\mathsf{List}[\mathbf{w},\code,\delta]$ of codewords $\delta$-close to $\mathbf{w}$.
+        \end{remarkblock}
+    \end{frame}
+
+    \section{IOPs of Proximity}
+
+    \subsection{Interactive Oracle Proofs}
+
+    \begin{frame}{Interactive Oracle Proofs}
+        Recall the idea of an \textbf{interactive oracle proof} (IOP):
+        \begin{itemize}
+            \item As in any interactive proof, $\mathcal{P}$ and $\mathcal{V}$ exchange messages over several rounds; the verifier's messages are random challenges.\pause
+            \item The prover's messages are \textbf{oracles}: long strings that the verifier does not read in full, but only \textbf{queries} at a few positions.\pause
+            \item Hence the verifier runs in time much smaller than the total length of the prover's messages.\pause
+            \item In practice, the prover commits to each oracle with a \textbf{Merkle tree}, and every query is answered with an opening.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Interactive Oracle Proofs}
+        \begin{figure}
+            \centering
+            \scalebox{0.74}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.36cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=1cm]{images/common/prover.png}\\Prover $\mathcal{P}(\mathbbm{x}, \mathbbm{w})$};
+                \node[inner sep=0pt, align=center, right=5cm of prover] (verifier) {\includegraphics[width=1cm]{images/common/verifier.png}\\Verifier $\mathcal{V}(\mathbbm{x})$};
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]prover.south) -- ([yshift=-5.3cm]prover.south);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]verifier.south) -- ([yshift=-5.3cm]verifier.south);
+                \sendoracle{-1.2cm}{$\pi_0$}{2,7}
+                \uncover<2->{\sendchallenge{-1.9cm}{$\alpha_1$}}
+                \uncover<3->{\sendoracle{-2.8cm}{$\pi_1$}{4}}
+                \path (prover.south) -- (verifier.south) coordinate[midway] (c);
+                \uncover<4->{
+                \node at ([yshift=-3.15cm]c) {$\vdots$};
+                \sendchallenge{-4.0cm}{$\alpha_r$}
+                \sendoracle{-4.9cm}{$\pi_r$}{0,5,8}}
+                \uncover<5->{
+                \node[align=center,fill=white,thick,below=5.4cm of verifier]{
+                \noindent\rule{3.5cm}{0.8pt}\\
+                Query a few cells of each $\pi_i$\\
+                Output $\mathsf{accept}/\mathsf{reject}$ \\
+                \noindent\rule{3.5cm}{0.8pt}};}
+            \end{tikzpicture}%
+            }
+            \caption{Long oracles $\pi_i$, short challenges $\alpha_i$; the verifier queries a few cells (orange).}
+        \end{figure}
+    \end{frame}
+
+    \subsection{IOPs of Proximity}
+
+    \begin{frame}{IOP of Proximity}
+        In an IOP, the verifier reads the statement $\mathbbm{x}$ in full. For the proximity problem this is not enough: the word $\mathbf{w}$ we want to check is itself too long to read.
+        \pause
+
+        \begin{definition}[IOP of Proximity]
+            Let $\mathcal{R} = \{(\mathbbm{x}, \mathbbm{y}, \mathbbm{w})\}$ be a relation, where $\mathbbm{y}$ is a string of large length $n$. An \textbf{IOP of proximity} (IOPP) for $\mathcal{R}$ is an IOP in which
+            \begin{itemize}
+                \item the prover receives $(\mathbbm{x}, \mathbbm{y}, \mathbbm{w})$;
+                \item the verifier receives $\mathbbm{x}$ and only \textbf{oracle access} to $\mathbbm{y}$.
+            \end{itemize}
+            At the end, the verifier outputs
+            \begin{equation*}
+                \mathcal{V}^{\mathbbm{y}, \pi_0, \dots, \pi_r}(\mathbbm{x}, \alpha_1, \dots, \alpha_r) \to \{0,1\}.
+            \end{equation*}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{IOP of Proximity}
+        \begin{figure}
+            \centering
+            \scalebox{0.68}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.36cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=1cm]{images/common/prover.png}\\Prover $\mathcal{P}(\mathbbm{x}, \textcolor{oc-red-8}{\mathbbm{y}}, \mathbbm{w})$};
+                \node[inner sep=0pt, align=center, right=5cm of prover] (verifier) {\includegraphics[width=1cm]{images/common/verifier.png}\\Verifier $\mathcal{V}^{\textcolor{oc-red-8}{\mathbbm{y}}}(\mathbbm{x})$};
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]prover.south) -- ([yshift=-6.9cm]prover.south);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]verifier.south) -- ([yshift=-6.9cm]verifier.south);
+                \path (prover.south) -- (verifier.south) coordinate[midway] (c);
+                \coordinate (y) at ([yshift=-1.05cm]c);
+                \node[draw=oc-red-6, dashed, thick, rounded corners=2pt, minimum width=5.6cm, minimum height=1.25cm] at ([yshift=0.2cm]y) {};
+                \node[text=oc-red-8, font=\small] at ([yshift=0.55cm]y) {input oracle (already committed)};
+                \coordinate (s) at ([yshift=-0.05cm]y);
+                \queriedstrip{s}{$\textcolor{oc-red-8}{\mathbbm{y}}$}{1,6}{oc-red-1}
+                \sendoracle{-2.4cm}{$\pi_0$}{2,7}
+                \sendchallenge{-3.1cm}{$\alpha_1$}
+                \sendoracle{-4.0cm}{$\pi_1$}{4}
+                \node at ([yshift=-4.35cm]c) {$\vdots$};
+                \sendchallenge{-5.2cm}{$\alpha_r$}
+                \sendoracle{-6.1cm}{$\pi_r$}{0,5,8}
+                \node[align=center,fill=white,thick,below=6.6cm of verifier]{
+                \noindent\rule{4.2cm}{0.8pt}\\
+                Query a few cells of $\textcolor{oc-red-8}{\mathbbm{y}}$ and each $\pi_i$\\
+                Output $\mathsf{accept}/\mathsf{reject}$ \\
+                \noindent\rule{4.2cm}{0.8pt}};
+            \end{tikzpicture}%
+            }
+            \caption{The input oracle $\mathbbm{y}$: known to $\mathcal{P}$ in full, only queried by $\mathcal{V}$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Which Inputs Should be Rejected?}
+        The natural answer, ``every $\mathbbm{y}$ that is not valid'', is unachievable:
+        \begin{itemize}
+            \item take a valid $\mathbbm{y}$ and change a single cell;\pause
+            \item a verifier querying $q$ of the $n$ cells reads the changed one with probability at most $q/n$.
+        \end{itemize}
+        \pause
+        We only ask to reject oracles that are far from every valid one.
+
+        \begin{definition}
+            $(\mathbbm{x}, \mathbbm{y})$ is \textbf{$\delta$-far from $\mathcal{R}$} if
+            \begin{equation*}
+                (\mathbbm{x},\mathbbm{y}',\mathbbm{w}) \not\in\mathcal{R} \; \text{for all} \; \mathbbm{y}',\mathbbm{w} \; \text{such that} \; \delta(\mathbbm{y}, \mathbbm{y}') \leq \delta.
+            \end{equation*}
+        \end{definition}
+        \pause
+
+        That is, $\mathbbm{y}$ cannot be made valid by changing at most a $\delta$ fraction of its cells.
+    \end{frame}
+
+    \begin{frame}{Correctness and Soundness}
+        \begin{definition}
+            An IOPP $(\mathcal{P}, \mathcal{V})$ for $\mathcal{R}$ may have the following properties:
+            \begin{itemize}
+                \item \textbf{Correctness.} For all $(\mathbbm{x}, \mathbbm{y}, \mathbbm{w}) \in \mathcal{R}$, $\mathcal{V}$ always accepts $\mathcal{P}$.
+                \item \textbf{$\delta$-soundness.} For all $(\mathbbm{x}, \mathbbm{y})$ that are $\delta$-far from $\mathcal{R}$,
+                \begin{equation*}
+                    \forall_{\mathcal{P}^*} \; \Pr[\mathcal{V}^{\mathbbm{y},\pi_0,\dots,\pi_r}(\mathbbm{x},\alpha_1,\dots,\alpha_r) = 1] < \negl(\lambda).
+                \end{equation*}
+            \end{itemize}
+        \end{definition}
+        \pause
+
+        \begin{remarkblock}{The gap is harmless}
+            An invalid $\mathbbm{y}$ that is not $\delta$-far may be accepted. But then $\mathbbm{y}$ is $\delta$-close to some valid $\mathbbm{y}'$, which for a code and small $\delta$ is unique, or one of a bounded list (list decoding!). We treat the prover as committed to $\mathbbm{y}'$.
+        \end{remarkblock}
+    \end{frame}
+
+    \begin{frame}{Example}
+        \begin{example}
+            Let $\mathbbm{x} = \mathsf{RS}[\mathbb{F}_7, \Omega := \mathbb{F}_7, k := 2]$, and $(\mathbbm{x}, \mathbbm{y}, \mathbbm{w}) \in \mathcal{R}$ iff $\mathbbm{w} = f \in \mathbb{F}_7[T]^{<2}$ and $\mathbbm{y} = \overline{f}$. The valid oracles are exactly the codewords.
+        \end{example}
+        \pause
+
+        \begin{itemize}
+            \item $\mathbbm{y}_1 = (3, 5, 0, 2, 4, 6, 1)$ is the codeword of $f = 3 + 2T$: always accepted.\pause
+            \item $\mathbbm{y}_2 = (3, 5, 0, 2, 4, 6, \textcolor{oc-red-8}{0})$ is $1/7$-close to $\mathbbm{y}_1$, so it is not $\delta$-far for $\delta \geq 1/7$: may be accepted, and we regard the prover as committed to $f = 3 + 2T$.\pause
+            \item $\mathbbm{y}_3 = (0, 1, 4, 2, 2, 4, 1)$ are the evaluations of $T^2$: it differs from every codeword in at least $5$ cells, so it is $\delta$-far for every $\delta < 5/7$, and it is rejected with high probability.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Reed--Solomon IOPP}
+        The special case where the statement is a code $\code = \mathsf{RS}[\mathbb{F},\Omega,k]$ and $\mathbbm{y}$ is a restriction $g: \Omega \to \mathbb{F}$ is the central topic of this lecture.
+
+        \begin{definition}[Reed--Solomon IOPP]
+            Given oracle access to $g: \Omega \to \mathbb{F}$ and $\delta \in (0,1)$, distinguish, with high confidence and few oracle queries $\pi_0,\dots,\pi_r$, between
+            \begin{itemize}
+                \item the case $g \in \mathsf{RS}[\mathbb{F}, \Omega, k]$, and
+                \item the case that $g$ is $\delta$-far from $\mathsf{RS}[\mathbb{F}, \Omega, k]$.
+            \end{itemize}
+        \end{definition}
+        \pause
+
+        \begin{remarkblock}{Black box}
+            Today we use a $\delta$-RS-IOPP as a black box. Next lecture: how to build one (FRI).
+        \end{remarkblock}
+    \end{frame}
+
+    \section{Compiling Poly-IOPs using RS-IOPPs}
+
+    \subsection{Attempt \#1: Quotienting}
+
+    \begin{frame}{Attempt \#1: Encoding Polynomials}
+        An IOP sends large \textbf{strings}, not \textbf{polynomials}. How do we encode $f \in \mathbb{F}[T]^{<k}$ into a string of length $n$?
+        \pause
+        \begin{itemize}
+            \item Natural answer: the restriction $\overline{f}: \Omega \to \mathbb{F}$, which lies in $\code := \mathsf{RS}[\mathbb{F},\Omega,k]$.\pause
+            \item But the prover can send an arbitrary $g: \Omega \to \mathbb{F}$, so we need to verify that $g$ is close to $\code$: exactly an RS-IOPP!
+        \end{itemize}
+        \pause
+
+        \begin{alertblock}{That is not enough}
+            A polynomial commitment needs \textbf{evaluation proofs}: that $f(r) = y$ for a given $(r, y)$.
+        \end{alertblock}
+    \end{frame}
+
+    \begin{frame}{Quotienting}
+        \begin{proposition}[Quotienting]
+            Let $r \in \mathbb{F} \setminus \Omega$, $y \in \mathbb{F}$, $f \in \mathbb{F}[T]^{<k}$, $\delta \in [0,1]$. Define the \textbf{quotient map} $\mathsf{q}$ sending a restriction $g: \Omega \to \mathbb{F}$ to the restriction $(g(T)-y)/(T-r)$. Then:
+            \begin{enumerate}
+                \item if $g = \overline{f} \in \mathsf{RS}[\mathbb{F}, \Omega, k]$ and $y=f(r)$, then $\mathsf{q}(g) \in \mathsf{RS}[\mathbb{F},\Omega,k-1]$;
+                \item if $y \neq h(r)$ for all $\overline{h} \in \mathsf{List}[g,k,\delta]$, then $\mathsf{q}(g)$ is $\delta$-far from $\mathsf{RS}[\mathbb{F},\Omega,k-1]$.
+            \end{enumerate}
+        \end{proposition}
+        Here, $\mathsf{List}[g,k,\delta] := \mathsf{List}[g,\mathsf{RS}[\mathbb{F},\Omega,k],\delta]$. Since $r \notin \Omega$, $\mathsf{q}(g)$ is well-defined.
+        \pause
+
+        \textbf{Proof idea.}
+        \begin{itemize}
+            \item[(i)] $f - y$ has a root at $r$, so $u := (f - y)/(T - r) \in \mathbb{F}[T]^{<k-1}$ and $\mathsf{q}(g) = \overline{u}$.\pause
+            \item[(ii)] If $\mathsf{q}(g)$ is $\delta$-close to some $\overline{u}$, then $h := u \cdot (T - r) + y$ satisfies $h(r) = y$ and $\overline{h} \in \mathsf{List}[g, k, \delta]$. \qed
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Quotienting: Example}
+        \begin{example}
+            Let $\mathbb{F} = \mathbb{F}_7$, $\Omega = \mathbb{F}_7 \setminus \{0\}$, $k = 2$ and $r = 0 \notin \Omega$. Take $f = 3 + 2T$, so that $g = \overline{f} = (5, 0, 2, 4, 6, 1)$ and $f(r) = 3$.
+        \end{example}
+        \pause
+
+        \begin{itemize}
+            \item \cmark\ Correct value $y = 3$:
+            \begin{equation*}
+                \mathsf{q}(g)(\omega) = \frac{3 + 2\omega - 3}{\omega} = 2, \quad \mathsf{q}(g) = (2, 2, 2, 2, 2, 2) \in \mathsf{RS}[\mathbb{F}_7, \Omega, 1].
+            \end{equation*}
+            \pause
+            \item \xmark\ Wrong value $y = 4$: $\mathsf{q}(g)(\omega) = 2 - \omega^{-1}$, that is, $\mathsf{q}(g) = (1, 5, 4, 0, 6, 3)$. All six values are distinct, so it is at relative distance $5/6$ from the constants.
+        \end{itemize}
+        \pause
+
+        This matches the second claim: for small $\delta$, $\mathsf{List}[g, 2, \delta] = \{\overline{f}\}$, and $f(0) = 3 \neq 4$.
+    \end{frame}
+
+    \begin{frame}{Attempt \#1}
+        \begin{figure}
+            \centering
+            \scalebox{0.6}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.36cm, inner sep=0pt},
+                vcell/.style={draw=oc-teal-7, densely dashed, fill=oc-teal-1, minimum size=0.36cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+                iopp/.style={{Stealth[length=3.5mm]}-{Stealth[length=3.5mm]}, line width=1.2mm, oc-blue-5},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=0.8cm]{images/common/prover.png}\\Prover $\mathcal{P}(f)$};
+                \node[inner sep=0pt, align=center, right=7cm of prover] (verifier) {\includegraphics[width=0.8cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$};
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]prover.south) -- ([yshift=-8.8cm]prover.south);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]verifier.south) -- ([yshift=-8.8cm]verifier.south);
+                \path (prover.south) -- (verifier.south) coordinate[midway] (c);
+                \draw[send] ([yshift=-1.5cm]prover.south) coordinate (l) -- (l-|verifier);
+                \coordinate (s) at ([yshift=-1.15cm]c);
+                \oraclestrip{s}{$g$}{cell, fill=oc-blue-1}
+                \node[right] at ([xshift=2.35cm]s) {$: \Omega \to \mathbb{F}$};
+                \node[font=\small, text=oc-gray-7] at ([yshift=-1.9cm]c) {honest prover: $g = \overline{f}$};
+                \uncover<2->{\evalquery{1}{-2.8cm}{-3.6cm}{-4.1cm}{-5.15cm}}
+                \uncover<3->{\evalquery{2}{-6.1cm}{-6.9cm}{-7.4cm}{-8.45cm}}
+            \end{tikzpicture}%
+            }
+            \caption{Virtual quotients $\mathsf{q}_i(g) := (g - y_i)/(T - r_i)$: $\mathcal{V}$ computes their cells from $g$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Attempt \#1: What Goes Wrong?}
+        What does the verifier $\mathcal{V}$ learn?
+        \pause
+
+        \begin{block}{$\mathcal{V}$ learns}
+            There are some $\overline{f}_1,\overline{f}_2 \in \mathsf{List}[g,k,\delta]$ s.t. $f_1(r_1)=y_1$ and $f_2(r_2)=y_2$.
+        \end{block}
+        \pause
+
+        \begin{alertblock}{Problem}
+            For $\delta \geq \mu(\code)/2$, the list $\mathsf{List}[g,k,\delta]$ may contain several elements, so it might happen that $f_1 \neq f_2$: different queries are explained by different codewords!
+        \end{alertblock}
+    \end{frame}
+
+    \subsection{Attempt \#2: Out-of-Domain Sampling}
+
+    \begin{frame}{Attempt \#2: Binding with a Random Point}
+        \textbf{Fix:} before everything, $\mathcal{V}$ samples $r \leftarrowS \mathbb{F} \setminus \Omega$, and an honest prover responds with $y \gets f(r)$.
+        \pause
+
+        \begin{proposition}
+            Let $\mathsf{Bad}$ be the event ``there exist $\overline{f}_1 \neq \overline{f}_2 \in \mathsf{List}[g,k,\delta]$ such that $f_1(r) = f_2(r) = y$ for $r \leftarrowS \mathbb{F} \setminus \Omega$''. Then
+            \begin{equation*}
+                \Pr\left[ \mathsf{Bad} \right] \leq \binom{\#\mathsf{List}[g,k,\delta]}{2} \cdot \frac{k-1}{\#\mathbb{F} - \#\Omega}.
+            \end{equation*}
+        \end{proposition}
+        \pause
+
+        \textbf{Proof.} For a fixed pair, $f_1 - f_2 \neq 0$ has degree $< k$, so by Schwartz--Zippel $\Pr[f_1(r) = f_2(r)] \leq \frac{k-1}{\#\mathbb{F} - \#\Omega}$. Union bound over all pairs. \qed
+    \end{frame}
+
+    \begin{frame}{Attempt \#2: Probability of the Bad Event}
+        \begin{corollary}
+            If $\delta < 1-\sqrt{\rho(\code)}$ (for $\code=\mathsf{RS}[\mathbb{F},\Omega,k]$), then
+            \begin{equation*}
+                \Pr\left[ \mathsf{Bad} \right] \leq \frac{1}{2\varepsilon_{\delta}^2} \cdot \frac{k-1}{\#\mathbb{F} - \#\Omega}, \quad \varepsilon_{\delta} = 2\sqrt{\rho(\code)}\,(1-\sqrt{\rho(\code)}-\delta),
+            \end{equation*}
+            where $\varepsilon_{\delta}$ does not depend on the size of the field.
+        \end{corollary}
+        \textbf{Proof.} Johnson bound and $\binom{x}{2} \leq \frac{x^2}{2}$. \qed
+        \pause
+
+        \begin{remark}
+            The probability is roughly $\mathsf{const}/\#\mathbb{F}$: negligible for large fields. For small fields (like \texttt{M31}, $\#\mathbb{F} = 2^{31}-1$), repeat the procedure several times.
+        \end{remark}
+        \pause
+
+        Hence $(r,y)$ binds the prover to \textbf{only one} $\overline{f} \in \mathsf{List}[g,k,\delta]$. Remaining problem: aggregate the checks $f(r)=y$ and $f(r_i)=y_i$.
+    \end{frame}
+
+    \begin{frame}{Multiple Quotientings}
+        \begin{proposition}[Multiple Quotientings]
+            Let $(r_i)_{i \in [t]} \subseteq \mathbb{F} \setminus \Omega$, $(y_i)_{i \in [t]} \subseteq \mathbb{F}$, and $\delta \in [0,1]$. Define $\nu,\iota \in \mathbb{F}[T]^{\leq t}$:
+            \begin{equation*}
+                \nu(T) := \prod_{i \in [t]} (T-r_i), \quad \iota(r_i) = y_i \; \text{for all} \; i \in [t],
+            \end{equation*}
+            and the \textbf{quotient map} $\mathsf{q}: g \mapsto (g(T)-\iota(T))/\nu(T)$. Then:
+            \begin{enumerate}
+                \item if $g = \overline{f} \in \mathsf{RS}[\mathbb{F}, \Omega, k]$ and $y_i=f(r_i)$ for all $i \in [t]$, then $\mathsf{q}(g) \in \mathsf{RS}[\mathbb{F},\Omega,k-t]$;
+                \item if for every $\overline{h} \in \mathsf{List}[g,k,\delta]$ we have $y_i \neq h(r_i)$ for some $i \in [t]$, then $\mathsf{q}(g)$ is $\delta$-far from $\mathsf{RS}[\mathbb{F},\Omega,k-t]$.
+            \end{enumerate}
+        \end{proposition}
+        \pause
+
+        \begin{questionblock}{Question \#1}
+            Prove this fact (generalize the proof of single quotienting).
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Attempt \#2}
+        \begin{figure}
+            \centering
+            \scalebox{0.62}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.36cm, inner sep=0pt},
+                vcell/.style={draw=oc-teal-7, densely dashed, fill=oc-teal-1, minimum size=0.36cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+                iopp/.style={{Stealth[length=3.5mm]}-{Stealth[length=3.5mm]}, line width=1.2mm, oc-blue-5},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=0.8cm]{images/common/prover.png}\\Prover $\mathcal{P}(f)$};
+                \node[inner sep=0pt, align=center, right=7cm of prover] (verifier) {\includegraphics[width=0.8cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$};
+                \coordinate (ps) at (prover.south);
+                \coordinate (vs) at (prover.south -| verifier.south);
+                \path (ps) -- (vs) coordinate[midway] (c);
+                \uncover<2->{
+                \fill[oc-orange-1, rounded corners=3pt] ([xshift=-0.5cm, yshift=-2.35cm]ps) rectangle ([xshift=0.5cm, yshift=-4.05cm]vs);
+                \node[font=\small\bfseries, text=oc-orange-9, rotate=90] at ([xshift=-0.75cm, yshift=-3.2cm]ps) {binding};}
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]ps) -- ([yshift=-8.0cm]ps);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]vs) -- ([yshift=-8.0cm]vs);
+                \draw[send] ([yshift=-1.5cm]ps) -- ([yshift=-1.5cm]vs);
+                \coordinate (s) at ([yshift=-1.15cm]c);
+                \oraclestrip{s}{$g$}{cell, fill=oc-blue-1}
+                \node[right] at ([xshift=2.35cm]s) {$: \Omega \to \mathbb{F}$};
+                \node[font=\small, text=oc-gray-7] at ([yshift=-1.9cm]c) {honest prover: $g = \overline{f}$};
+                \uncover<2->{
+                \fromverifier{-2.8cm}{Sample random point $r \leftarrowS \mathbb{F} \setminus \Omega$}
+                \fromprover{-3.6cm}{Send claimed value $y$}}
+                \uncover<3->{
+                \fromverifier{-4.6cm}{Sample point $r_1 \in \mathbb{F} \setminus \Omega$}
+                \fromprover{-5.4cm}{Send claimed value $y_1$}}
+                \uncover<4->{
+                \node[font=\small] at ([yshift=-5.95cm]c) {$\nu := (T - r)(T - r_1), \qquad \iota(r) = y, \;\; \iota(r_1) = y_1$};
+                \coordinate (s) at ([yshift=-6.55cm]c);
+                \oraclestrip{s}{$(g - \iota)/\nu$}{vcell}
+                \draw[iopp] ([yshift=-7.6cm]ps) -- ([yshift=-7.6cm]vs) node[midway, above=1mm, text=black]{$\delta$-RS-IOPP: is $(g - \iota)/\nu$ close to $\mathsf{RS}[\mathbb{F}, \Omega, k-2]$?};}
+            \end{tikzpicture}%
+            }
+            \caption{New: a random out-of-domain point $r$ (highlighted); later queries are quotiented \emph{together} with $(r, y)$.}
+        \end{figure}
+    \end{frame}
+
+    \section{Batching RS-IOPPs}
+
+    \subsection{Distance Preserving Transformations}
+
+    \begin{frame}{Batching RS-IOPPs}
+        Running one RS-IOPP per query is costly. Given oracles $g_0,\dots,g_n: \Omega \to \mathbb{F}$, the prover wants to convince $\mathcal{V}$ that all of them are $\delta$-close to $\mathsf{RS}[\mathbb{F},\Omega,k]$.
+        \pause
+
+        \begin{definition}[Distance Preserving Transformation]
+            Let $\Omega,\Omega' \subseteq \mathbb{F}$ be evaluation domains and $r$ a blinding factor. The map $T: (g_0,\dots,g_n;r) \mapsto g$, from restrictions $g_i: \Omega \to \mathbb{F}$ to $g: \Omega' \to \mathbb{F}$, is \textbf{distance preserving} if:
+            \begin{enumerate}
+                \item if $g_0,\dots,g_n \in \mathsf{RS}[\mathbb{F},\Omega,k]$, then $g \in \mathsf{RS}[\mathbb{F},\Omega',k']$ for all $r$;
+                \item if some $g_i$ is $\delta$-far from $\mathsf{RS}[\mathbb{F},\Omega,k]$, then $g$ is $\delta$-far from $\mathsf{RS}[\mathbb{F},\Omega',k']$ with overwhelming probability over $r$.
+            \end{enumerate}
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Linear Combination}
+        \begin{example}
+            For $r$ sampled randomly from $\mathbb{F}$,
+            \begin{equation*}
+                T(g_0,\dots,g_n;r) := g_0 + g_1r + g_2r^2 + \dots + g_nr^n
+            \end{equation*}
+            is a distance preserving transformation (for appropriate code parameters).
+        \end{example}
+        \pause
+
+        \textbf{Batching:} $\mathcal{V}$ samples $r \leftarrowS \mathbb{F}$ and the prover sets \textcolor{oc-blue-8}{$g := \sum_{i} r^ig_i$}. Then one RS-IOPP for $g$ suffices.
+        \pause
+        \begin{itemize}
+            \item Property 1 is immediate: a linear combination of codewords is a codeword.\pause
+            \item Property 2 is tricky: it follows from the \textbf{proximity gap theorem}.
+        \end{itemize}
+    \end{frame}
+
+    \begin{frame}{Proximity Gaps}
+        \begin{lemma}[The proximity gap theorem, simplified]
+            Let $\code := \mathsf{RS}[\mathbb{F},\Omega,k]$, $g_0,\dots,g_n: \Omega \to \mathbb{F}$, $\delta < 1-1.01\sqrt{\rho}$ and $g_r := \sum_{i} r^ig_i$. Suppose
+            \begin{equation*}
+                \Pr_{r \leftarrowS \mathbb{F}}\left[\delta(g_r, \code) \leq \delta\right] > \varepsilon_{\delta},
+            \end{equation*}
+            where $\varepsilon_{\delta} = O(\frac{nk}{\rho\#\mathbb{F}})$ for $\delta<\frac{1-\rho}{2}$ and $\varepsilon_{\delta} = O(\frac{nk^2}{\rho^2\#\mathbb{F}})$ otherwise. Then all $g_i$ are $\delta$-close to $\code$.
+        \end{lemma}
+        \pause
+
+        \begin{theorem}[BCIKS20]
+            Moreover, there exists $S \subseteq \Omega$ such that $\#S \geq (1-\delta)\#\Omega$ and
+            \begin{equation*}
+                \forall_{i} \; \exists_{f_i \in \code} \;\; g_i\big|_S = f_i\big|_S.
+            \end{equation*}
+        \end{theorem}
+        \pause
+        That is, all $g_i$ are $\delta$-close to $\code$ \textbf{on the same positions} $S$.
+    \end{frame}
+
+    \subsection{2-way Folding}
+
+    \begin{frame}{2-way Folding: Splitting a Polynomial}
+        Another distance preserving transformation shrinks the \textbf{code} instead of the number of functions.
+        \pause
+        \begin{itemize}
+            \item For $f \in \mathbb{F}[T]^{<k}$, let $f_E$ ($f_O$) consist of the even (odd) coefficients of $f$:
+            \begin{equation*}
+                f(T) = f_E(T^2) + T f_O(T^2), \quad f_E, f_O \in \mathbb{F}[T]^{<k/2}.
+            \end{equation*}
+            \pause
+            \vspace{-10pt}
+            \item Let $\Omega := \langle \omega \rangle$, where $\omega$ is a primitive $n$th root of unity, $n$ a power of two.\pause
+            \item Since $\omega^{n/2} = -1$, $\Omega$ splits into pairs $\{x, -x\}$, and both elements of a pair are mapped to the same element of $\Omega^2 := \{x^2 : x \in \Omega\}$.
+        \end{itemize}
+        \pause
+
+        \begin{questionblock}{Question \#2}
+            Verify that $\#\Omega^2 = \frac{1}{2}\#\Omega$, so the evaluation domain shrinks $2\times$.
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Squaring Halves a Smooth Domain}
+        \begin{figure}
+            \centering
+            \resizebox{\linewidth}{!}{%
+            \begin{tikzpicture}[
+                lab/.style={font=\footnotesize},
+                pt/.style={circle, inner sep=1.6pt},
+            ]
+                \foreach \a/\c in {0/oc-blue-6, 45/oc-teal-6, 90/oc-orange-6, 135/oc-grape-6} {
+                    \draw[\c, densely dashed, thick] ($(0, 0) + (\a:1.0)$) -- ($(0, 0) + (\a+180:1.0)$);
+                }
+                \domain{0}{1/0/oc-blue-6, 2/45/oc-teal-6, 4/90/oc-orange-6, 8/135/oc-grape-6, 16/180/oc-blue-6, 15/225/oc-teal-6, 13/270/oc-orange-6, 9/315/oc-grape-6}{$\Omega = \langle 2 \rangle$, $n = 8$}
+                \uncover<2->{
+                \foreach \a/\c in {0/oc-gray-6, 90/oc-gray-6} {
+                    \draw[\c, densely dashed, thick] ($(4.2, 0) + (\a:1.0)$) -- ($(4.2, 0) + (\a+180:1.0)$);
+                }
+                \domain{4.2}{1/0/oc-blue-6, 4/90/oc-teal-6, 16/180/oc-orange-6, 13/270/oc-grape-6}{$\Omega^2 = \langle 4 \rangle$, $n = 4$}
+                \draw[-{Stealth[length=2.5mm]}, very thick, oc-gray-7] (1.6, 0) -- node[lab, above] {$x \mapsto x^2$} (2.6, 0);}
+                \uncover<3->{
+                \domain{8.4}{1/0/oc-gray-6, 16/180/oc-gray-6}{$\Omega^4 = \langle 16 \rangle$, $n = 2$}
+                \draw[-{Stealth[length=2.5mm]}, very thick, oc-gray-7] (5.8, 0) -- node[lab, above] {$x \mapsto x^2$} (6.8, 0);}
+            \end{tikzpicture}%
+            }
+            \caption{In $\mathbb{F}_{17}$: in $\Omega = \langle 2 \rangle$, every $x$ has $-x$ on the opposite side (dashed), and both are mapped to the point of the same colour in $\Omega^2$. Applying the map again gives $\Omega^4 = \{1, -1\}$.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{2-way Folding}
+        If $g = \overline{f}$, plugging $x$ and $-x$ into $f(T) = f_E(T^2) + T f_O(T^2)$ gives two linear equations:
+        \begin{equation*}
+            f_E(x^2) = \frac{g(x) + g(-x)}{2}, \qquad f_O(x^2) = \frac{g(x) - g(-x)}{2x}.
+        \end{equation*}
+        \pause
+        The right-hand sides make sense for an \textbf{arbitrary} restriction $g$.
+
+        \begin{definition}[2-way folding]
+            For a restriction $g: \Omega \to \mathbb{F}$ and $r \in \mathbb{F}$, define $g_E, g_O: \Omega^2 \to \mathbb{F}$ by
+            \begin{equation*}
+                g_E(x^2) := \frac{g(x) + g(-x)}{2}, \qquad g_O(x^2) := \frac{g(x) - g(-x)}{2x},
+            \end{equation*}
+            and the \textbf{fold} of $g$ as $\mathsf{Fold}(g, r) := g_E + r \cdot g_O: \Omega^2 \to \mathbb{F}$.
+        \end{definition}
+    \end{frame}
+
+    \begin{frame}{Folding is Distance Preserving}
+        \begin{lemma}
+            Let $\code := \mathsf{RS}[\mathbb{F},\Omega,k]$, $\code' := \mathsf{RS}[\mathbb{F},\Omega^2,k/2]$, and $\delta$, $\varepsilon_\delta$ as in the proximity gap lemma. Then:
+            \begin{enumerate}
+                \item if $g = \overline{f} \in \code$, then $\mathsf{Fold}(g, r) = \overline{f_E + r f_O} \in \code'$ for all $r \in \mathbb{F}$;
+                \item if $g$ is $\delta$-far from $\code$, then $\Pr_{r \leftarrowS \mathbb{F}}[\mathsf{Fold}(g, r) \text{ is } \delta\text{-close to } \code'] \leq \varepsilon_{\delta}$.
+            \end{enumerate}
+        \end{lemma}
+        \pause
+
+        \textbf{Proof idea of (ii).} $\mathsf{Fold}(g, r)$ is a random linear combination of $g_E, g_O$; $\code, \code'$ have the same rate.
+        \begin{itemize}
+            \item<3-> The theorem gives $S \subseteq \Omega^2$ and $u_E, u_O \in \mathbb{F}[T]^{<k/2}$ agreeing with $g_E, g_O$ on $S$.
+            \item<4-> Glue: $u(T) := u_E(T^2) + T \cdot u_O(T^2)$ agrees with $g$ on the $2 \cdot \#S \geq (1-\delta)n$ preimages of $S$: contradiction. \qed
+        \end{itemize}
+        \uncover<5->{
+        \begin{remark}
+            We need the \textbf{strong} form: the \textbf{same} set $S$ for $g_E$ and $g_O$.
+        \end{remark}}
+    \end{frame}
+
+    \section{Attempt \#3: Putting Everything Together}
+
+    \begin{frame}{Attempt \#3: The Full Compilation}
+        The Poly-IOP prover sends $f_1, \dots, f_m \in \mathbb{F}[T]^{<k}$; the Poly-IOP verifier wants all of them at $r_1, \dots, r_t \in \mathbb{F} \setminus \Omega$.
+        \begin{algoen}
+            \item<2-> \textbf{Commit.} $\mathcal{P}$ sends oracles $g_1, \dots, g_m: \Omega \to \mathbb{F}$; honestly, $g_j := \overline{f_j}$.
+            \item<3-> \textbf{Bind.} $\mathcal{V}$ samples $r_0 \leftarrowS \mathbb{F} \setminus \Omega$, $\mathcal{P}$ replies with $y_{j,0}$ ($= f_j(r_0)$) for every $j \in [m]$.
+            \item<4-> \textbf{Run the Poly-IOP.} When asked for $f_j(r_i)$, $\mathcal{P}$ replies with $y_{j,i}$, and $\mathcal{V}$ simply uses it.
+            \item<5-> \textbf{Quotient.} $\nu(T) := \prod_{i=0}^{t} (T - r_i)$, $\iota_j \in \mathbb{F}[T]^{\leq t}$ with $\iota_j(r_i) = y_{j,i}$, and
+            \begin{equation*}
+                \mathsf{q}_j := \frac{g_j - \iota_j}{\nu}: \Omega \to \mathbb{F}, \quad j \in [m].
+            \end{equation*}
+            \vspace{-10pt}
+            \item<6-> \textbf{Batch.} $\mathcal{V}$ samples $\alpha \leftarrowS \mathbb{F}$; both define $h := \sum_{j \in [m]} \alpha^{j} \mathsf{q}_j$.
+            \item<7-> \textbf{Test.} Run a single $\delta$-RS-IOPP for $h$ against $\mathsf{RS}[\mathbb{F}, \Omega, k - t - 1]$.
+        \end{algoen}
+    \end{frame}
+
+    \begin{frame}{Attempt \#3}
+        \begin{figure}
+            \centering
+            \scalebox{0.58}{%
+            \begin{tikzpicture}[
+                cell/.style={draw=oc-gray-7, minimum size=0.36cm, inner sep=0pt},
+                vcell/.style={draw=oc-teal-7, densely dashed, fill=oc-teal-1, minimum size=0.36cm, inner sep=0pt},
+                send/.style={-{Stealth[length=3mm]}, line width=0.4mm},
+                iopp/.style={{Stealth[length=3.5mm]}-{Stealth[length=3.5mm]}, line width=1.2mm, oc-blue-5},
+            ]
+                \node[inner sep=0pt, align=center] (prover) {\includegraphics[width=0.8cm]{images/common/prover.png}\\Prover $\mathcal{P}(f_1, \dots, f_m)$};
+                \node[inner sep=0pt, align=center, right=8cm of prover] (verifier) {\includegraphics[width=0.8cm]{images/common/verifier.png}\\Verifier $\mathcal{V}$};
+                \coordinate (ps) at (prover.south);
+                \coordinate (vs) at (prover.south -| verifier.south);
+                \path (ps) -- (vs) coordinate[midway] (c);
+                \uncover<4->{
+                \fill[oc-orange-1, rounded corners=3pt] ([xshift=-0.5cm, yshift=-7.3cm]ps) rectangle ([xshift=0.5cm, yshift=-9.0cm]vs);
+                \node[font=\footnotesize\bfseries, text=oc-orange-9, rotate=90] at ([xshift=-0.78cm, yshift=-8.15cm]ps) {batching};}
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]ps) -- ([yshift=-10.0cm]ps);
+                \draw [dashed,line width=0.3mm] ([yshift=-0.3cm]vs) -- ([yshift=-10.0cm]vs);
+                % commit
+                \coordinate (s1) at ([yshift=-0.75cm]c);
+                \coordinate (s2) at ([yshift=-1.2cm]c);
+                \coordinate (s3) at ([yshift=-1.95cm]c);
+                \oraclestrip{s1}{$g_1$}{cell, fill=oc-blue-1}
+                \oraclestrip{s2}{$g_2$}{cell, fill=oc-blue-1}
+                \node at ([yshift=-1.52cm]c) {$\vdots$};
+                \oraclestrip{s3}{$g_m$}{cell, fill=oc-blue-1}
+                \draw[oc-orange-8, very thick, rounded corners=1pt] ([xshift=-1.1cm+0.36cm*6-0.21cm, yshift=0.22cm]s1) rectangle ([xshift=-1.1cm+0.36cm*6+0.21cm, yshift=-0.22cm]s3);
+                \node[right, font=\footnotesize, text=oc-orange-9, align=left] at ([xshift=2.4cm]s2) {one query at $\omega$\\opens all $g_j(\omega)$};
+                \draw[send] ([yshift=-2.4cm]ps) -- ([yshift=-2.4cm]vs);
+                \node[font=\small, text=oc-gray-7] at ([yshift=-2.8cm]c) {honest prover: $g_j = \overline{f_j}$};
+                % bind
+                \uncover<2->{
+                \fromverifier{-3.6cm}{Sample random point $r_0 \leftarrowS \mathbb{F} \setminus \Omega$}
+                \fromprover{-4.4cm}{Send claimed values $y_{1,0}, \dots, y_{m,0}$}}
+                % Poly-IOP
+                \uncover<3->{
+                \fromverifier{-5.2cm}{Poly-IOP queries points $r_1, \dots, r_t$}
+                \fromprover{-6.0cm}{Send claimed values $y_{j,i}$ for all $j, i$}
+                \node[font=\small] at ([yshift=-6.7cm]c) {$\mathsf{q}_j := \dfrac{g_j - \iota_j}{\nu}, \quad \nu := \prod_{i=0}^{t}(T - r_i), \quad \iota_j(r_i) = y_{j,i}$};}
+                % batch
+                \uncover<4->{
+                \fromverifier{-7.9cm}{Sample batching challenge $\alpha \leftarrowS \mathbb{F}$}
+                \coordinate (s) at ([yshift=-8.55cm]c);
+                \oraclestrip{s}{$h := \sum_{j} \alpha^j \mathsf{q}_j$}{vcell}}
+                % test
+                \uncover<5->{
+                \draw[iopp] ([yshift=-9.6cm]ps) -- ([yshift=-9.6cm]vs) node[midway, above=1mm, text=black]{one $\delta$-RS-IOPP: is $h$ close to $\mathsf{RS}[\mathbb{F}, \Omega, k-t-1]$?};}
+            \end{tikzpicture}%
+            }
+            \caption{Commit, bind, answer, quotient, batch with $\alpha$ (highlighted), and run only one RS-IOPP.}
+        \end{figure}
+    \end{frame}
+
+    \begin{frame}{Attempt \#3: Why it Works}
+        \textbf{Virtual oracles.} No oracles for $\mathsf{q}_j$ or $h$: $\mathcal{V}$ queries $g_1(\omega), \dots, g_m(\omega)$ and computes $h(\omega)$.
+        \pause
+
+        \textbf{Completeness.} Every $\mathsf{q}_j \in \mathsf{RS}[\mathbb{F}, \Omega, k - t - 1]$, hence so is $h$.
+        \pause
+
+        \textbf{Soundness.} Suppose $\mathcal{V}$ accepts with non-negligible probability. Then:
+        \begin{algoen}
+            \item<4-> $h$ is $\delta$-close to the code, so by proximity gaps every $\mathsf{q}_j$ is $\delta$-close to $\mathsf{RS}[\mathbb{F}, \Omega, k - t - 1]$ (except w.p. $\varepsilon_\delta$ over $\alpha$);
+            \item<5-> by multiple quotienting, each $g_j$ is $\delta$-close to some $\overline{f_j'}$ with $f_j'(r_i) = y_{j,i}$ for \textbf{all} $i$;
+            \item<6-> $\overline{f_j'}$ is the only codeword in $\mathsf{List}[g_j, k, \delta]$ through $(r_0, y_{j,0})$, except w.p. $\Pr[\mathsf{Bad}]$ (union bound over $j$).
+        \end{algoen}
+        \uncover<7->{All answers come from one fixed $f_j'$ per oracle: exactly what a polynomial commitment must guarantee.}
+    \end{frame}
+
+    \begin{frame}{Degree Correction}
+        \begin{remark}
+            If different polynomials are queried at different numbers of points, the quotients $\mathsf{q}_j$ have different degree bounds and cannot be added directly.
+        \end{remark}
+        \pause
+
+        \begin{block}{Degree correction}
+            Before batching, each $\mathsf{q}_j$ is multiplied by a power of $T$ (and combined with fresh random coefficients), so that all of them are tested against the same code.
+        \end{block}
+        \pause
+
+        \begin{questionblock}{Question \#3}
+            Why do we sample $r_0$ from $\mathbb{F} \setminus \Omega$ and not from $\Omega$? What would go wrong with the quotient $\mathsf{q}_j$ otherwise?
+        \end{questionblock}
+    \end{frame}
+
+    \begin{frame}{Summary}
+        \begin{itemize}
+            \item An \textbf{IOPP} gives the verifier only oracle access to the input $\mathbbm{y}$; we can only ask it to reject inputs that are \textbf{$\delta$-far} from valid ones.\pause
+            \item A \textbf{$\delta$-RS-IOPP} tests proximity of $g: \Omega \to \mathbb{F}$ to $\mathsf{RS}[\mathbb{F},\Omega,k]$.\pause
+            \item \textbf{Quotienting} turns the claim $f(r) = y$ into proximity of $(g - y)/(T - r)$ to a smaller RS code.\pause
+            \item \textbf{Out-of-domain sampling} at $r_0 \leftarrowS \mathbb{F} \setminus \Omega$ binds the prover to a single codeword of the list.\pause
+            \item \textbf{Proximity gaps}: random linear combinations and \textbf{folding} are distance preserving, so all claims are batched into one RS-IOPP.\pause
+            \item Next: building the RS-IOPP itself (FRI) and the STARK.
+        \end{itemize}
+    \end{frame}
+
+    \makeclosingframe
+\end{document}
