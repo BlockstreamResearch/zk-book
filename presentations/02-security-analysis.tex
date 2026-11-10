@@ -50,7 +50,9 @@
         Let us introduce three sets:
         \begin{itemize}
             \item $\mathcal{K}$ --- a set of all possible keys.
-            \item $\mathcal{M}$ --- a set of all possible messages. For example, $\mathcal{M} = \{0,1\}^n$ --- all binary strings of length $n$.
+            \item $\mathcal{M}$ --- a set of all possible messages. 
+            
+            For example, $\mathcal{M} = \{0,1\}^n$ --- all binary strings of length $n$.
             \item $\mathcal{C}$ --- a set of all possible ciphertexts.
         \end{itemize}
 
@@ -64,10 +66,10 @@
 
     \begin{frame}{Introducing the Cipher}
         \begin{definition}
-            Cipher $\mathcal{E} = (E,D)$ over the space $(\mathcal{K}, \mathcal{M}, \mathcal{C})$ consists of two efficiently computable methods:
+            Cipher $\mathcal{E} = (E,D)$ over the space $(\mathcal{K}, \mathcal{M}, \mathcal{C})$ consists of two efficiently computable functions:
             \begin{itemize}
-                \item $E: \mathcal{K} \times \mathcal{M} \to \mathcal{C}$ --- encryption method, that based on the provided message $m \in \mathcal{M}$ and key $k \in \mathcal{K}$ outputs the cipher $c = E(k,m) \in \mathcal{C}$.
-                \item $D: \mathcal{K} \times \mathcal{C} \to \mathcal{M}$ --- decryption method, that based on the provided cipher $c \in \mathcal{C}$ and key $k \in \mathcal{K}$ outputs the message $m = D(k,c) \in \mathcal{M}$.
+                \item $E: \mathcal{K} \times \mathcal{M} \to \mathcal{C}$ --- encryption function, that based on the provided message $m \in \mathcal{M}$ and key $k \in \mathcal{K}$ outputs the cipher $c = E(k,m) \in \mathcal{C}$.
+                \item $D: \mathcal{K} \times \mathcal{C} \to \mathcal{M}$ --- decryption function, that based on the provided cipher $c \in \mathcal{C}$ and key $k \in \mathcal{K}$ outputs the message $m = D(k,c) \in \mathcal{M}$.
             \end{itemize}
         \end{definition}
         \pause
@@ -206,7 +208,7 @@
         \begin{theorem}
             A function $f: \mathbb{N} \to \mathbb{R}$ is \textbf{negligible} if and only if for any $\gamma \in \mathbb{R}_{>0}$, we have
             \begin{equation*}
-                \lim_{\lambda \to \infty} f(\lambda)\lambda^{\gamma} = 0.
+                \lim_{n \to \infty} f(n)n^{\gamma} = 0.
             \end{equation*}
         \end{theorem}
     \end{frame}
@@ -299,14 +301,14 @@
 
     \begin{frame}{Constructing the Reduction}
         \begin{algoen}
-            \item $\mathcal{B}$ generates $m_0, m_1 \in \mathcal{M}$ and sends them to the semantic security challenger.\pause
+            \item $\mathcal{B}$ samples $m_0, m_1 \in \mathcal{M}$ independently and sends them to the semantic security challenger.\pause
             \item The challenger sends a ciphertext $c$ to $\mathcal{B}$. Since $\mathcal{B}$ can use the message recovery oracle, it sends $c$ to $\mathcal{A}$.\pause
             \item $\mathcal{A}$ returns $\widehat{m}$. If $\widehat{m} = m_0$, then $\mathcal{B}$ sets $\widehat{b} := 0$; otherwise, $\widehat{b} := 1$.\pause
             \item $\mathcal{B}$ sends $\widehat{b}$ to the semantic security challenger.
         \end{algoen}
         \pause
 
-        One can show that $\textsf{Adv}^{\textsf{SS}}_{\mathcal{B},\mathcal{E}} = \textsf{Adv}^{\textsf{MR}}_{\mathcal{A},\mathcal{E}}$, so $\mathcal{B}$ breaks the semantic security with a non-negligible probability.
+        One can show that $\textsf{Adv}^{\textsf{SS}}_{\mathcal{B},\mathcal{E}} =\frac{1}{2} \textsf{Adv}^{\textsf{MR}}_{\mathcal{A},\mathcal{E}}$, so $\mathcal{B}$ breaks the semantic security with a non-negligible probability.
     \end{frame}
 
     \begin{frame}{Security Reduction: the Recipe}
